@@ -1,0 +1,22 @@
+services:
+  checks:
+    build:
+      context: .
+      target: checks
+    command: ["bun", "run", "verify"]
+  frontend:
+    build:
+      context: .
+      target: frontend
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    volumes:
+      - ./artifacts:/output
+    command: ["sh", "-c", "cp -r /artifacts/frontend /output/"]
+  native:
+    build:
+      context: .
+      target: native
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    volumes:
+      - ./artifacts:/output
+    command: ["sh", "-c", "cp /artifacts/solar-forge-diagrams /output/"]

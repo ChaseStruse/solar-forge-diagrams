@@ -5,3 +5,8 @@ src-tauri/target/
 
 .tools/
 src-tauri/gen/
+artifacts/
+packaging/arch/src/
+packaging/arch/pkg/
+packaging/arch/*.tar.gz
+packaging/arch/*.pkg.tar.zst
