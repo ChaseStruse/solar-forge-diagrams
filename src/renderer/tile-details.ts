@@ -2,6 +2,7 @@ import type { InterleavedBufferAttribute } from 'three';
 import {
   BufferAttribute,
   BufferGeometry,
+  Color,
   DynamicDrawUsage,
   Group,
   InstancedMesh,
@@ -15,25 +16,25 @@ import {
   Vector3,
 } from 'three';
 import type { DiagramNode } from '../domain/document';
+import type { ScenePalette } from '../themes';
+import { tinted } from './tile-bodies';
 
 /** Shared insets, shadows, and wire edges cost three draws for the entire board. */
 export class TileDetails {
   public readonly root = new Group();
   private readonly plane = new PlaneGeometry(1, 1);
-  private readonly faceMaterial = new MeshLambertMaterial({ color: '#345064' });
-  private readonly shadowMaterial = new MeshBasicMaterial({
-    color: '#02080d',
-    transparent: true,
-    opacity: 0.4,
-    depthWrite: false,
-  });
+  private readonly faceMaterial = new MeshLambertMaterial({ color: '#ffffff' });
+  private readonly shadowMaterial: MeshBasicMaterial;
   private readonly outlineMaterial = new LineBasicMaterial({
-    color: '#778895',
+    color: '#ffffff',
+    vertexColors: true,
     transparent: true,
-    opacity: 0.7,
+    opacity: 0.85,
   });
   private readonly outlineGeometry = new BufferGeometry();
   private readonly positions: BufferAttribute;
+  private readonly colors: BufferAttribute;
+  private readonly color = new Color();
   private readonly faces: InstancedMesh;
   private readonly shadows: InstancedMesh;
   private readonly matrix = new Matrix4();
@@ -47,7 +48,14 @@ export class TileDetails {
   constructor(
     count: number,
     private readonly source: BufferAttribute | InterleavedBufferAttribute,
+    private readonly palette: ScenePalette,
   ) {
+    this.shadowMaterial = new MeshBasicMaterial({
+      color: palette.shadow,
+      transparent: true,
+      opacity: palette.shadowOpacity,
+      depthWrite: false,
+    });
     this.faces = new InstancedMesh(this.plane, this.faceMaterial, count);
     this.shadows = new InstancedMesh(this.plane, this.shadowMaterial, count);
     for (const mesh of [this.faces, this.shadows]) {
@@ -59,6 +67,11 @@ export class TileDetails {
       3,
     ).setUsage(DynamicDrawUsage);
     this.outlineGeometry.setAttribute('position', this.positions);
+    this.colors = new BufferAttribute(
+      new Float32Array(count * source.count * 3),
+      3,
+    ).setUsage(DynamicDrawUsage);
+    this.outlineGeometry.setAttribute('color', this.colors);
     const outlines = new LineSegments(
       this.outlineGeometry,
       this.outlineMaterial,
@@ -74,6 +87,19 @@ export class TileDetails {
         index,
         this.matrix.compose(this.position, this.rotation, this.scale),
       );
+      this.faces.setColorAt(
+        index,
+        tinted(
+          this.color,
+          this.palette.face,
+          node.color,
+          this.palette.faceTint,
+        ),
+      );
+      if (this.faces.instanceColor) {
+        this.faces.instanceColor.addUpdateRange(index * 3, 3);
+        this.faces.instanceColor.needsUpdate = true;
+      }
       this.position.set(world.x + 8, world.y - 14, world.z + 11);
       this.scale.set(node.width * 1.04, node.depth * 1.05, 1);
       this.shadows.setMatrixAt(
@@ -89,6 +115,24 @@ export class TileDetails {
       mesh.instanceMatrix.addUpdateRange(index * 16, 16);
       mesh.instanceMatrix.needsUpdate = true;
     }
+    tinted(
+      this.color,
+      this.palette.outline,
+      node.color,
+      node.kind === 'group' ? 0.85 : this.palette.outlineTint,
+    );
+    for (let vertex = 0; vertex < this.source.count; vertex++)
+      this.colors.setXYZ(
+        index * this.source.count + vertex,
+        this.color.r,
+        this.color.g,
+        this.color.b,
+      );
+    this.colors.addUpdateRange(
+      index * this.source.count * 3,
+      this.source.count * 3,
+    );
+    this.colors.needsUpdate = true;
     for (let vertex = 0; vertex < this.source.count; vertex++)
       this.positions.setXYZ(
         index * this.source.count + vertex,

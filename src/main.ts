@@ -32,6 +32,7 @@ import {
   saveDocumentFile,
 } from './platform/files';
 import { DiagramScene } from './renderer/scene';
+import { applyThemeCss, findTheme, themes } from './themes';
 import { icon } from './ui/icons';
 
 const root = document.querySelector<HTMLDivElement>('#app');
@@ -40,9 +41,10 @@ root.innerHTML = `
   <main class="workspace" aria-label="Diagram workspace"><div id="canvas"></div></main>
   <header class="topbar">
     <div class="board-heading"><button id="menu" class="icon-button" aria-label="File menu" aria-expanded="false" title="File menu">${icon('menu')}</button><span class="forge-mark" aria-hidden="true">✦</span><span class="brand">Solar Forge</span><span class="heading-divider"></span><button id="title" class="document-title" title="Rename diagram"></button><span id="save-state" class="save-state">Unchanged</span></div>
-    <div class="top-actions"><button id="components" class="quiet-button" title="AWS components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
+    <div class="top-actions"><button id="components" class="quiet-button" title="AWS components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="theme" class="icon-button" aria-label="Theme" aria-expanded="false" title="Theme">${icon('palette')}</button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
   </header>
   <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="export">Export PNG ${icon('arrow')}</button><button id="export-svg">Export SVG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">RECENT DIAGRAMS</p><div id="recent-files"></div><div class="menu-divider"></div><p class="popover-caption">TEMPLATES</p><button id="example-starter">Two-service starter</button><button id="example-serverless">Serverless architecture</button><div id="templates"></div></section>
+  <section id="theme-menu" class="popover theme-menu" aria-label="Themes" hidden><p class="popover-caption">THEME</p><div id="theme-list"></div></section>
   <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add AWS service" title="Add AWS service (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
   <section id="component-palette" class="popover component-palette" aria-label="AWS components" hidden><div class="popover-heading"><h2>AWS components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a component to add it to your board.</p></section>
   <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label">Label</label><input id="node-label" maxlength="1000"><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
@@ -85,9 +87,19 @@ let diagramVisible = true;
 const notify = (message: string): void => {
   element('status').textContent = message;
 };
+let theme = findTheme(
+  (() => {
+    try {
+      return localStorage.getItem('solar-forge-theme');
+    } catch {
+      return null;
+    }
+  })(),
+);
+applyThemeCss(theme);
 let scene: DiagramScene;
 try {
-  scene = new DiagramScene(element('canvas'), current);
+  scene = new DiagramScene(element('canvas'), current, theme.scene);
 } catch (error) {
   notify(
     `Graphics unavailable: ${error instanceof Error ? error.message : String(error)}`,
@@ -104,6 +116,42 @@ function showComponents(show: boolean): void {
     inputElement('search').focus();
   }
 }
+function setTheme(id: string): void {
+  theme = findTheme(id);
+  applyThemeCss(theme);
+  scene.setPalette(theme.scene);
+  for (const button of element('theme-list').querySelectorAll('button'))
+    button.setAttribute(
+      'aria-pressed',
+      String(button.dataset.theme === theme.id),
+    );
+  try {
+    localStorage.setItem('solar-forge-theme', theme.id);
+  } catch {}
+  notify(`${theme.name} theme`);
+}
+for (const option of themes) {
+  const button = document.createElement('button');
+  button.dataset.theme = option.id;
+  button.setAttribute('aria-pressed', String(option.id === theme.id));
+  const swatch = document.createElement('span');
+  swatch.className = 'theme-swatch';
+  swatch.style.background = `linear-gradient(135deg, ${option.css.bg} 0 45%, ${option.css.accent} 45% 72%, ${option.css.hot} 72%)`;
+  const name = document.createElement('span');
+  name.textContent = option.name;
+  button.append(swatch, name);
+  button.onclick = () => {
+    setTheme(option.id);
+    element('theme-menu').hidden = true;
+    element('theme').setAttribute('aria-expanded', 'false');
+  };
+  element('theme-list').append(button);
+}
+element('theme').onclick = () => {
+  const menu = element('theme-menu');
+  menu.hidden = !menu.hidden;
+  element('theme').setAttribute('aria-expanded', String(!menu.hidden));
+};
 function showLayers(show: boolean): void {
   layersVisible = show;
   element('layers-panel').hidden = !show;
@@ -151,10 +199,15 @@ function updateLayers(): void {
       const symbol = document.createElement('span');
       symbol.className = 'layer-symbol';
       symbol.style.color = node.color;
-      symbol.textContent =
-        node.kind === 'group'
-          ? '▱'
-          : (findService(node.serviceId ?? node.label)?.glyph ?? '◇');
+      const service = findService(node.serviceId ?? node.label);
+      if (service?.icon && node.kind === 'service') {
+        const image = document.createElement('img');
+        image.src = service.icon;
+        image.alt = '';
+        symbol.append(image);
+      } else
+        symbol.textContent =
+          node.kind === 'group' ? '▱' : (service?.glyph ?? '◇');
       const label = document.createElement('span');
       label.textContent = node.label;
       button.append(symbol, label);
@@ -996,6 +1049,10 @@ window.addEventListener('keydown', (event) => {
           id,
         run: () => element(id).click(),
       })),
+      ...themes.map((option) => ({
+        label: `Theme: ${option.name}`,
+        run: () => setTheme(option.id),
+      })),
       ...services.map((service) => ({
         label: `Add ${service.label} · ${service.category}`,
         run: () => {
@@ -1040,6 +1097,7 @@ window.addEventListener('keydown', (event) => {
     showComponents(false);
     element('file-menu').hidden = true;
     element('help-panel').hidden = true;
+    element('theme-menu').hidden = true;
     element('menu').setAttribute('aria-expanded', 'false');
     element('help').setAttribute('aria-expanded', 'false');
     scene.select(undefined);

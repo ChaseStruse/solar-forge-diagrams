@@ -27,7 +27,7 @@ const aws: readonly (readonly [
     'AWS-Lambda',
     'Compute',
     'function serverless',
-    '#f6bd72',
+    '#ed7100',
   ],
   [
     'api-gateway',
@@ -35,7 +35,7 @@ const aws: readonly (readonly [
     'Amazon-API-Gateway',
     'Networking',
     'api rest http gateway',
-    '#b9a0e4',
+    '#8c4fff',
   ],
   [
     'dynamodb',
@@ -43,7 +43,7 @@ const aws: readonly (readonly [
     'Amazon-DynamoDB',
     'Database',
     'nosql key value database',
-    '#82b7df',
+    '#c925d1',
   ],
   [
     's3',
@@ -51,7 +51,7 @@ const aws: readonly (readonly [
     'Amazon-Simple-Storage-Service',
     'Storage',
     'bucket object storage',
-    '#a8cf88',
+    '#7aa116',
   ],
   [
     'ec2',
@@ -59,7 +59,7 @@ const aws: readonly (readonly [
     'Amazon-EC2',
     'Compute',
     'virtual machine instance vm',
-    '#f6bd72',
+    '#ed7100',
   ],
   [
     'ecs',
@@ -67,7 +67,7 @@ const aws: readonly (readonly [
     'Amazon-Elastic-Container-Service',
     'Compute',
     'containers docker fargate',
-    '#f6bd72',
+    '#ed7100',
   ],
   [
     'eks',
@@ -75,7 +75,7 @@ const aws: readonly (readonly [
     'Amazon-Elastic-Kubernetes-Service',
     'Compute',
     'kubernetes k8s containers',
-    '#f6bd72',
+    '#ed7100',
   ],
   [
     'rds',
@@ -83,7 +83,7 @@ const aws: readonly (readonly [
     'Amazon-RDS',
     'Database',
     'relational postgres mysql database',
-    '#82b7df',
+    '#c925d1',
   ],
   [
     'cloudfront',
@@ -91,7 +91,7 @@ const aws: readonly (readonly [
     'Amazon-CloudFront',
     'Networking',
     'cdn edge cache',
-    '#b9a0e4',
+    '#8c4fff',
   ],
   [
     'route53',
@@ -99,7 +99,7 @@ const aws: readonly (readonly [
     'Amazon-Route-53',
     'Networking',
     'dns domain routing',
-    '#b9a0e4',
+    '#8c4fff',
   ],
   [
     'sqs',
@@ -107,7 +107,7 @@ const aws: readonly (readonly [
     'Amazon-Simple-Queue-Service',
     'Integration',
     'queue messaging',
-    '#e5a0c0',
+    '#e7157b',
   ],
   [
     'sns',
@@ -115,7 +115,7 @@ const aws: readonly (readonly [
     'Amazon-Simple-Notification-Service',
     'Integration',
     'notification pubsub topic',
-    '#e5a0c0',
+    '#e7157b',
   ],
   [
     'eventbridge',
@@ -123,7 +123,7 @@ const aws: readonly (readonly [
     'Amazon-EventBridge',
     'Integration',
     'events bus rules',
-    '#e5a0c0',
+    '#e7157b',
   ],
   [
     'elb',
@@ -131,9 +131,31 @@ const aws: readonly (readonly [
     'Elastic-Load-Balancing',
     'Networking',
     'elb alb nlb load balancing',
-    '#b9a0e4',
+    '#8c4fff',
   ],
 ];
+/** Official AWS architecture group colours. */
+export const boundaryColors = {
+  account: '#e7157b',
+  region: '#00a4a6',
+  vpc: '#8c4fff',
+  zone: '#00a4a6',
+  subnet: '#7aa116',
+} as const;
+/** Pastel defaults from earlier releases; documents using them adopt the catalog colour. */
+export const legacyColors: ReadonlySet<string> = new Set([
+  '#f6bd72',
+  '#b9a0e4',
+  '#82b7df',
+  '#a8cf88',
+  '#e5a0c0',
+  '#a568ce',
+  '#ed983c',
+  '#548bc4',
+  '#cb6186',
+  '#79a950',
+  '#d9a15f',
+]);
 export const services: ComponentDefinition[] = [
   ...(['process', 'decision', 'terminal'] as const).map((shape) => ({
     id: `flow.${shape}`,
@@ -178,7 +200,7 @@ export const services: ComponentDefinition[] = [
           : boundary === 'zone'
             ? 'Availability zone'
             : boundary.charAt(0).toUpperCase() + boundary.slice(1),
-      color: '#d9a15f',
+      color: boundaryColors[boundary],
       glyph: '▱',
       description: 'Nested architecture boundary',
       category: 'Boundaries',

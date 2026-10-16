@@ -15,6 +15,7 @@ import {
 } from 'three';
 import { serviceImages } from '../catalog/images';
 import { serviceGlyph } from '../catalog/services';
+import type { ScenePalette } from '../themes';
 
 type LabelKind = 'node' | 'edge' | 'icon' | 'group';
 interface Entry {
@@ -39,6 +40,7 @@ const SIZE = 1024;
 
 /** Batched screen-facing captions and service glyphs; no DOM overlay to lose in exports. */
 export class LabelAtlas {
+  constructor(public palette: ScenePalette) {}
   private readonly pages: Page[] = [];
   private readonly regions = new Map<
     string,
@@ -103,17 +105,29 @@ export class LabelAtlas {
       page.context.font = font;
     }
     const { x, y, context } = page;
+    const palette = this.palette;
     if (kind === 'node' || kind === 'edge') {
-      context.fillStyle = kind === 'node' ? '#14202b' : '#182431';
-      context.fillRect(x + 2, y + 3, width - 4, height - 6);
+      context.fillStyle =
+        kind === 'node'
+          ? palette.nodeLabel.background
+          : palette.edgeLabel.background;
+      context.beginPath();
+      context.roundRect(x + 2, y + 3, width - 4, height - 6, 8);
+      context.fill();
       if (kind === 'node') {
-        context.strokeStyle = '#41505e';
+        context.strokeStyle = palette.nodeLabel.border;
         context.lineWidth = 2;
-        context.strokeRect(x + 2, y + 3, width - 4, height - 6);
+        context.stroke();
       }
     }
     context.fillStyle =
-      kind === 'group' ? '#93a6b6' : kind === 'icon' ? '#f6d7a5' : '#e9eef4';
+      kind === 'group'
+        ? palette.groupLabel
+        : kind === 'icon'
+          ? palette.glyph
+          : kind === 'edge'
+            ? palette.edgeLabel.text
+            : palette.nodeLabel.text;
     const image = kind === 'icon' ? serviceImages.get(text) : undefined;
     if (image) context.drawImage(image, x + 8, y + 8, width - 16, height - 16);
     else context.fillText(text, x + width / 2, y + height / 2, width - 20);

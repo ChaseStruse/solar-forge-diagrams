@@ -1,3 +1,5 @@
+import { boundaryColors, findService, legacyColors } from '../catalog/services';
+
 export type Port = 'north' | 'east' | 'south' | 'west';
 export interface DiagramNode {
   id: string;
@@ -109,6 +111,11 @@ export function parseDocument(json: string): DiagramDocument {
         throw Error('Invalid boundary kind');
       node.boundary = n.boundary as NonNullable<DiagramNode['boundary']>;
     }
+    if (legacyColors.has(node.color.toLowerCase())) {
+      const service = node.serviceId ? findService(node.serviceId) : undefined;
+      if (service && node.kind === 'service') node.color = service.color;
+      else if (node.boundary) node.color = boundaryColors[node.boundary];
+    }
     if (n.metadata !== undefined) {
       const metadata = record(n.metadata);
       node.metadata = {};
@@ -208,76 +215,83 @@ export function sampleDocument(): DiagramDocument {
         id: 'region',
         kind: 'group',
         label: 'AWS / us-east-1',
+        boundary: 'region',
         x: 0,
         z: 0,
         width: 940,
         depth: 900,
-        color: '#27323b',
+        color: '#00a4a6',
       },
       {
         id: 'vpc',
         kind: 'group',
         label: 'Application boundary',
+        boundary: 'vpc',
         x: 50,
         z: 10,
         width: 650,
         depth: 720,
-        color: '#34413b',
+        color: '#8c4fff',
         parentId: 'region',
       },
       {
         id: 'gateway',
         kind: 'service',
         label: 'API Gateway',
+        serviceId: 'aws.api-gateway',
         x: -280,
         z: -110,
         width: 150,
         depth: 96,
-        color: '#a568ce',
+        color: '#8c4fff',
         parentId: 'region',
       },
       {
         id: 'lambda',
         kind: 'service',
         label: 'Lambda',
+        serviceId: 'aws.lambda',
         x: -40,
         z: -80,
         width: 150,
         depth: 96,
-        color: '#ed983c',
+        color: '#ed7100',
         parentId: 'vpc',
       },
       {
         id: 'db',
         kind: 'service',
         label: 'DynamoDB',
+        serviceId: 'aws.dynamodb',
         x: 190,
         z: -80,
         width: 150,
         depth: 96,
-        color: '#548bc4',
+        color: '#c925d1',
         parentId: 'vpc',
       },
       {
         id: 'queue',
         kind: 'service',
         label: 'SQS',
+        serviceId: 'aws.sqs',
         x: -40,
         z: 310,
         width: 150,
         depth: 96,
-        color: '#cb6186',
+        color: '#e7157b',
         parentId: 'vpc',
       },
       {
         id: 'storage',
         kind: 'service',
         label: 'S3',
+        serviceId: 'aws.s3',
         x: 190,
         z: 310,
         width: 150,
         depth: 96,
-        color: '#79a950',
+        color: '#7aa116',
         parentId: 'vpc',
       },
     ],
@@ -305,7 +319,7 @@ export function starterDocument(): DiagramDocument {
         z: 0,
         width: 180,
         depth: 150,
-        color: '#f6bd72',
+        color: '#ed7100',
       },
       {
         id: 'database',
@@ -316,7 +330,7 @@ export function starterDocument(): DiagramDocument {
         z: 0,
         width: 180,
         depth: 150,
-        color: '#82b7df',
+        color: '#c925d1',
       },
     ],
     edges: [

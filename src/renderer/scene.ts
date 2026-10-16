@@ -45,6 +45,7 @@ import {
   routeEdge,
   routeMidpoint,
 } from '../domain/routing';
+import { defaultTheme, type ScenePalette } from '../themes';
 import { createBackdrop } from './backdrop';
 import { LabelAtlas } from './labels';
 import {
@@ -68,11 +69,6 @@ export interface ResizeChange {
   id: string;
   from: Partial<Box>;
   to: Partial<Box>;
-}
-interface EdgePalette {
-  edge: string;
-  edgeHover: string;
-  edgeSelected: string;
 }
 const isPort = (value: unknown): value is Port =>
   value === 'north' ||
@@ -113,8 +109,12 @@ export class DiagramScene {
   public readonly ready: Promise<void>;
   private document: DiagramDocument;
   private readonly scene = new Scene();
-  private readonly backdrop = createBackdrop();
-  private readonly labels = new LabelAtlas();
+  private palette: ScenePalette = defaultTheme.scene;
+  private backdrop = createBackdrop(this.palette);
+  private readonly labels = new LabelAtlas(this.palette);
+  private grid = new GridHelper(16000, 320);
+  private readonly ambient = new AmbientLight('#c9def1', 2);
+  private readonly fog = new FogExp2('#0b111a', 0.00012);
   private readonly view = new BoardView();
   private get camera() {
     return this.view.camera;
@@ -151,11 +151,6 @@ export class DiagramScene {
   private edgeBuffer: InterleavedBuffer | undefined;
   private readonly tiles = new Map<string, Tile>();
   private readonly scratchColor = new Color();
-  private palette: EdgePalette = {
-    edge: '#ffe1a2',
-    edgeHover: '#fff4dc',
-    edgeSelected: '#ff9d3c',
-  };
   private readonly edges = new Map<string, number>();
   private edgePositions = new BufferAttribute(new Float32Array(), 3);
   private readonly edgeLabels = new Map<string, Object3D>();
@@ -267,6 +262,7 @@ export class DiagramScene {
   constructor(
     private readonly host: HTMLElement,
     document: DiagramDocument,
+    palette: ScenePalette = defaultTheme.scene,
   ) {
     this.document = document;
     this.ready = loadServiceImages()
@@ -278,9 +274,8 @@ export class DiagramScene {
       })
       .catch((error) => this.onError(String(error)));
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-    this.renderer.setClearColor('#0b111a', 0);
-    this.scene.background = this.backdrop;
-    this.scene.fog = new FogExp2('#0b111a', 0.00012);
+    this.renderer.setClearColor('#000000', 0);
+    this.scene.fog = this.fog;
     this.renderer.domElement.setAttribute(
       'aria-label',
       'Architecture diagram canvas',
@@ -291,17 +286,11 @@ export class DiagramScene {
     this.selectionBox.setAttribute('aria-hidden', 'true');
     this.host.append(this.selectionBox);
     this.scene.add(this.ports);
-    this.scene.add(this.content, new AmbientLight('#c9def1', 2));
+    this.scene.add(this.content, this.ambient);
     const light = new DirectionalLight('#ffe5bf', 2);
     light.position.set(-200, 500, 300);
     this.scene.add(light);
-    const grid = new GridHelper(16000, 320, '#62503a', '#253543');
-    grid.position.y = -12;
-    if (!Array.isArray(grid.material)) {
-      grid.material.transparent = true;
-      grid.material.opacity = 0.22;
-    }
-    this.scene.add(grid);
+    this.applyPalette(palette);
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
     this.renderer.domElement.addEventListener('pointerdown', this.down);
@@ -336,6 +325,38 @@ export class DiagramScene {
     this.resize();
     this.setView('isometric');
   }
+  private applyPalette(palette: ScenePalette): void {
+    this.palette = palette;
+    this.labels.palette = palette;
+    this.backdrop.dispose();
+    this.backdrop = createBackdrop(palette);
+    this.scene.background = this.backdrop;
+    this.fog.color.set(palette.fog);
+    this.ambient.intensity = palette.ambient;
+    this.scene.remove(this.grid);
+    this.grid.dispose();
+    // Same colour for the centre lines: an axis cutting the board reads as a bug.
+    this.grid = new GridHelper(16000, 320, palette.grid[1], palette.grid[1]);
+    this.grid.position.y = -12;
+    if (!Array.isArray(this.grid.material)) {
+      this.grid.material.transparent = true;
+      this.grid.material.opacity = palette.gridOpacity;
+    }
+    this.scene.add(this.grid);
+    this.portMaterial.color.set(palette.port);
+    this.handleMaterial.color.set(palette.handle);
+    this.previewMaterial.color.set(palette.edgeSelected);
+    this.haloMaterial.opacity = palette.haloOpacity;
+  }
+  /** Repaint the whole board in a new theme, keeping the current selection. */
+  public setPalette(palette: ScenePalette): void {
+    const ids = this.selection;
+    const edge = this.selectedEdge;
+    this.applyPalette(palette);
+    this.load(this.document);
+    if (edge) this.selectEdge(edge);
+    else this.selectMany(ids);
+  }
   private releaseContent(): void {
     for (const tile of this.tiles.values()) tile.material.dispose();
     this.bodies?.dispose();
@@ -367,11 +388,7 @@ export class DiagramScene {
     this.connectionStart = undefined;
     this.clearPreview();
     this.hoveredEdge = undefined;
-    if (
-      this.selectedEdge &&
-      !document.edges.some((e) => e.id === this.selectedEdge)
-    )
-      this.selectedEdge = undefined;
+    this.selectedEdge = undefined;
     this.document = document;
     this.releaseContent();
     this.selected = undefined;
@@ -381,11 +398,13 @@ export class DiagramScene {
       document.nodes,
       this.geometry,
       this.shapeGeometries,
+      this.palette,
     );
     this.content.add(this.bodies.root);
     this.details = new TileDetails(
       document.nodes.length,
       this.tileOutline.getAttribute('position'),
+      this.palette,
     );
     this.content.add(this.details.root);
     for (const [index, node] of document.nodes.entries()) {
@@ -1409,16 +1428,7 @@ export class DiagramScene {
     cancelAnimationFrame(this.frame);
     this.observer.disconnect();
     this.releaseContent();
-    this.scene.traverse((object) => {
-      if (object instanceof GridHelper) {
-        object.geometry.dispose();
-        if (Array.isArray(object.material))
-          object.material.forEach((m) => {
-            m.dispose();
-          });
-        else object.material.dispose();
-      }
-    });
+    this.grid.dispose();
     for (const geometry of Object.values(this.shapeGeometries))
       geometry.dispose();
     this.clearPreview();

@@ -1,6 +1,6 @@
 import type { DiagramDocument, DiagramNode } from '../domain/document';
 import { sampleDocument } from '../domain/document';
-import { findService } from './services';
+import { boundaryColors, findService } from './services';
 export interface Template {
   id: string;
   name: string;
@@ -16,7 +16,7 @@ function architecture(title: string, ids: readonly string[]): DiagramDocument {
     z: 0,
     width: ids.length * 260 + 100,
     depth: 360,
-    color: '#d9a15f',
+    color: boundaryColors.vpc,
   };
   const nodes = ids.map((id, index): DiagramNode => {
     const service = findService(`aws.${id}`);
