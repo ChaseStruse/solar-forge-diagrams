@@ -1,7 +1,7 @@
 # Build from the reviewed local source archive; no application runtime server.
 pkgname=solar-forge-diagrams
 pkgver=0.1.0
-pkgrel=3
+pkgrel=4
 pkgdesc='Native offline flowcharts and AWS architecture diagrams'
 arch=('x86_64')
 license=('LicenseRef-SolarForge' 'LicenseRef-AWS-Architecture-Icons' 'MIT' 'Apache-2.0')

@@ -4,7 +4,7 @@ Native, offline-first architecture diagramming with a Three.js isometric canvas 
 
 ## Install on Omarchy
 
-Download/extract the [Omarchy install bundle](artifacts/omarchy/solar-forge-diagrams-0.1.0-3-omarchy-x86_64.tar.gz), then run `./install.sh --check` and `./install.sh` in its directory. Launch **Solar Forge Diagrams** with `Super+Space`. The x86_64 bundle uses Omarchy's native package manager and includes desktop/file integration. See [installation and removal](packaging/omarchy/README.md).
+Download/extract the [Omarchy install bundle](artifacts/omarchy/solar-forge-diagrams-0.1.0-4-omarchy-x86_64.tar.gz), then run `./install.sh --check` and `./install.sh` in its directory. Launch **Solar Forge Diagrams** with `Super+Space`. The x86_64 bundle uses Omarchy's native package manager and includes desktop/file integration. See [installation and removal](packaging/omarchy/README.md).
 
 ## Development
 
