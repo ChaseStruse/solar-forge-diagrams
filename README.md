@@ -27,3 +27,17 @@ src-tauri/target/debug/solar-forge-diagrams --smoke-test
 ```
 
 The opt-in smoke check (debug builds, or release builds compiled with `--features diagnostics`) opens a real native window, captures both camera views, checks idle render invalidation, loads the benchmark boards, and roundtrips a document through the native atomic writer. Results and PNGs go to `/tmp/solar-forge-native-smoke/`; the app exits on success. It does not certify physical input latency, native dialog interactions, release startup, or GPU execution time. Normal launches do not run diagnostics.
+
+## Current checkpoint
+
+M0 native feasibility is implemented; M1 document history/recovery is next. The prototype supports view switching, dragging, service insertion, native Save/Open, and labeled PNG export. See the plan's execution table and `docs/PROGRESS.md` for exact commits and remaining acceptance checks. Save currently asks for a destination each time; autosave and undo are not yet implemented.
+
+The Linux file chooser uses XDG desktop portals. Omarchy must have its normal portal service and file-chooser backend available; the app does not edit desktop configuration.
+
+```sh
+bun run verify
+cargo build --manifest-path src-tauri/Cargo.toml --release --locked
+./src-tauri/target/release/solar-forge-diagrams
+```
+
+The installed native executable needs neither Bun nor Docker at runtime. To benchmark the optimized shell explicitly, compile with `--features diagnostics` and run it with `--smoke-test`.

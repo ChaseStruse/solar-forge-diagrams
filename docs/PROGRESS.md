@@ -1,77 +1,85 @@
 # Implementation progress
 
-## Current position
+## Where to resume
 
-M0 functional native feasibility is demonstrated, including actual Save/Open/PNG dialogs. The final optimized portal-backend build and updated nested-fixture benchmark are being checked. M1–M6 are not implemented. Continue with M1 after this checkpoint; retain the outstanding acceptance checks below for M2/M5.
+**Start M1: typed domain commands and bounded undo/redo history.** M0's functional native feasibility gate passed on Omarchy. M1–M6 remain open; the palette, inspector, and export prototypes do not establish completion of later milestones.
 
-## Commit/task map
+First M1 slice: add command/history types and meaningful transaction tests, then route the existing drag, rename, and service-insertion actions through them. Preserve incremental scene updates. Follow with native close protection, autosave/recovery, durable file handles, and a documented migration policy. Save currently prompts for a destination every time.
 
-| Commit | Plan task | State |
+## Task-to-commit map
+
+| Commit | Plan task | Delivered |
 | --- | --- | --- |
-| `f489981` | Plan baseline | Approved native direction recorded |
-| `41ee697` | M0 scaffold and first editor slice | Bun/strict TS/Vite/Three.js/Tauri, portable documents, benchmark fixtures, basic native file commands and initial UI |
-| `50bfcb4` | M0 native validation and efficient labels | Bundled native assets, debug smoke runner, shared label atlases, readable labels, edge labels, native writer tests |
+| `f489981` | Plan baseline | Approved native desktop direction |
+| `41ee697` | M0 scaffold / first vertical slice | Bun, strict TS, Vite, Three.js, Tauri; portable validated documents; initial fixtures, UI, native file commands |
+| `50bfcb4` | M0 native verification / label efficiency | Bundled native assets, readable labels, shared atlases, native smoke runner, atomic writer tests |
+| `57cc746` | M0 performance / Wayland integration | Instanced label draws, batched connector buffer, XDG portal dialogs with parent handles, nested fixtures, snapped-drag check, size-budget enforcement |
+| Documentation checkpoint following `57cc746` | Handoff | Exact milestone mapping in the plan, final native measurements, remaining work and launch instructions |
 
-| Next implementation commit | M0 batched rendering and Wayland dialogs | Instanced text, one connector buffer, package-size checks, portal backend, nested fixtures, native snapped-drag check |
-
-Hashes are added in the following documentation checkpoint to avoid self-referential commit hashes. Use the commit subject in git log if the final row still says “next”.
+The documentation checkpoint refers to prior implementation hashes to avoid self-referential commit IDs. All changes are local commits; nothing was pushed.
 
 ## Verified checks
 
-- `bun run lint`, `bun run check`, `bun test`: pass (4 tests / 12 assertions).
-- Production frontend build: pass; initial JS 525.92 kB raw / 134.75 kB gzip. Lazy diagnostics 1.25 kB raw / 0.73 kB gzip. The raw >500 kB Vite advisory remains visible.
-- `cargo check --locked`, native `cargo build --locked`, Rust formatting, `cargo clippy -- -D warnings`: pass.
-- `cargo test --locked`: 2 native atomic-writer tests pass (complete replacement and failed replacement preserving target).
-- Actual native WebKitGTK window rendered both camera modes with bundled assets and no dev server. PNG captures were visually inspected.
-- Explicit `--smoke-test` native command completed a document write/read roundtrip and exported labeled views under `/tmp/solar-forge-native-smoke/`.
+- Frozen Bun install; `bun run verify` passes: Biome, strict TypeScript, 4 document tests / 12 assertions, production frontend build, compressed-JS size check.
+- Native Cargo build (debug and optimized), Rust formatting, `cargo clippy --all-targets -- -D warnings`, and `cargo test --locked` pass. Both Rust tests exercise atomic file replacement and failed-replacement preservation.
+- Actual native WebKitGTK rendering works with bundled assets and no development server.
+- Both camera modes and PNG captures were visually inspected. Text is in the WebGL scene, including exports.
+- Explicit native diagnostics verify a synthetic snapped drag ends as one completed gesture, zero idle render frames in a 500 ms sample, standard/stress fixtures, and a native writer/readback roundtrip.
+- Actual desktop portal Save wrote a JSON document; Open reopened it and the app status was verified as `Diagram opened`; PNG Export wrote an image and status was `PNG exported`.
+- Portal chooser floats at a usable 875×600. The earlier direct GTK chooser tiled too narrowly; setting its parent alone did not fix that, so the portal backend is deliberate.
+- No desktop configuration was changed. Omarchy skill capture guidance was used for native visual checks.
 
-## Preliminary native measurements (2026-10-15)
+## Latest preliminary optimized measurements
 
-Debug native shell / production frontend, 1253×1376 window, DPR 1, WebKitGTK 2.52.6, GTK 3.24.52. CPU: Intel i9-11900H; 16 GB RAM; Intel UHD and NVIDIA RTX 3060 Mobile installed (active WebGL GPU not yet identified).
+Source: `benchmarks/results/2026-10-15-release-nested-groups.json`, implementation `57cc746`. Optimized native shell with explicit diagnostics feature, production frontend, three nested group boundaries, total node counts including those boundaries. **Window: 900×918, DPR 1.** These are preliminary single-run measurements, not the plan's 1920×1080 release certification.
 
-| Board | Load to scheduled frames | Render submission p95 | Camera change to frame p95 | GPU textures | Draw calls |
+| Board | Load to scheduled frames | CPU render submission p95 | Camera update to frame p95 | GPU textures | Draw calls |
 | --- | --- | --- | --- | --- | --- |
-| 500 nodes / 750 edges | 237 ms | 22 ms | 25 ms | 9 | 2,501 |
-| 2,000 nodes / 3,000 edges | 705 ms | 63 ms | 68 ms | 41 | 10,001 |
+| 500 nodes / 750 edges | 151 ms | 4 ms | 19 ms | 9 | 511 |
+| 2,000 nodes / 3,000 edges | 535 ms | 16 ms | 29 ms | 41 | 2,043 |
 
-Idle: zero render frames over a 500 ms sample. `startupToScriptMs` was 210 ms from Web Performance timing, **not full process-start-to-editable latency**. These are single debug-shell runs, not the release acceptance benchmark or physical latency measurements. This pre-batching result missed the standard render-time budget; see the subsequent optimized run below.
+- Zero rendered frames during the 500 ms idle sample; 30-second CPU measurements remain open.
+- `navigationToScriptMs`: 149 ms. This excludes process startup and is not a cold/warm launch measurement.
+- Initial JS: **134,888 bytes gzip**; optimized executable with bundled assets and portal backend: **7,203,600 bytes**. Both pass initial size budgets. Native executable size excludes system GTK/WebKitGTK and portal services.
+- Vite reports its raw >500 kB entry-chunk advisory (524.11 kB raw). The compressed startup budget passes; the advisory is not hidden.
+- WebKitGTK 2.52.6, GTK 3.24.52; host inventory: Intel i9-11900H, 16 GB RAM, Intel UHD + NVIDIA RTX 3060 Mobile. WebGL reported `Apple GPU`/`Apple Inc.`; these appear privacy-masked. Active physical GPU/driver identity is unverified.
+- Camera-update timing is scheduled JS-to-frame timing, not physical input latency or GPU completion time.
 
-A per-label-texture experiment regressed board loads to 8.5 s / 31 s. Shared atlases reduced these to 237 ms / 705 ms. Do not reintroduce independent full-size canvases per label.
+The older single-group result is retained separately. Do not compare runs as controlled experiments across different window sizes and fixture revisions. A per-label-texture experiment caused 8.5 s / 31 s loads; shared atlases and instanced batches removed that regression. Do not restore independent full-size label canvases or one draw per edge.
 
-## Next actions and remaining gates
+## Remaining acceptance and limits
 
-1. Finalize the optimized portal build and current nested-fixture report; then start M1 commands/history, version migration policy, recovery/autosave, close protection, and durable document handles.
-2. Remaining native acceptance: manual pan, clipboard, fractional scaling, multiple monitors, and interrupted-close behavior. A synthetic snapped drag passed in the real native WebView.
-3. Measure process-start-to-ready, 30-second process-tree CPU/RSS, actual active GPU, and the 1920×1080 reference workload. Current timings use tiled windows.
-4. Actual portal Save and PNG Export wrote temporary output files; Open returned the saved document and the app status was verified as `Diagram opened`. The portal chooser is floating at 875×600. No user desktop configuration was changed.
+- M1: commands/history, autosave, recovery UI, durable file handles, migration policy and native unsaved-close protection. Current close behavior must not be described as data-loss-safe.
+- M2: multi-select, resize, grouping tools, connection creation/reconnection/routing controls, clipboard, full shortcuts and context menus. Existing ordinary edits still reload portions of the scene; refine this when routing them through commands.
+- M3: official AWS artwork, complete catalog, architecture metadata, templates, and production UI polish. Current tiles use text identifiers and five prototype services.
+- M4: document-driven SVG, recent documents, quality controls and finished export behavior. Optional automatic layout remains unevaluated.
+- M5: Arch packaging, file associations, Docker build/check workflow, clean install/upgrade verification. Current binaries are runnable build artifacts, not installable release packages.
+- Outstanding native checks: manual pan, clipboard, fractional scaling, multiple monitors, real interruption/recovery workflows, repeated open/edit cycles, context-loss behavior, process-start-to-ready, 30-second process-tree CPU/RSS, and 1920×1080 reference measurements. PNG snapshots and a short idle frame count do not certify those checks.
+- M6 free orbit/arbitrary 3D placement remains deferred.
 
-## Current limits
+## Run or continue locally
 
-This is an M0 prototype: no history, autosave/recovery, multi-select, full connection editing, official AWS icons, SVG exporter, installable Arch package, or Docker build workflow yet. Save prompts for a destination every time. Basic palette/inspector work does not imply M2/M3 completion. Native close prompts still require explicit Tauri integration at M1.
+Runnable optimized binary (no Bun/Docker required to launch):
 
-## Local toolchain
+```sh
+./src-tauri/target/release/solar-forge-diagrams
+```
 
-Pinned Bun is in ignored `.tools/package/bin/bun`. Rust 1.99.1 is installed temporarily in `/tmp/solar-forge-cargo` and `/tmp/solar-forge-rustup`. For this session:
+This session installed isolated tools because Bun and Rust were absent. Bun is in ignored `.tools/package/bin/bun`; Rust 1.99.1 is in temporary `/tmp/solar-forge-cargo` and `/tmp/solar-forge-rustup`. These are not application runtime requirements and the /tmp toolchain may disappear after reboot.
 
 ```sh
 export PATH="$PWD/.tools/package/bin:/tmp/solar-forge-cargo/bin:$PATH"
 export CARGO_HOME=/tmp/solar-forge-cargo
 export RUSTUP_HOME=/tmp/solar-forge-rustup
-bun run lint
-bun run check
-bun test
-bun run build
+bun run verify
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo test --manifest-path src-tauri/Cargo.toml --locked
-cargo build --manifest-path src-tauri/Cargo.toml --locked
-src-tauri/target/debug/solar-forge-diagrams --smoke-test
+cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+cargo build --manifest-path src-tauri/Cargo.toml --release --features diagnostics --locked
+bun scripts/check-budgets.ts --native
+./src-tauri/target/release/solar-forge-diagrams --smoke-test
 ```
 
-Normal application usage does not require these temporary paths. A debug native binary is currently at `src-tauri/target/debug/solar-forge-diagrams`; it is not a release package.
+Diagnostics run only in debug or explicitly diagnostic-enabled builds with `--smoke-test`, write under `/tmp/solar-forge-native-smoke/`, and exit on success. Standard builds omit the diagnostics feature. Normal launches do not benchmark or write smoke-test files.
 
-## Optimized native follow-up
-
-The pre-portal optimized shell (1046×918, DPR 1) recorded 139 ms standard load, 6 ms render submission p95, and 19 ms camera-update-to-frame p95. Stress results: 520 ms load / 20 ms submission p95 / 27 ms camera-update p95. Draw calls fell to 511 / 2,043; texture counts remained 9 / 41. Idle render count remained zero. This earlier benchmark had one group; the current fixture has three nested groups and must be measured separately.
-
-The WebGL renderer string reported `Apple GPU` on Linux Intel/NVIDIA hardware; treat this as privacy-masked and do not claim an identified GPU. The earlier optimized native executable was 5,309,528 bytes; the portal backend adds native dependencies and requires a fresh size report. Initial JS is now 134,888 bytes gzip. `bun run check:size` enforces the compressed-JS budget; add `--native` when invoking its script to check the optimized executable.
-
-Verified desktop outputs: `/tmp/solar-forge-dialog-smoke.sforge.json` and `/tmp/solar-forge-dialog-smoke.png`. Chooser buttons were activated with AT-SPI accessibility APIs after inspecting their actual names; the input-injection path was unreliable, so do not mistake its failed key presses for a failed file API.
+Native dialog test outputs are `/tmp/solar-forge-dialog-smoke.sforge.json` and `/tmp/solar-forge-dialog-smoke.png`. AT-SPI accessibility actions completed the chooser tests; injected key sequences proved unreliable. Portal chooser controls are named `Save` for writing and `Select` for opening.

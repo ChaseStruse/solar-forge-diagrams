@@ -193,6 +193,17 @@ Implementation rules:
 
 Work sequentially through decision gates. Each milestone must leave a runnable application and a short validation report.
 
+### Execution checkpoints (2026-10-15)
+
+| Milestone | Implementation commits | Handoff state |
+| --- | --- | --- |
+| M0 | `41ee697`, `50bfcb4`, `57cc746` | Native functional gate passed: bundled WebGL scene, camera modes, snapped drag, native Save/Open/PNG, fixtures and initial measurements. Broader release performance/scaling acceptance remains tracked in progress notes. |
+| M1 | Schema/validation foundation in `41ee697`; full milestone pending | **Resume here:** typed commands/history first, then autosave/recovery, durable file handles, close protection, and migration policy. |
+| M2–M5 | No completion commits yet | Planned; initial palette/inspector/export prototypes do not establish milestone completion. |
+| M6 | None | Optional and deferred until M5. |
+
+Read [docs/PROGRESS.md](docs/PROGRESS.md) for exact validation, measured limits, local tooling, and next steps. Each subsequent implementation commit must add or update its corresponding row in that handoff record.
+
 ### M0 — Native feasibility and measurements
 
 - Scaffold Bun, strict TypeScript, Vite, Three.js, and Tauri with minimal dependencies.
