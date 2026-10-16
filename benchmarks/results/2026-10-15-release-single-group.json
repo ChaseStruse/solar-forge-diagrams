@@ -1,0 +1,27 @@
+{
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+  "viewport": [1046, 918],
+  "pixelRatio": 1,
+  "navigationToScriptMs": 171,
+  "build": "optimized shell / production frontend / diagnostics feature",
+  "gpu": {
+    "renderer": "Apple GPU",
+    "vendor": "Apple Inc."
+  },
+  "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+  "idleFramesOver500ms": 0,
+  "500nodes": {
+    "loadMs": 138.9999999999999,
+    "textures": 9,
+    "drawCalls": 511,
+    "renderSubmissionP95Ms": 6,
+    "cameraChangeToFrameP95Ms": 19
+  },
+  "2000nodes": {
+    "loadMs": 520.0000000000005,
+    "textures": 41,
+    "drawCalls": 2043,
+    "renderSubmissionP95Ms": 20,
+    "cameraChangeToFrameP95Ms": 27
+  }
+}
