@@ -1,0 +1,15 @@
+{
+  "sourceCommit": "eab4757",
+  "packageVersion": "0.1.0-3",
+  "packageSha256": "d2433b20cf76190aa2a971d568dba6573833aa6eef274992c89941031c47fbad",
+  "bundleSha256": "50d9b46e7cf2118c18ecef73b774b68ee30e233a84644083aea1e97f826713c1",
+  "frontendTests": "22 passed / 138 assertions",
+  "rustAtomicTests": "2 passed",
+  "nativeRectangleSelection": "passed, both directions, Shift-add, cancellation; unchanged document",
+  "nativeCompositorDrag": "rectangle and selected tiles visually checked; window position and size unchanged",
+  "normalNativePackageBuild": "passed",
+  "bundleInstallerCheck": "passed on Omarchy 4.0.4",
+  "hostPackageAtLastCheck": "solar-forge-diagrams 0.1.0-2",
+  "hostUpgrade": "awaiting system authentication",
+  "existingUserEditor": "left open"
+}
