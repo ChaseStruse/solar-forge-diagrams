@@ -78,6 +78,22 @@ const aws: readonly (readonly [
     '#ed7100',
   ],
   [
+    'ecr',
+    'ECR',
+    'Amazon-Elastic-Container-Registry',
+    'Containers',
+    'container registry docker images repository elastic',
+    '#ed7100',
+  ],
+  [
+    'fargate',
+    'Fargate',
+    'AWS-Fargate',
+    'Containers',
+    'serverless containers tasks ecs eks',
+    '#ed7100',
+  ],
+  [
     'rds',
     'RDS',
     'Amazon-RDS',

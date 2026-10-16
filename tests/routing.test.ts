@@ -1,6 +1,12 @@
 import { expect, test } from 'bun:test';
 import type { DiagramEdge, DiagramNode } from '../src/domain/document';
-import { nearestPort, routeEdge, routeMidpoint } from '../src/domain/routing';
+import {
+  fansOf,
+  nearestPort,
+  obstaclesOf,
+  routeEdge,
+  routeMidpoint,
+} from '../src/domain/routing';
 
 const tile = (id: string, x: number, z: number): DiagramNode => ({
   id,
@@ -73,4 +79,31 @@ test('labels sit halfway along a route', () => {
   ]);
   expect(point).toEqual({ x: 75, z: 0 });
   expect(horizontal).toBe(true);
+});
+
+test('branches sharing a side fork at their shared node and merge at the target', () => {
+  const ecr = tile('ecr', 0, 0),
+    eks = tile('eks', 400, -200),
+    ecs = tile('ecs', 400, 200),
+    fargate = tile('fargate', 800, 0);
+  const nodes = board(ecr, eks, ecs, fargate);
+  const edges: DiagramEdge[] = [
+    { id: 'a', source: 'ecr', target: 'eks', label: '' },
+    { id: 'b', source: 'ecr', target: 'ecs', label: '' },
+    { id: 'c', source: 'eks', target: 'fargate', label: '' },
+    { id: 'd', source: 'ecs', target: 'fargate', label: '' },
+  ];
+  const fans = fansOf(edges, nodes);
+  const route = (id: string) => {
+    const edge = edges.find((e) => e.id === id);
+    if (!edge) throw Error('Missing edge');
+    return routeEdge(edge, nodes, obstaclesOf(nodes), fans).points;
+  };
+  // ECR's right side is x=90; its stub ends at 114, where both branches turn.
+  for (const id of ['a', 'b']) expect(route(id)[2]?.x).toBe(114);
+  // Fargate's left side is x=710; both inputs turn into it at 686.
+  for (const id of ['c', 'd']) expect(route(id)[3]?.x).toBe(686);
+  // A lone connection does not turn at its source.
+  const single = routeEdge(edges[0] as DiagramEdge, board(ecr, eks));
+  expect(single.points[2]?.x).not.toBe(114);
 });

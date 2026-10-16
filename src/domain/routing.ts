@@ -71,11 +71,11 @@ export function obstaclesOf(
       result.push({ id: node.id, ...rect(node, nodes) });
   return result;
 }
-export function routeEdge(
+/** The sides a connection leaves and enters by, fixed or automatic. */
+export function resolvePorts(
   edge: DiagramEdge,
   nodes: ReadonlyMap<string, DiagramNode>,
-  obstacles: readonly Obstacle[] = obstaclesOf(nodes),
-): { points: Point[]; sourcePort: Port; targetPort: Port } {
+): [Port, Port] {
   const source = nodes.get(edge.source),
     target = nodes.get(edge.target);
   if (!source || !target) throw Error('Missing connection endpoint');
@@ -97,6 +97,35 @@ export function routeEdge(
       portPosition(target, targetPort, nodes),
       nodes,
     );
+  return [sourcePort, targetPort];
+}
+/** Connections sharing a node side, keyed "node:port"; shared sides fork at the node. */
+export type Fans = ReadonlyMap<string, number>;
+export function fansOf(
+  edges: Iterable<DiagramEdge>,
+  nodes: ReadonlyMap<string, DiagramNode>,
+): Map<string, number> {
+  const fans = new Map<string, number>();
+  for (const edge of edges) {
+    if (!nodes.has(edge.source) || !nodes.has(edge.target)) continue;
+    const [out, into] = resolvePorts(edge, nodes);
+    for (const key of [`${edge.source}:${out}`, `${edge.target}:${into}`])
+      fans.set(key, (fans.get(key) ?? 0) + 1);
+  }
+  return fans;
+}
+export function routeEdge(
+  edge: DiagramEdge,
+  nodes: ReadonlyMap<string, DiagramNode>,
+  obstacles: readonly Obstacle[] = obstaclesOf(nodes),
+  fans?: Fans,
+): { points: Point[]; sourcePort: Port; targetPort: Port } {
+  const source = nodes.get(edge.source),
+    target = nodes.get(edge.target);
+  if (!source || !target) throw Error('Missing connection endpoint');
+  const [sourcePort, targetPort] = resolvePorts(edge, nodes);
+  const fork = (fans?.get(`${edge.source}:${sourcePort}`) ?? 0) > 1;
+  const merge = (fans?.get(`${edge.target}:${targetPort}`) ?? 0) > 1;
   const start = portPosition(source, sourcePort, nodes),
     end = portPosition(target, targetPort, nodes);
   const first = offset(start, sourcePort, 24),
@@ -116,6 +145,7 @@ export function routeEdge(
         target,
         nodes,
         obstacles,
+        fork && !merge ? 'source' : merge && !fork ? 'target' : 'middle',
       ),
       end,
     ],
@@ -168,6 +198,7 @@ function bestPath(
   target: DiagramNode,
   nodes: ReadonlyMap<string, DiagramNode>,
   all: readonly Obstacle[],
+  split: 'source' | 'middle' | 'target',
 ): Point[] {
   const ends = [rect(source, nodes), rect(target, nodes)];
   const bend = edge.bend ?? 0;
@@ -195,14 +226,19 @@ function bestPath(
     )
       obstacles.push(box);
   const candidates: Point[][] = [];
-  for (const x of [(first.x + last.x) / 2 + bend, minX + bend, maxX + bend])
+  // Where the cross segment sits: halfway, or at a shared node so branches
+  // visibly fork from (or merge into) it.
+  const along = (a: number, b: number) =>
+    (split === 'source' ? a : split === 'target' ? b : (a + b) / 2) + bend;
+  for (const x of [along(first.x, last.x), minX + bend, maxX + bend])
     candidates.push([first, { x, z: first.z }, { x, z: last.z }, last]);
-  for (const z of [(first.z + last.z) / 2 + bend, minZ + bend, maxZ + bend])
+  for (const z of [along(first.z, last.z), minZ + bend, maxZ + bend])
     candidates.push([first, { x: first.x, z }, { x: last.x, z }, last]);
   const elbows = [
     { x: last.x, z: first.z },
     { x: first.x, z: last.z },
   ];
+  const forked = candidates.length;
   for (const elbow of elbows)
     candidates.push([first, elbow, { ...elbow }, last]);
   const out = direction(sourcePort);
@@ -230,6 +266,8 @@ function bestPath(
       previous = b;
     }
     score += bends * 40;
+    // Equal-length elbows tie with a fork; keep shared branches at the node.
+    if (split !== 'middle' && candidates.indexOf(path) >= forked) score += 1;
     if (score < bestScore) {
       bestScore = score;
       best = path;

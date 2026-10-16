@@ -1499,7 +1499,13 @@ window.addEventListener('beforeunload', (event) => {
 });
 window.addEventListener('pagehide', () => scene.dispose(), { once: true });
 if (import.meta.env.DEV)
-  Object.assign(window, { solarForge: { scene, document: () => current } });
+  Object.assign(window, {
+    solarForge: {
+      scene,
+      document: () => current,
+      load: (json: string) => replaceDocument(parseDocument(json)),
+    },
+  });
 function adaptViewport(): void {
   if (innerWidth < 800 && layersVisible) showLayers(false);
 }

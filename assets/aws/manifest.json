@@ -68,5 +68,15 @@
     "file": "elastic-load-balancing.svg",
     "sourcePath": "Architecture-Service-Icons_07312026/Arch_Networking-Content-Delivery/64/Arch_Elastic-Load-Balancing_64.svg",
     "sha256": "eaaf3465e26d6e7cfae47d2da7bb8d727fe1bd3a118ed06614349e07039f8caa"
+  },
+  {
+    "file": "amazon-elastic-container-registry.svg",
+    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Containers/64/Arch_Amazon-Elastic-Container-Registry_64.svg",
+    "sha256": "bec34a867cb424de91592470a14e82556dd9b041231b5e070ca846752d1c719f"
+  },
+  {
+    "file": "aws-fargate.svg",
+    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Containers/64/Arch_AWS-Fargate_64.svg",
+    "sha256": "003cc5280deebfdd044db0a393be0cd7c35fd376013dd72950d7e5b60c7c1917"
   }
 ]

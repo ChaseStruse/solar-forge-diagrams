@@ -39,6 +39,8 @@ import type {
 } from '../domain/document';
 import { worldPosition } from '../domain/document';
 import {
+  type Fans,
+  fansOf,
   nearestPort,
   type Obstacle,
   obstaclesOf,
@@ -198,9 +200,14 @@ export class DiagramScene {
   private readonly incident = new Map<string, Set<string>>();
   /** Tile footprints for routing; dropped whenever anything moves. */
   private obstacleCache: Obstacle[] | undefined;
+  private fanCache: Fans | undefined;
   private get obstacles(): Obstacle[] {
     this.obstacleCache ??= obstaclesOf(this.nodeIndex);
     return this.obstacleCache;
+  }
+  private get fans(): Fans {
+    this.fanCache ??= fansOf(this.edgeIndex.values(), this.nodeIndex);
+    return this.fanCache;
   }
   private readonly ray = new Raycaster();
   private readonly pointer = new Vector2();
@@ -600,6 +607,7 @@ export class DiagramScene {
   }
   private updatePositions(): void {
     this.obstacleCache = undefined;
+    this.fanCache = undefined;
     for (const tile of this.tiles.values()) {
       const p = worldPosition(tile.node, this.nodeIndex);
       tile.group.position.set(p.x, p.level * 4, p.z);
@@ -623,6 +631,7 @@ export class DiagramScene {
       edge,
       this.nodeIndex,
       this.obstacles,
+      this.fans,
     );
     const y = Math.max(source.group.position.y, target.group.position.y) + 8;
     const offset = index * 14;
@@ -1194,6 +1203,7 @@ export class DiagramScene {
     const tile = this.tiles.get(id);
     if (!tile) return;
     this.obstacleCache = undefined;
+    this.fanCache = undefined;
     if (tile.node.kind === 'group') this.updatePositions();
     else {
       const position = worldPosition(tile.node, this.nodeIndex);
@@ -1497,7 +1507,12 @@ export class DiagramScene {
     const index = this.edges.get(id);
     const edge = this.edgeIndex.get(id);
     if (index === undefined || !edge) return;
-    const { points } = routeEdge(edge, this.nodeIndex, this.obstacles);
+    const { points } = routeEdge(
+      edge,
+      this.nodeIndex,
+      this.obstacles,
+      this.fans,
+    );
     const { point } = routeMidpoint(points);
     const projected = new Vector3(point.x, 8, point.z).project(this.camera);
     const rect = this.renderer.domElement.getBoundingClientRect();
@@ -1630,9 +1645,12 @@ export class DiagramScene {
           if (!edge || !source || !target) return;
           const y =
             Math.max(source.group.position.y, target.group.position.y) + 8;
-          return routeEdge(edge, this.nodeIndex, this.obstacles).points.map(
-            (p) => new Vector3(p.x, y, p.z),
-          );
+          return routeEdge(
+            edge,
+            this.nodeIndex,
+            this.obstacles,
+            this.fans,
+          ).points.map((p) => new Vector3(p.x, y, p.z));
         },
         node: (id) => {
           const tile = this.tiles.get(id);
