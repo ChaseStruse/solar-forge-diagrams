@@ -36,10 +36,10 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
     ]),
     ...routes.flatMap((r) => r.points.map((p) => p.z)),
   ];
-  const minX = Math.min(0, ...xs) - 50,
-    minZ = Math.min(0, ...zs) - 50,
-    width = Math.max(200, Math.max(0, ...xs) - minX + 50),
-    height = Math.max(160, Math.max(0, ...zs) - minZ + 50);
+  const minX = xs.reduce((a, b) => Math.min(a, b), 0) - 50,
+    minZ = zs.reduce((a, b) => Math.min(a, b), 0) - 50,
+    width = Math.max(200, xs.reduce((a, b) => Math.max(a, b), 0) - minX + 50),
+    height = Math.max(160, zs.reduce((a, b) => Math.max(a, b), 0) - minZ + 50);
   const icons = new Map<string, string>();
   const assets = import.meta.glob<string>('../../assets/aws/*.svg', {
     query: '?raw',

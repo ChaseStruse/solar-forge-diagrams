@@ -471,17 +471,23 @@ element('tool-edit').onclick = () => {
 element('node-label').onchange = () => {
   const node = current.nodes.find((n) => n.id === selected);
   if (!node) return;
-  if (
-    !history.execute({
-      type: 'rename',
-      id: node.id,
-      label: inputElement('node-label').value,
-    })
-  )
-    return;
-  scene.load(current);
-  scene.select(node.id);
-  updateHeader();
+  const label = inputElement('node-label').value.slice(0, 1000);
+  if (label === node.label) return;
+  const service = findService(node.serviceId ?? node.label);
+  commit({
+    type: 'graph',
+    label: 'Rename component',
+    nodes: [
+      {
+        id: node.id,
+        value: {
+          ...node,
+          label,
+          ...(service ? { serviceId: service.id } : {}),
+        },
+      },
+    ],
+  });
 };
 function deleteSelection(): void {
   if (selectedEdge) {
@@ -1081,6 +1087,4 @@ if (nativeAvailable())
         void recovery.flush().catch(() => {});
       }
     });
-  })().catch((error) =>
-    notify(`Startup recovery check failed: ${String(error)}`),
-  );
+  })().catch((error) => notify(`Startup check failed: ${String(error)}`));

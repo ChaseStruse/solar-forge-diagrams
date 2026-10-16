@@ -298,6 +298,7 @@ export function starterDocument(): DiagramDocument {
     nodes: [
       {
         id: 'function',
+        serviceId: 'aws.lambda',
         kind: 'service',
         label: 'Lambda',
         x: -300,
@@ -308,6 +309,7 @@ export function starterDocument(): DiagramDocument {
       },
       {
         id: 'database',
+        serviceId: 'aws.dynamodb',
         kind: 'service',
         label: 'DynamoDB',
         x: 300,

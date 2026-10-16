@@ -22,11 +22,12 @@ const percentile = (samples: number[]): number =>
 /** Explicit diagnostic-build --smoke-test run; never runs during an ordinary session. */
 export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
   await scene.ready;
+  await new Promise((resolve) => setTimeout(resolve, 2000));
   const results: Record<string, unknown> = {
     userAgent: navigator.userAgent,
     viewport: [innerWidth, innerHeight],
     pixelRatio: devicePixelRatio,
-    navigationToScriptMs: performance.now(),
+    navigationToDiagnosticsMs: performance.now(),
     build: await invoke<string>('diagnostic_build'),
     gpu: scene.gpuDetails(),
   };
@@ -102,9 +103,9 @@ export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
     throw Error('Native clipboard graph roundtrip failed');
   scene.load(workflow);
   scene.fit();
-  scene.select('lambda');
+  scene.select('function');
   await frame();
-  const handle = scene.handleScreenPosition('lambda', 'resize');
+  const handle = scene.handleScreenPosition('function', 'resize');
   if (!handle) throw Error('Missing resize handle');
   let resizes = 0;
   const previousResize = scene.onResize;
@@ -126,9 +127,9 @@ export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
     );
   scene.onResize = previousResize;
   if (resizes !== 1) throw Error('Native resize gesture failed');
-  scene.selectMany(['lambda', 'dynamodb']);
+  scene.selectMany(['function', 'database']);
   await frame();
-  const moveAnchor = scene.nodeScreenPosition('lambda');
+  const moveAnchor = scene.nodeScreenPosition('function');
   if (!moveAnchor) throw Error('Missing multiselect anchor');
   let groupedMoves = 0;
   const previousMoves = scene.onMoves;
@@ -150,15 +151,15 @@ export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
     );
   scene.onMoves = previousMoves;
   if (groupedMoves !== 1) throw Error('Native multi-selection drag failed');
-  scene.select('lambda');
+  scene.select('function');
   await frame();
-  const sourceHandle = scene.handleScreenPosition('lambda', 'east'),
-    targetAnchor = scene.nodeScreenPosition('dynamodb');
+  const sourceHandle = scene.handleScreenPosition('function', 'east'),
+    targetAnchor = scene.nodeScreenPosition('database');
   if (!sourceHandle || !targetAnchor) throw Error('Missing port target');
   let connects = 0;
   const previousConnect = scene.onConnect;
   scene.onConnect = (source, port, target) => {
-    if (source === 'lambda' && port === 'east' && target === 'dynamodb')
+    if (source === 'function' && port === 'east' && target === 'database')
       connects++;
   };
   canvas.dispatchEvent(

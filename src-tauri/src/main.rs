@@ -162,30 +162,38 @@ fn recovery_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(directory.join("recovery.sforge.json"))
 }
 #[tauri::command]
-fn read_recovery(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let path = recovery_path(&app)?;
-    if path.exists() {
-        read_document(&path).map(Some)
-    } else {
-        Ok(None)
-    }
+async fn read_recovery(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = recovery_path(&app)?;
+        if path.exists() {
+            read_document(&path).map(Some)
+        } else {
+            Ok(None)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-fn write_recovery(app: tauri::AppHandle, content: Option<String>) -> Result<(), String> {
-    let path = recovery_path(&app)?;
-    if let Some(content) = content {
-        if content.len() > 10_000_000 {
-            return Err("Recovery exceeds 10 MB limit".into());
+async fn write_recovery(app: tauri::AppHandle, content: Option<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = recovery_path(&app)?;
+        if let Some(content) = content {
+            if content.len() > 10_000_000 {
+                return Err("Recovery exceeds 10 MB limit".into());
+            }
+            let _: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+            atomic_write(&path, content.as_bytes())
+        } else {
+            match fs::remove_file(path) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(e.to_string()),
+            }
         }
-        let _: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-        atomic_write(&path, content.as_bytes())
-    } else {
-        match fs::remove_file(path) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e.to_string()),
-        }
-    }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -228,8 +236,10 @@ fn remember_path(app: &tauri::AppHandle, path: &Path) -> Result<(), String> {
     )
 }
 #[tauri::command]
-fn recent_documents(app: tauri::AppHandle) -> Result<Vec<RecentFile>, String> {
-    recent_files(&app)
+async fn recent_documents(app: tauri::AppHandle) -> Result<Vec<RecentFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || recent_files(&app))
+        .await
+        .map_err(|e| e.to_string())?
 }
 fn open_path(app: &tauri::AppHandle, path: PathBuf) -> Result<OpenedDocument, String> {
     let content = read_document(&path)?;
@@ -241,21 +251,29 @@ fn open_path(app: &tauri::AppHandle, path: PathBuf) -> Result<OpenedDocument, St
     })
 }
 #[tauri::command]
-fn open_recent(app: tauri::AppHandle, path: PathBuf) -> Result<OpenedDocument, String> {
-    if !recent_files(&app)?.iter().any(|entry| entry.path == path) {
-        return Err("Unknown recent file".into());
-    }
-    open_path(&app, path)
+async fn open_recent(app: tauri::AppHandle, path: PathBuf) -> Result<OpenedDocument, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if !recent_files(&app)?.iter().any(|entry| entry.path == path) {
+            return Err("Unknown recent file".into());
+        }
+        open_path(&app, path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-fn take_pending_file(app: tauri::AppHandle) -> Result<Option<OpenedDocument>, String> {
-    let path = app
-        .state::<FileSessions>()
-        .pending
-        .lock()
-        .map_err(|e| e.to_string())?
-        .pop();
-    path.map(|path| open_path(&app, path)).transpose()
+async fn take_pending_file(app: tauri::AppHandle) -> Result<Option<OpenedDocument>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = app
+            .state::<FileSessions>()
+            .pending
+            .lock()
+            .map_err(|e| e.to_string())?
+            .pop();
+        path.map(|path| open_path(&app, path)).transpose()
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 fn queue_arguments(app: &tauri::AppHandle, args: Vec<String>, cwd: &Path) {
     let paths: Vec<PathBuf> = args
