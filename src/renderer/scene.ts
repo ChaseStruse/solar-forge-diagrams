@@ -147,6 +147,20 @@ export class DiagramScene {
     depthWrite: false,
     vertexColors: true,
   });
+  /** Short bright dashes that march from source to target. */
+  private readonly flowMaterial = new LineMaterial({
+    color: '#ffffff',
+    linewidth: 3.6,
+    transparent: true,
+    depthWrite: false,
+    dashed: true,
+    dashSize: 12,
+    gapSize: 38,
+  });
+  private flowLines: LineSegments2 | undefined;
+  private distancesDirty = false;
+  private flowing = true;
+  private readonly animators = new Set<(time: number) => boolean>();
   private edgeGeometry: LineSegmentsGeometry | undefined;
   private edgeBuffer: InterleavedBuffer | undefined;
   private readonly tiles = new Map<string, Tile>();
@@ -346,6 +360,7 @@ export class DiagramScene {
     this.portMaterial.color.set(palette.port);
     this.handleMaterial.color.set(palette.handle);
     this.previewMaterial.color.set(palette.edgeSelected);
+    this.flowMaterial.color.set(palette.flow);
     this.haloMaterial.opacity = palette.haloOpacity;
   }
   /** Repaint the whole board in a new theme, keeping the current selection. */
@@ -477,7 +492,12 @@ export class DiagramScene {
     halo.frustumCulled = false;
     const connections = new LineSegments2(this.edgeGeometry, this.edgeMaterial);
     connections.frustumCulled = false;
-    this.content.add(halo, connections);
+    this.flowLines = new LineSegments2(this.edgeGeometry, this.flowMaterial);
+    this.flowLines.frustumCulled = false;
+    this.flowLines.visible = this.flowing;
+    this.flowLines.renderOrder = 2;
+    this.content.add(halo, connections, this.flowLines);
+    this.distancesDirty = true;
     for (const [index, edge] of document.edges.entries()) {
       this.edgeIndex.set(edge.id, edge);
       this.edges.set(edge.id, index);
@@ -552,6 +572,7 @@ export class DiagramScene {
       this.edgeBuffer.addUpdateRange(index * 42, 42);
       this.edgeBuffer.needsUpdate = true;
     }
+    this.distancesDirty = true;
     const label = this.edgeLabels.get(id);
     if (label) {
       label.position.set(middle.x, y + 8, middle.z);
@@ -1308,8 +1329,42 @@ export class DiagramScene {
       this.render();
     });
   }
+  /** Toggle the marching data-flow dashes on every connection. */
+  public setFlow(on: boolean): void {
+    this.flowing = on;
+    if (this.flowLines) this.flowLines.visible = on;
+    this.invalidate();
+  }
+  public get flow(): boolean {
+    return this.flowing;
+  }
+  /**
+   * Register per-frame work; the callback returns false once it is finished.
+   * While anything animates, the board renders every frame; otherwise it idles.
+   */
+  public animate(step: (time: number) => boolean): () => void {
+    this.animators.add(step);
+    this.invalidate();
+    return () => {
+      this.animators.delete(step);
+      this.invalidate();
+    };
+  }
+  private get animating(): boolean {
+    return (
+      this.content.visible &&
+      ((this.flowing && this.edges.size > 0) || this.animators.size > 0)
+    );
+  }
   private render(): void {
     const start = performance.now();
+    if (this.distancesDirty && this.flowLines) {
+      this.flowLines.computeLineDistances();
+      this.distancesDirty = false;
+    }
+    this.flowMaterial.dashOffset = -((start / 1000) * 80) % 50;
+    for (const step of this.animators)
+      if (!step(start)) this.animators.delete(step);
     this.syncHandles();
     this.scene.updateMatrixWorld();
     this.labels.sync(this.camera, this.height);
@@ -1318,6 +1373,7 @@ export class DiagramScene {
     this.metrics.drawCalls = this.renderer.info.render.calls;
     this.metrics.frames++;
     this.metrics.lastRenderMs = performance.now() - start;
+    if (this.animating) this.invalidate();
   }
   public async checkContextRecovery(): Promise<boolean> {
     const extension = this.renderer
@@ -1440,6 +1496,8 @@ export class DiagramScene {
     this.geometry.dispose();
     this.tileOutline.dispose();
     this.haloMaterial.dispose();
+    this.flowMaterial.dispose();
+    this.animators.clear();
     this.edgeMaterial.dispose();
     this.backdrop.dispose();
     this.renderer.dispose();

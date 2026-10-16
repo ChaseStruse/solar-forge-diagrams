@@ -22,6 +22,8 @@ const percentile = (samples: number[]): number =>
 /** Explicit diagnostic-build --smoke-test run; never runs during an ordinary session. */
 export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
   await scene.ready;
+  // Diagnostics measure idle invalidation; continuous flow animation would mask it.
+  scene.setFlow(false);
   await new Promise((resolve) => setTimeout(resolve, 2000));
   const results: Record<string, unknown> = {
     userAgent: navigator.userAgent,
