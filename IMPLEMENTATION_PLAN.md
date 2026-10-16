@@ -1,6 +1,6 @@
 # Solar Forge Diagrams — agent implementation plan
 
-Status: approved technical direction; implementation not started.
+Status: implementation in progress. See [progress and task-to-commit mapping](docs/PROGRESS.md) for verified results and the next action.
 
 ## 1. Product objective and priorities
 
