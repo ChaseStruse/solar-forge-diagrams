@@ -106,7 +106,7 @@ Use a versioned `.sforge.json` document with stable IDs, nodes, edges, group rel
 ### First-release views
 
 - Top-down orthographic editing for precision and dense diagrams.
-- Isometric orthographic editing as the distinctive Solar Forge presentation.
+- A shallow tilted orthographic view as the distinctive Solar Forge presentation: approximately 15 degrees from top-down, minimal diagonal skew, and subtle tile depth. Readability takes priority over dramatic isometric angles.
 - Both views operate on the same graph. Switching views must not mutate document coordinates.
 - Defer unrestricted orbit and arbitrary 3D placement until the core editor passes acceptance tests.
 

@@ -36,8 +36,13 @@ export class LabelAtlas {
   private readonly pages: Page[] = [];
   private readonly matrix = new Matrix4();
   private readonly position = new Vector3();
+  private readonly up = new Vector3();
 
-  public create(text: string, zoom: number): Object3D {
+  public create(
+    text: string,
+    zoom: number,
+    kind: 'node' | 'edge' = 'node',
+  ): Object3D {
     let page = this.pages[this.pages.length - 1] ?? this.page();
     const width = Math.min(
       480,
@@ -50,9 +55,15 @@ export class LabelAtlas {
     }
     if (page.y + HEIGHT > SIZE) page = this.page();
     const { x, y, context } = page;
+    if (kind === 'edge') {
+      context.fillStyle = '#1c252c';
+      context.fillRect(x + 2, y + 4, width - 4, HEIGHT - 8);
+      context.fillStyle = '#f5eee1';
+    }
     context.strokeText(text, x + width / 2, y + HEIGHT / 2, width - 16);
     context.fillText(text, x + width / 2, y + HEIGHT / 2, width - 16);
     const object = new Object3D();
+    object.userData.screenOffsetY = kind === 'edge' ? 20 : 0;
     object.userData.labelWidth = width;
     object.userData.labelHeight = HEIGHT;
     object.scale.set((width * 0.5) / zoom, (HEIGHT * 0.5) / zoom, 1);
@@ -67,12 +78,12 @@ export class LabelAtlas {
     canvas.height = SIZE;
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Text canvas unavailable');
-    context.font = '600 26px system-ui';
+    context.font = '600 28px system-ui';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillStyle = '#f5eee1';
     context.strokeStyle = '#182027';
-    context.lineWidth = 4;
+    context.lineWidth = 2;
     context.lineJoin = 'round';
     const texture = new CanvasTexture(canvas);
     texture.generateMipmaps = false;
@@ -134,12 +145,16 @@ export class LabelAtlas {
       root.add(batch);
     }
   }
-  public sync(camera: Camera): void {
+  public sync(camera: Camera, zoom: number): void {
+    this.up.set(0, 1, 0).applyQuaternion(camera.quaternion);
     for (const page of this.pages) {
       const batch = page.batch;
       if (!batch) continue;
       for (const [index, entry] of page.entries.entries()) {
         this.position.setFromMatrixPosition(entry.object.matrixWorld);
+        const offset: unknown = entry.object.userData.screenOffsetY;
+        if (typeof offset === 'number')
+          this.position.addScaledVector(this.up, offset / zoom);
         this.matrix.compose(
           this.position,
           camera.quaternion,

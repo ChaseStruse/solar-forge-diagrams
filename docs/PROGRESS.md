@@ -83,3 +83,11 @@ bun scripts/check-budgets.ts --native
 Diagnostics run only in debug or explicitly diagnostic-enabled builds with `--smoke-test`, write under `/tmp/solar-forge-native-smoke/`, and exit on success. Standard builds omit the diagnostics feature. Normal launches do not benchmark or write smoke-test files.
 
 Native dialog test outputs are `/tmp/solar-forge-dialog-smoke.sforge.json` and `/tmp/solar-forge-dialog-smoke.png`. AT-SPI accessibility actions completed the chooser tests; injected key sequences proved unreliable. Portal chooser controls are named `Save` for writing and `Select` for opening.
+
+## Readability correction after M0
+
+User feedback: the default angle was exaggerated and the diagram unreadable. The default camera now tilts approximately 15 degrees from top-down with minimal diagonal skew. Tile/platform thickness and group elevation are reduced; labels are slightly larger with lighter outlines. Connection labels receive a consistent screen-space upward offset and dark backing so they do not overlap service names.
+
+Validated with `bun run verify`, native build, and the native smoke runner; both view captures were inspected. Snapped dragging and idle invalidation still pass. The final debug-shell run at 900×918 measured 123 ms standard-board load, 5 ms render submission p95, 17 ms scheduled camera-update p95; 10 atlas textures and 512 draw calls. These are preliminary debug measurements; earlier release results remain historical. Compressed JS is 135,030 bytes. The optimized native binary is rebuilt for this correction. Existing running windows require reopening to load bundled asset changes; they are not forcibly closed.
+
+Resume remains M1. This readability correction does not change the document format or complete later milestones.

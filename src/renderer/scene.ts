@@ -154,7 +154,7 @@ export class DiagramScene {
       const group = new Group();
       const material = new MeshLambertMaterial({ color: node.color });
       const mesh = new Mesh(this.geometry, material);
-      mesh.scale.set(node.width, node.kind === 'group' ? 8 : 24, node.depth);
+      mesh.scale.set(node.width, node.kind === 'group' ? 3 : 10, node.depth);
       mesh.userData.nodeId = node.id;
       group.add(mesh);
       const label = this.labels.create(node.label, this.camera.zoom);
@@ -162,7 +162,7 @@ export class DiagramScene {
         node.kind === 'group'
           ? -node.width / 2 + Math.min(node.width / 2, 150)
           : 0,
-        node.kind === 'group' ? 13 : 37,
+        node.kind === 'group' ? 9 : 22,
         node.kind === 'group' ? -node.depth / 2 + 25 : 0,
       );
       group.add(label);
@@ -182,7 +182,7 @@ export class DiagramScene {
       this.edgeIndex.set(edge.id, edge);
       this.edges.set(edge.id, index);
       if (edge.label) {
-        const label = this.labels.create(edge.label, this.camera.zoom);
+        const label = this.labels.create(edge.label, this.camera.zoom, 'edge');
         this.content.add(label);
         this.edgeLabels.set(edge.id, label);
       }
@@ -200,7 +200,7 @@ export class DiagramScene {
   private updatePositions(): void {
     for (const tile of this.tiles.values()) {
       const p = worldPosition(tile.node, this.nodeIndex);
-      tile.group.position.set(p.x, p.level * 16, p.z);
+      tile.group.position.set(p.x, p.level * 6, p.z);
     }
     for (const id of this.edges.keys()) this.updateEdge(id);
   }
@@ -213,7 +213,7 @@ export class DiagramScene {
     if (!source || !target) return;
     const a = source.group.position;
     const b = target.group.position;
-    const y = Math.max(a.y, b.y) + 14;
+    const y = Math.max(a.y, b.y) + 8;
     const horizontal = Math.abs(b.x - a.x) >= Math.abs(b.z - a.z);
     const direction = horizontal ? Math.sign(b.x - a.x) : Math.sign(b.z - a.z);
     const ax = a.x + (horizontal ? (direction * source.node.width) / 2 : 0);
@@ -250,12 +250,11 @@ export class DiagramScene {
   public setView(mode: ViewMode): void {
     this.mode = mode;
     this.camera.up.set(0, 0, -1);
+    // Tilt about 15 degrees from top-down, with almost no diagonal skew.
     this.camera.position
       .copy(this.target)
       .add(
-        mode === 'top'
-          ? new Vector3(0, 2000, 0)
-          : new Vector3(1200, 1400, 1200),
+        mode === 'top' ? new Vector3(0, 2000, 0) : new Vector3(180, 2600, 700),
       );
     this.camera.lookAt(this.target);
     this.camera.updateMatrixWorld();
@@ -372,7 +371,7 @@ export class DiagramScene {
     if (tile.node.kind === 'group') this.updatePositions();
     else {
       const position = worldPosition(tile.node, this.nodeIndex);
-      tile.group.position.set(position.x, position.level * 16, position.z);
+      tile.group.position.set(position.x, position.level * 6, position.z);
       for (const id of this.incident.get(tile.node.id) ?? [])
         this.updateEdge(id);
     }
@@ -451,7 +450,7 @@ export class DiagramScene {
   private render(): void {
     const start = performance.now();
     this.scene.updateMatrixWorld();
-    this.labels.sync(this.camera);
+    this.labels.sync(this.camera, this.camera.zoom);
     this.renderer.render(this.scene, this.camera);
     this.metrics.textures = this.renderer.info.memory.textures;
     this.metrics.drawCalls = this.renderer.info.render.calls;
@@ -480,7 +479,7 @@ export class DiagramScene {
     const tile = this.tiles.get(id);
     if (!tile) return undefined;
     const point = tile.group.position.clone();
-    point.y += tile.node.kind === 'group' ? 4 : 12;
+    point.y += tile.node.kind === 'group' ? 1.5 : 5;
     point.project(this.camera);
     const rect = this.renderer.domElement.getBoundingClientRect();
     return {
