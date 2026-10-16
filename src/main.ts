@@ -18,6 +18,8 @@ import {
 import type { Edit } from './domain/history';
 import { DocumentHistory } from './domain/history';
 import {
+  type Alignment,
+  alignNodes,
   copyFragment,
   deleteNodes,
   groupNodes,
@@ -52,7 +54,7 @@ root.innerHTML = `
   <div class="history-dock floating-dock" aria-label="Edit history"><button id="undo" class="small-icon" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button><button id="redo" class="small-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>${icon('redo')}</button></div>
   <div class="view-dock floating-dock" aria-label="View controls"><button id="flow" aria-pressed="true" title="Animate data flow along connections">${icon('flow')}<span>Flow</span></button><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
   <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add a service <kbd>Esc</kbd> Deselect</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><label class="quality-label">Rendering quality<select id="quality"><option value="1">Efficient · 1×</option><option value="1.5" selected>Balanced · 1.5×</option><option value="2">Sharp · 2×</option></select></label><p>Drag empty canvas to select. Shift-drag adds.<br>Scroll to zoom. Right-drag to pan.</p></section>
-  <section id="context-menu" class="popover context-menu" aria-label="Selection actions" hidden><button data-action="duplicate">Duplicate</button><button data-action="tool-group">Group</button><button data-action="ungroup">Ungroup</button><button data-action="delete">Delete</button><button data-action="fit">Fit view</button></section>
+  <section id="context-menu" class="popover context-menu" aria-label="Selection actions" hidden><button data-action="duplicate">Duplicate</button><button data-action="tool-group">Group</button><button data-action="ungroup">Ungroup</button><div class="align-row" data-multi><button data-align="left" title="Align left edges">⇤</button><button data-align="center" title="Align centres horizontally">↔</button><button data-align="right" title="Align right edges">⇥</button><button data-align="top" title="Align top edges">⤒</button><button data-align="middle" title="Align middles">↕</button><button data-align="bottom" title="Align bottom edges">⤓</button></div><div class="align-row" data-multi><button data-align="distribute-x" title="Distribute horizontally">⋯ Space evenly ↔</button><button data-align="distribute-z" title="Distribute vertically">⋮ ↕</button></div><button data-action="delete">Delete</button><button data-action="fit">Fit view</button></section>
   <div id="status" class="status" role="status">Ready</div><span id="count" class="board-count"></span>`;
 function element(id: string): HTMLElement {
   const result = document.getElementById(id);
@@ -960,7 +962,11 @@ for (const key of [
 element('delete-edge').onclick = deleteSelection;
 scene.onContextMenu = (x, y) => {
   const menu = element('context-menu');
-  for (const button of menu.querySelectorAll<HTMLButtonElement>('button')) {
+  for (const row of menu.querySelectorAll<HTMLElement>('[data-multi]'))
+    row.hidden = !!selectedEdge || selectedIds.size < 2;
+  for (const button of menu.querySelectorAll<HTMLButtonElement>(
+    'button[data-action]',
+  )) {
     const action = button.dataset.action;
     button.hidden = selectedEdge
       ? action !== 'delete'
@@ -972,8 +978,32 @@ scene.onContextMenu = (x, y) => {
   menu.style.left = `${Math.min(x, innerWidth - 190)}px`;
   menu.style.top = `${Math.min(y, innerHeight - 250)}px`;
 };
+const alignments: readonly [Alignment, string][] = [
+  ['left', 'Align left edges'],
+  ['center', 'Align centres horizontally'],
+  ['right', 'Align right edges'],
+  ['top', 'Align top edges'],
+  ['middle', 'Align middles'],
+  ['bottom', 'Align bottom edges'],
+  ['distribute-x', 'Distribute horizontally'],
+  ['distribute-z', 'Distribute vertically'],
+];
+function align(alignment: Alignment): void {
+  if (selectedIds.size < 2) {
+    notify('Select two or more components to align.');
+    return;
+  }
+  commit(alignNodes(current, selectedIds, alignment));
+}
 for (const button of document.querySelectorAll<HTMLButtonElement>(
-  '#context-menu button',
+  '#context-menu [data-align]',
+))
+  button.onclick = () => {
+    element('context-menu').hidden = true;
+    align(button.dataset.align as Alignment);
+  };
+for (const button of document.querySelectorAll<HTMLButtonElement>(
+  '#context-menu button[data-action]',
 ))
   button.onclick = () => {
     element('context-menu').hidden = true;
@@ -1059,6 +1089,10 @@ window.addEventListener('keydown', (event) => {
           element(id).textContent?.trim() ??
           id,
         run: () => element(id).click(),
+      })),
+      ...alignments.map(([alignment, label]) => ({
+        label,
+        run: () => align(alignment),
       })),
       ...themes.map((option) => ({
         label: `Theme: ${option.name}`,

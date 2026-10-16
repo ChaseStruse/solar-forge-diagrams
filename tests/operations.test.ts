@@ -8,6 +8,7 @@ import {
 import { DocumentHistory } from '../src/domain/history';
 import { routeEdge } from '../src/domain/routing';
 import {
+  alignNodes,
   copyFragment,
   deleteNodes,
   groupNodes,
@@ -109,4 +110,31 @@ test('named ports and routing survive serialization and resolve endpoints', () =
     if (!a || !b) throw Error('Missing route');
     expect(a.x === b.x || a.z === b.z).toBe(true);
   }
+});
+
+test('align and distribute work in world space for nested and root nodes', () => {
+  const doc = sampleDocument();
+  const ids = new Set(['gateway', 'lambda', 'db']);
+  const index = () => new Map(doc.nodes.map((n) => [n.id, n]));
+  const history = new DocumentHistory(doc);
+  history.execute(alignNodes(doc, ids, 'top'));
+  const tops = [...ids].map((id) => {
+    const node = index().get(id);
+    if (!node) throw Error('Missing node');
+    return worldPosition(node, index()).z - node.depth / 2;
+  });
+  expect(new Set(tops).size).toBe(1);
+  history.execute(alignNodes(doc, ids, 'distribute-x'));
+  const xs = [...ids]
+    .map((id) => {
+      const node = index().get(id);
+      if (!node) throw Error('Missing node');
+      return worldPosition(node, index()).x;
+    })
+    .sort((a, b) => a - b);
+  const [a = 0, b = 0, c = 0] = xs;
+  expect(Math.abs(b - a - (c - b))).toBeLessThanOrEqual(1);
+  history.undo();
+  history.undo();
+  expect(doc).toEqual(sampleDocument());
 });

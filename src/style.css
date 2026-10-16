@@ -980,3 +980,20 @@ textarea:focus-visible {
   border-radius: 3px;
   display: block;
 }
+.context-menu {
+  width: 210px;
+}
+.align-row {
+  display: flex;
+  gap: 2px;
+  padding: 2px 0 4px;
+  border-bottom: 1px solid var(--divider);
+  margin-bottom: 4px;
+}
+.context-menu .align-row button {
+  width: auto;
+  flex: 1;
+  text-align: center;
+  padding: 6px 4px;
+  font-size: 13px;
+}

@@ -224,3 +224,100 @@ export function insertionSlot(
       }
   throw Error('No nearby space for another component. Pan to an empty area.');
 }
+
+export type Alignment =
+  | 'left'
+  | 'center'
+  | 'right'
+  | 'top'
+  | 'middle'
+  | 'bottom'
+  | 'distribute-x'
+  | 'distribute-z';
+/**
+ * Line up or evenly space the selected top-level nodes in world space.
+ * Children of selected boundaries travel with their parent.
+ */
+export function alignNodes(
+  doc: DiagramDocument,
+  selected: ReadonlySet<string>,
+  alignment: Alignment,
+): Edit {
+  const index = new Map(doc.nodes.map((n) => [n.id, n]));
+  const items = doc.nodes
+    .filter((n) => selected.has(n.id) && !hasSelectedParent(n, index, selected))
+    .map((node) => {
+      const p = worldPosition(node, index);
+      return {
+        node,
+        x: p.x,
+        z: p.z,
+        minX: p.x - node.width / 2,
+        maxX: p.x + node.width / 2,
+        minZ: p.z - node.depth / 2,
+        maxZ: p.z + node.depth / 2,
+      };
+    });
+  const label =
+    alignment === 'distribute-x' || alignment === 'distribute-z'
+      ? 'Distribute selection'
+      : 'Align selection';
+  if (items.length < 2) return { type: 'graph', label, nodes: [] };
+  const target = new Map<string, { x: number; z: number }>();
+  const min = (key: 'minX' | 'minZ') => Math.min(...items.map((i) => i[key]));
+  const max = (key: 'maxX' | 'maxZ') => Math.max(...items.map((i) => i[key]));
+  for (const item of items) {
+    const { node } = item;
+    let { x, z } = item;
+    if (alignment === 'left') x = min('minX') + node.width / 2;
+    if (alignment === 'right') x = max('maxX') - node.width / 2;
+    if (alignment === 'center') x = (min('minX') + max('maxX')) / 2;
+    if (alignment === 'top') z = min('minZ') + node.depth / 2;
+    if (alignment === 'bottom') z = max('maxZ') - node.depth / 2;
+    if (alignment === 'middle') z = (min('minZ') + max('maxZ')) / 2;
+    target.set(node.id, { x, z });
+  }
+  if (alignment === 'distribute-x' || alignment === 'distribute-z') {
+    // Equal gaps between neighbours, keeping the outermost two in place.
+    const horizontal = alignment === 'distribute-x';
+    const sorted = [...items].sort((a, b) =>
+      horizontal ? a.x - b.x : a.z - b.z,
+    );
+    const span = horizontal
+      ? max('maxX') - min('minX')
+      : max('maxZ') - min('minZ');
+    const occupied = sorted.reduce(
+      (sum, i) => sum + (horizontal ? i.node.width : i.node.depth),
+      0,
+    );
+    const gap = (span - occupied) / (sorted.length - 1);
+    let cursor = horizontal ? min('minX') : min('minZ');
+    for (const item of sorted) {
+      const size = horizontal ? item.node.width : item.node.depth;
+      const centre = cursor + size / 2;
+      target.set(item.node.id, {
+        x: horizontal ? centre : item.x,
+        z: horizontal ? item.z : centre,
+      });
+      cursor += size + gap;
+    }
+  }
+  return {
+    type: 'graph',
+    label,
+    nodes: items.flatMap(({ node, x, z }) => {
+      const next = target.get(node.id);
+      if (!next || (next.x === x && next.z === z)) return [];
+      return [
+        {
+          id: node.id,
+          value: {
+            ...node,
+            x: Math.round(node.x + next.x - x),
+            z: Math.round(node.z + next.z - z),
+          },
+        },
+      ];
+    }),
+  };
+}

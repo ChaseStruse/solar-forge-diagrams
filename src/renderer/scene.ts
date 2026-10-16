@@ -59,6 +59,12 @@ import { BoardView, type ViewMode } from './view';
 
 export type { ViewMode } from './view';
 
+interface Rect {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
 interface Box {
   x: number;
   z: number;
@@ -240,8 +246,29 @@ export class DiagramScene {
     | undefined;
   private dragOrigins: { node: DiagramNode; x: number; z: number }[] = [];
   private drag:
-    | { id: string; x: number; z: number; startX: number; startZ: number }
+    | {
+        id: string;
+        x: number;
+        z: number;
+        startX: number;
+        startZ: number;
+        /** World box of the grabbed node at drag start. */
+        box: Rect;
+        /** Boxes of everything not moving, for alignment guides. */
+        others: Rect[];
+      }
     | undefined;
+  private readonly guideMaterial = new LineMaterial({
+    color: '#ff2a6d',
+    linewidth: 1.5,
+    transparent: true,
+    opacity: 0.9,
+    depthTest: false,
+    dashed: true,
+    dashSize: 8,
+    gapSize: 6,
+  });
+  private guides: LineSegments2 | undefined;
   private pan: { x: number; z: number } | undefined;
   private activePointer: number | undefined;
   private readonly selectionBox = document.createElement('div');
@@ -361,6 +388,7 @@ export class DiagramScene {
     this.handleMaterial.color.set(palette.handle);
     this.previewMaterial.color.set(palette.edgeSelected);
     this.flowMaterial.color.set(palette.flow);
+    this.guideMaterial.color.set(palette.guide);
     this.haloMaterial.opacity = palette.haloOpacity;
   }
   /** Repaint the whole board in a new theme, keeping the current selection. */
@@ -776,12 +804,24 @@ export class DiagramScene {
           return true;
         })
         .map(({ node }) => ({ node, x: node.x, z: node.z }));
+      const moving = new Set(this.dragOrigins.map((o) => o.node.id));
+      const movingOrInside = (tile: Tile) => {
+        for (let id: string | undefined = tile.node.id; id; ) {
+          if (moving.has(id)) return true;
+          id = this.nodeIndex.get(id)?.parentId;
+        }
+        return false;
+      };
       this.drag = {
         id: node.id,
         x: point.x,
         z: point.z,
         startX: node.x,
         startZ: node.z,
+        box: this.worldRect(this.tiles.get(node.id)),
+        others: [...this.tiles.values()]
+          .filter((tile) => !movingOrInside(tile))
+          .map((tile) => this.worldRect(tile)),
       };
     }
   };
@@ -939,14 +979,108 @@ export class DiagramScene {
     const tile = this.tiles.get(this.drag.id);
     if (!tile) return;
     const step = this.snapping ? 10 : 1;
-    const dx = Math.round((point.x - this.drag.x) / step) * step;
-    const dz = Math.round((point.z - this.drag.z) / step) * step;
+    let dx = Math.round((point.x - this.drag.x) / step) * step;
+    let dz = Math.round((point.z - this.drag.z) / step) * step;
+    if (!event.ctrlKey) {
+      const snapped = this.alignToNeighbours(this.drag, dx, dz);
+      dx = snapped.dx;
+      dz = snapped.dz;
+    } else this.showGuides([]);
     for (const origin of this.dragOrigins) {
       origin.node.x = origin.x + dx;
       origin.node.z = origin.z + dz;
       this.refreshPosition(origin.node.id);
     }
   };
+  private worldRect(tile: Tile | undefined): Rect {
+    if (!tile) return { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+    const p = worldPosition(tile.node, this.nodeIndex);
+    return {
+      minX: p.x - tile.node.width / 2,
+      maxX: p.x + tile.node.width / 2,
+      minZ: p.z - tile.node.depth / 2,
+      maxZ: p.z + tile.node.depth / 2,
+    };
+  }
+  /**
+   * Smart guides: pull the grabbed node's edges or centre onto a neighbour's
+   * when within a few pixels, and draw the line it snapped to.
+   */
+  private alignToNeighbours(
+    drag: NonNullable<DiagramScene['drag']>,
+    dx: number,
+    dz: number,
+  ): { dx: number; dz: number } {
+    const box = drag.box;
+    const threshold =
+      8 *
+      this.pixelSize(
+        new Vector3((box.minX + box.maxX) / 2, 0, (box.minZ + box.maxZ) / 2),
+      );
+    const lines = (min: number, max: number) => [min, (min + max) / 2, max];
+    let bestX: { diff: number; at: number; other: Rect } | undefined;
+    let bestZ: { diff: number; at: number; other: Rect } | undefined;
+    for (const other of drag.others) {
+      for (const a of lines(box.minX + dx, box.maxX + dx))
+        for (const b of lines(other.minX, other.maxX)) {
+          const diff = b - a;
+          if (
+            Math.abs(diff) < threshold &&
+            (!bestX || Math.abs(diff) < Math.abs(bestX.diff))
+          )
+            bestX = { diff, at: b, other };
+        }
+      for (const a of lines(box.minZ + dz, box.maxZ + dz))
+        for (const b of lines(other.minZ, other.maxZ)) {
+          const diff = b - a;
+          if (
+            Math.abs(diff) < threshold &&
+            (!bestZ || Math.abs(diff) < Math.abs(bestZ.diff))
+          )
+            bestZ = { diff, at: b, other };
+        }
+    }
+    if (bestX) dx += bestX.diff;
+    if (bestZ) dz += bestZ.diff;
+    const segments: number[] = [];
+    const y = 16;
+    if (bestX) {
+      const from = Math.min(box.minZ + dz, bestX.other.minZ) - 30;
+      const to = Math.max(box.maxZ + dz, bestX.other.maxZ) + 30;
+      segments.push(bestX.at, y, from, bestX.at, y, to);
+    }
+    if (bestZ) {
+      const from = Math.min(box.minX + dx, bestZ.other.minX) - 30;
+      const to = Math.max(box.maxX + dx, bestZ.other.maxX) + 30;
+      segments.push(from, y, bestZ.at, to, y, bestZ.at);
+    }
+    this.showGuides(segments);
+    return { dx, dz };
+  }
+  private showGuides(positions: number[]): void {
+    if (!positions.length) {
+      if (this.guides) {
+        this.scene.remove(this.guides);
+        this.guides.geometry.dispose();
+        this.guides = undefined;
+        this.invalidate();
+      }
+      return;
+    }
+    if (this.guides) {
+      this.scene.remove(this.guides);
+      this.guides.geometry.dispose();
+    }
+    this.guides = new LineSegments2(
+      new LineSegmentsGeometry().setPositions(positions),
+      this.guideMaterial,
+    );
+    this.guides.computeLineDistances();
+    this.guides.frustumCulled = false;
+    this.guides.renderOrder = 11;
+    this.scene.add(this.guides);
+    this.invalidate();
+  }
   private applySize(tile: Tile): void {
     const mesh = tile.group.children[0];
     if (mesh instanceof Mesh)
@@ -1143,6 +1277,7 @@ export class DiagramScene {
     this.drag = undefined;
     this.dragOrigins = [];
     this.pan = undefined;
+    this.showGuides([]);
     if (moves.length === 1) {
       const move = moves[0];
       if (move) this.onMove(move.id, move.from, move.to);
@@ -1171,6 +1306,7 @@ export class DiagramScene {
     this.drag = undefined;
     this.dragOrigins = [];
     this.pan = undefined;
+    this.showGuides([]);
     this.connectionStart = undefined;
     this.clearPreview();
     this.updatePositions();
@@ -1497,6 +1633,8 @@ export class DiagramScene {
     this.tileOutline.dispose();
     this.haloMaterial.dispose();
     this.flowMaterial.dispose();
+    this.showGuides([]);
+    this.guideMaterial.dispose();
     this.animators.clear();
     this.edgeMaterial.dispose();
     this.backdrop.dispose();

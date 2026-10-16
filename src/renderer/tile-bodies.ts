@@ -95,7 +95,7 @@ export class TileBodies {
     if (node.kind === 'group')
       tinted(this.color, palette.group, node.color, 0.35);
     else tinted(this.color, palette.tile, node.color, palette.tileTint);
-    if (selected) this.color.lerp(scratch.set(palette.selected), 0.35);
+    if (selected) this.color.lerp(scratch.set(palette.selected), 0.12);
     return this.color;
   }
   public dispose(): void {
