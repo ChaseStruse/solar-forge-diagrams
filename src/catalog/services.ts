@@ -191,6 +191,26 @@ export const services: ComponentDefinition[] = [
     icon: new URL(`../../assets/aws/${file.toLowerCase()}.svg`, import.meta.url)
       .href,
   })),
+  {
+    id: 'note.text',
+    label: 'Text',
+    color: '#ffffff',
+    glyph: 'T',
+    description: 'Free text on the board',
+    category: 'Annotations',
+    aliases: 'text label heading title caption annotation',
+    kind: 'text' as const,
+  },
+  {
+    id: 'note.sticky',
+    label: 'Sticky note',
+    color: '#ffd84d',
+    glyph: '▤',
+    description: 'A note pinned to the board',
+    category: 'Annotations',
+    aliases: 'note sticky comment memo annotation todo',
+    kind: 'note' as const,
+  },
   ...(['account', 'region', 'vpc', 'zone', 'subnet'] as const).map(
     (boundary) => ({
       id: `boundary.${boundary}`,

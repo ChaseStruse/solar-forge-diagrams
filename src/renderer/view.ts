@@ -17,7 +17,7 @@ export interface BoardBounds {
 const ELEVATION = (52 * Math.PI) / 180;
 export class BoardView {
   public readonly target = new Vector3();
-  private readonly spatial = new PerspectiveCamera(20, 1, 1, 80000);
+  private readonly spatial = new PerspectiveCamera(20, 1, 20, 80000);
   private readonly plan = new OrthographicCamera(-1, 1, 1, -1, 0.1, 80000);
   private mode: ViewMode = 'isometric';
   private width = 1;

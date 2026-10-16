@@ -3,7 +3,8 @@ import { boundaryColors, findService, legacyColors } from '../catalog/services';
 export type Port = 'north' | 'east' | 'south' | 'west';
 export interface DiagramNode {
   id: string;
-  kind: 'service' | 'group';
+  /** Text and notes are annotations: free text, or text on a sticky note. */
+  kind: 'service' | 'group' | 'text' | 'note';
   label: string;
   x: number;
   z: number;
@@ -14,6 +15,8 @@ export interface DiagramNode {
   serviceId?: string;
   shape?: 'process' | 'decision' | 'terminal';
   boundary?: 'account' | 'region' | 'vpc' | 'zone' | 'subnet';
+  /** World-unit font size for text and notes. */
+  fontSize?: number;
   metadata?: {
     region?: string;
     environment?: string;
@@ -44,8 +47,10 @@ function record(value: unknown): Record<string, unknown> {
     throw new Error('Expected an object');
   return Object.fromEntries(Object.entries(value));
 }
+export const MAX_TEXT = 4000;
+const nodeKinds = new Set(['service', 'group', 'text', 'note']);
 function text(value: unknown, name: string): string {
-  if (typeof value !== 'string' || value.length > 1000)
+  if (typeof value !== 'string' || value.length > MAX_TEXT)
     throw new Error(`Invalid ${name}`);
   return value;
 }
@@ -71,11 +76,10 @@ export function parseDocument(json: string): DiagramDocument {
     throw new Error('Invalid graph size');
   const nodes = input.nodes.map((value: unknown): DiagramNode => {
     const n = record(value);
-    if (n.kind !== 'service' && n.kind !== 'group')
-      throw new Error('Invalid node kind');
+    if (!nodeKinds.has(String(n.kind))) throw new Error('Invalid node kind');
     const node: DiagramNode = {
       id: text(n.id, 'node ID'),
-      kind: n.kind,
+      kind: n.kind as DiagramNode['kind'],
       label: text(n.label, 'label'),
       x: finite(n.x),
       z: finite(n.z),
@@ -115,6 +119,11 @@ export function parseDocument(json: string): DiagramDocument {
       const service = node.serviceId ? findService(node.serviceId) : undefined;
       if (service && node.kind === 'service') node.color = service.color;
       else if (node.boundary) node.color = boundaryColors[node.boundary];
+    }
+    if (n.fontSize !== undefined) {
+      const size = finite(n.fontSize);
+      if (size < 4 || size > 400) throw Error('Invalid font size');
+      node.fontSize = size;
     }
     if (n.metadata !== undefined) {
       const metadata = record(n.metadata);

@@ -46,6 +46,7 @@ import {
   routeMidpoint,
 } from '../domain/routing';
 import { defaultTheme, type ScenePalette } from '../themes';
+import { createAnnotation, NOTE_HEIGHT } from './annotations';
 import { createBackdrop } from './backdrop';
 import { LabelAtlas } from './labels';
 import {
@@ -110,7 +111,22 @@ interface Tile {
   group: Group;
   material: MeshLambertMaterial;
   label: Object3D;
+  annotation?: { root: Group; dispose: () => void };
 }
+const isAnnotation = (node: DiagramNode) =>
+  node.kind === 'text' || node.kind === 'note';
+/** Height of the invisible picking box, matching what is drawn. */
+function pickHeight(node: DiagramNode): number {
+  if (node.kind === 'group') return 2;
+  if (node.kind === 'text') return 4;
+  if (node.kind === 'note') return NOTE_HEIGHT;
+  return 24;
+}
+export type EditTarget =
+  | { kind: 'node'; id: string }
+  | { kind: 'edge'; id: string }
+  | { kind: 'empty'; x: number; z: number };
+export type Tool = 'select' | 'pan' | 'connect' | 'text' | 'note';
 export class DiagramScene {
   public readonly ready: Promise<void>;
   private document: DiagramDocument;
@@ -186,7 +202,7 @@ export class DiagramScene {
   private width = 1;
   private height = 1;
   private mode: ViewMode = 'isometric';
-  private tool: 'select' | 'pan' | 'connect' = 'select';
+  private tool: Tool = 'select';
   public snapping = true;
   private readonly selectedIds = new Set<string>();
   private readonly portGeometry = new SphereGeometry(1, 12, 8);
@@ -218,6 +234,10 @@ export class DiagramScene {
   private edgeColors: Float32Array<ArrayBufferLike> = new Float32Array();
   private edgeColorBuffer: InterleavedBuffer | undefined;
   public onSelectEdge: (id: string | undefined) => void = () => {};
+  /** Double-click on a node, a connection, or empty board. */
+  public onEditRequest: (target: EditTarget) => void = () => {};
+  public onPlace: (tool: 'text' | 'note', x: number, z: number) => void =
+    () => {};
   public onConnect: (
     source: string,
     sourcePort: Port | undefined,
@@ -354,6 +374,7 @@ export class DiagramScene {
       passive: false,
     });
     this.renderer.domElement.addEventListener('contextmenu', this.context);
+    this.renderer.domElement.addEventListener('dblclick', this.doubleClick);
     this.renderer.domElement.addEventListener(
       'webglcontextlost',
       this.contextLost,
@@ -401,7 +422,10 @@ export class DiagramScene {
     else this.selectMany(ids);
   }
   private releaseContent(): void {
-    for (const tile of this.tiles.values()) tile.material.dispose();
+    for (const tile of this.tiles.values()) {
+      tile.material.dispose();
+      tile.annotation?.dispose();
+    }
     this.bodies?.dispose();
     this.bodies = undefined;
     this.details?.dispose();
@@ -463,10 +487,25 @@ export class DiagramScene {
         node.shape ? this.shapeGeometries[node.shape] : this.geometry,
         material,
       );
-      mesh.scale.set(node.width, node.kind === 'group' ? 2 : 24, node.depth);
+      mesh.scale.set(node.width, pickHeight(node), node.depth);
       mesh.userData.nodeId = node.id;
       mesh.visible = false;
       group.add(mesh);
+      if (isAnnotation(node)) {
+        const annotation = createAnnotation(node, this.palette);
+        group.add(annotation.root);
+        this.content.add(group);
+        // Annotations carry their own text; the placeholder keeps Tile uniform.
+        this.tiles.set(node.id, {
+          index,
+          node,
+          group,
+          material,
+          label: new Group(),
+          annotation,
+        });
+        continue;
+      }
       if (node.kind === 'service' && !node.shape) {
         const glyph = this.labels.create(
           findService(node.serviceId ?? node.label)?.id ?? node.label,
@@ -652,11 +691,21 @@ export class DiagramScene {
     this.onZoom(this.view.percent);
     this.invalidate();
   }
-  public setTool(tool: 'select' | 'pan' | 'connect'): void {
+  public setTool(tool: Tool): void {
     this.cancelInteraction();
     this.tool = tool;
-    this.renderer.domElement.style.cursor =
-      tool === 'pan' ? 'grab' : tool === 'connect' ? 'crosshair' : 'default';
+    this.renderer.domElement.style.cursor = this.toolCursor();
+  }
+  private toolCursor(): string {
+    return this.tool === 'pan'
+      ? 'grab'
+      : this.tool === 'connect'
+        ? 'crosshair'
+        : this.tool === 'text'
+          ? 'text'
+          : this.tool === 'note'
+            ? 'copy'
+            : 'default';
   }
   public finishInteraction(): void {
     this.up();
@@ -713,6 +762,11 @@ export class DiagramScene {
       this.tool === 'pan'
     ) {
       this.pan = { x: point.x, z: point.z };
+      return;
+    }
+    if (this.tool === 'text' || this.tool === 'note') {
+      this.releasePointer();
+      this.onPlace(this.tool, Math.round(point.x), Math.round(point.z));
       return;
     }
     const handle = this.handleAt();
@@ -880,12 +934,7 @@ export class DiagramScene {
     if (!this.locate(event)) return;
     const handle = this.handleAt();
     const resize: unknown = handle?.userData.resize;
-    let cursor =
-      this.tool === 'pan'
-        ? 'grab'
-        : this.tool === 'connect'
-          ? 'crosshair'
-          : 'default';
+    let cursor = this.toolCursor();
     let edge: string | undefined;
     if (Array.isArray(resize)) {
       const [sx, sz] = resize as [number, number];
@@ -1084,12 +1133,16 @@ export class DiagramScene {
   private applySize(tile: Tile): void {
     const mesh = tile.group.children[0];
     if (mesh instanceof Mesh)
-      mesh.scale.set(
-        tile.node.width,
-        tile.node.kind === 'group' ? 2 : 24,
-        tile.node.depth,
-      );
+      mesh.scale.set(tile.node.width, pickHeight(tile.node), tile.node.depth);
     tile.label.userData.nodeWidth = tile.node.width;
+    // Stretch the drawn annotation live; it is redrawn crisply on commit.
+    const root = tile.annotation?.root;
+    if (root)
+      root.scale.set(
+        tile.node.width / root.userData.width,
+        1,
+        tile.node.depth / root.userData.depth,
+      );
   }
   private showPreview(point: Vector3): void {
     const start = this.connectionStart;
@@ -1361,6 +1414,84 @@ export class DiagramScene {
     }
     this.onContextMenu(event.clientX, event.clientY);
   };
+  private doubleClick = (event: MouseEvent): void => {
+    if (this.tool !== 'select') return;
+    const edge = this.edgeAt(event);
+    if (edge) {
+      this.onEditRequest({ kind: 'edge', id: edge });
+      return;
+    }
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.set(
+      ((event.clientX - rect.left) / this.width) * 2 - 1,
+      (-(event.clientY - rect.top) / this.height) * 2 + 1,
+    );
+    this.ray.setFromCamera(this.pointer, this.camera);
+    const id = this.nodeAt();
+    if (id) {
+      this.select(id);
+      this.onEditRequest({ kind: 'node', id });
+      return;
+    }
+    const point = this.ray.ray.intersectPlane(this.plane, this.point);
+    if (point)
+      this.onEditRequest({
+        kind: 'empty',
+        x: Math.round(point.x),
+        z: Math.round(point.z),
+      });
+  };
+  /** Screen rectangle covering a node's top face, for overlay editors. */
+  public nodeScreenRect(
+    id: string,
+  ): { left: number; top: number; width: number; height: number } | undefined {
+    const tile = this.tiles.get(id);
+    if (!tile) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const { x, y, z } = tile.group.position;
+    const top = y + pickHeight(tile.node) / 2;
+    let left = Infinity,
+      right = -Infinity,
+      upper = Infinity,
+      lower = -Infinity;
+    const point = new Vector3();
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) {
+        point
+          .set(
+            x + (sx * tile.node.width) / 2,
+            top,
+            z + (sz * tile.node.depth) / 2,
+          )
+          .project(this.camera);
+        const px = rect.left + ((point.x + 1) * this.width) / 2;
+        const py = rect.top + ((1 - point.y) * this.height) / 2;
+        left = Math.min(left, px);
+        right = Math.max(right, px);
+        upper = Math.min(upper, py);
+        lower = Math.max(lower, py);
+      }
+    return { left, top: upper, width: right - left, height: lower - upper };
+  }
+  /** Client position of a connection's label anchor. */
+  public edgeScreenPosition(id: string): { x: number; y: number } | undefined {
+    const index = this.edges.get(id);
+    const edge = this.edgeIndex.get(id);
+    if (index === undefined || !edge) return;
+    const { points } = routeEdge(edge, this.nodeIndex);
+    const { point } = routeMidpoint(points);
+    const projected = new Vector3(point.x, 8, point.z).project(this.camera);
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return {
+      x: rect.left + ((projected.x + 1) * this.width) / 2,
+      y: rect.top + ((1 - projected.y) * this.height) / 2,
+    };
+  }
+  /** World units per screen pixel around a node; overlay editors match zoom. */
+  public nodePixelScale(id: string): number {
+    const tile = this.tiles.get(id);
+    return tile ? 1 / this.pixelSize(tile.group.position) : 1;
+  }
   private contextLost = (event: Event): void => {
     event.preventDefault();
     this.onError('Graphics context lost. Waiting for recovery…');

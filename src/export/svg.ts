@@ -2,6 +2,7 @@ import { findService } from '../catalog/services';
 import type { DiagramDocument } from '../domain/document';
 import { worldPosition } from '../domain/document';
 import { routeEdge } from '../domain/routing';
+import { fontSize, wrapText } from '../domain/text';
 
 const xmlText = (text: string) =>
   text.replace(
@@ -90,5 +91,31 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
       return `<g><title>${xmlText(node.label)}</title>${shape} fill="#fff" stroke="${node.color}" stroke-width="2"/>${image && !node.shape ? `<image href="${image}" x="${p.x - 26}" y="${p.z - 26}" width="52" height="52"/>` : ''}<text x="${p.x}" y="${node.shape ? p.z + 5 : z + node.depth + 26}" text-anchor="middle" font-size="16" fill="#172c43">${xmlText(node.label)}</text></g>`;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minZ} ${width} ${height}" role="img" aria-label="${xmlText(doc.title)}"><title>${xmlText(doc.title)}</title><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="#576b84"/></marker></defs><rect x="${minX}" y="${minZ}" width="${width}" height="${height}" fill="#fff"/><g font-family="system-ui, sans-serif">${groups}${edges}${services}</g></svg>`;
+  const annotations = positioned
+    .filter(({ node }) => node.kind === 'text' || node.kind === 'note')
+    .map(({ node, p }) => {
+      const note = node.kind === 'note';
+      const x = p.x - node.width / 2,
+        z = p.z - node.depth / 2;
+      const size = fontSize(node);
+      const padding = note ? 14 : 4;
+      // Approximate glyph width; SVG has no layout engine to wrap for us.
+      const lines = wrapText(
+        node.label,
+        node.width - padding * 2,
+        (text) => text.length * size * 0.56,
+      ).slice(
+        0,
+        Math.max(1, Math.floor((node.depth - padding) / (size * 1.28))),
+      );
+      const text = lines
+        .map(
+          (line, i) =>
+            `<tspan x="${x + padding}" dy="${i ? size * 1.28 : size}">${xmlText(line)}</tspan>`,
+        )
+        .join('');
+      return `<g>${note ? `<rect x="${x}" y="${z}" width="${node.width}" height="${node.depth}" rx="3" fill="${node.color}" stroke="#00000022"/>` : ''}<text x="${x + padding}" y="${z + padding}" font-size="${size}" font-weight="${note ? 500 : 600}" fill="${note ? '#2a2010' : '#172c43'}">${text}</text></g>`;
+    })
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minZ} ${width} ${height}" role="img" aria-label="${xmlText(doc.title)}"><title>${xmlText(doc.title)}</title><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="#576b84"/></marker></defs><rect x="${minX}" y="${minZ}" width="${width}" height="${height}" fill="#fff"/><g font-family="system-ui, sans-serif">${groups}${edges}${services}${annotations}</g></svg>`;
 }

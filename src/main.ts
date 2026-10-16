@@ -9,6 +9,7 @@ import './style.css';
 import { findService, services } from './catalog/services';
 import type { DiagramEdge, DiagramNode, Port } from './domain/document';
 import {
+  MAX_TEXT,
   parseDocument,
   sampleDocument,
   serializeDocument,
@@ -17,6 +18,7 @@ import {
 } from './domain/document';
 import type { Edit } from './domain/history';
 import { DocumentHistory } from './domain/history';
+import { fontSize } from './domain/text';
 import {
   type Alignment,
   alignNodes,
@@ -33,7 +35,7 @@ import {
   openDocumentFile,
   saveDocumentFile,
 } from './platform/files';
-import { DiagramScene } from './renderer/scene';
+import { DiagramScene, type EditTarget, type Tool } from './renderer/scene';
 import { applyThemeCss, findTheme, themes } from './themes';
 import { icon } from './ui/icons';
 
@@ -47,9 +49,9 @@ root.innerHTML = `
   </header>
   <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="export">Export PNG ${icon('arrow')}</button><button id="export-svg">Export SVG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">RECENT DIAGRAMS</p><div id="recent-files"></div><div class="menu-divider"></div><p class="popover-caption">TEMPLATES</p><button id="example-starter">Two-service starter</button><button id="example-serverless">Serverless architecture</button><div id="templates"></div></section>
   <section id="theme-menu" class="popover theme-menu" aria-label="Themes" hidden><p class="popover-caption">THEME</p><div id="theme-list"></div></section>
-  <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add AWS service" title="Add AWS service (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
+  <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add AWS service" title="Add AWS service (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-text" class="tool" aria-label="Text" aria-pressed="false" title="Text: click the board (T)">${icon('text')}<kbd>T</kbd></button><button id="tool-note" class="tool" aria-label="Sticky note" aria-pressed="false" title="Sticky note: click the board (N)">${icon('note')}<kbd>N</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
   <section id="component-palette" class="popover component-palette" aria-label="AWS components" hidden><div class="popover-heading"><h2>AWS components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a component to add it to your board.</p></section>
-  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label">Label</label><input id="node-label" maxlength="1000"><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
+  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
   <nav class="canvas-controls" aria-label="Canvas controls"><div class="zoom-dock floating-dock" aria-label="Zoom controls"><button id="zoom-out" class="small-icon" aria-label="Zoom out">${icon('minus')}</button><span id="zoom-level">100%</span><button id="zoom-in" class="small-icon" aria-label="Zoom in">${icon('plus')}</button><span class="dock-divider"></span><button id="fit">Fit</button><span class="dock-divider"></span><button id="help" class="small-icon" aria-label="Keyboard help" aria-expanded="false">${icon('help')}</button></div>
   <div class="history-dock floating-dock" aria-label="Edit history"><button id="undo" class="small-icon" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button><button id="redo" class="small-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>${icon('redo')}</button></div>
   <div class="view-dock floating-dock" aria-label="View controls"><button id="flow" aria-pressed="true" title="Animate data flow along connections">${icon('flow')}<span>Flow</span></button><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
@@ -210,8 +212,18 @@ function updateLayers(): void {
       } else
         symbol.textContent =
           node.kind === 'group' ? '▱' : (service?.glyph ?? '◇');
+      if (node.kind === 'text' || node.kind === 'note') {
+        symbol.textContent = node.kind === 'text' ? 'T' : '▤';
+        symbol.style.color = node.kind === 'note' ? node.color : '';
+      }
       const label = document.createElement('span');
-      label.textContent = node.label;
+      label.textContent =
+        node.label.split('\n')[0] ||
+        (node.kind === 'note'
+          ? 'Sticky note'
+          : node.kind === 'text'
+            ? 'Text'
+            : '');
       button.append(symbol, label);
       button.style.paddingLeft = `${8 + depth * 12}px`;
       layerButtons.set(`node:${node.id}`, button);
@@ -314,18 +326,36 @@ function updateHeader(): void {
   element('title').textContent = `${current.title}${dirty ? ' •' : ''}`;
   element('count').textContent =
     `${current.nodes.length} objects · ${current.edges.length} connections`;
-  const serviceCount = current.nodes.filter(
-    (node) => node.kind === 'service',
-  ).length;
+  const count = (kind: DiagramNode['kind']) =>
+    current.nodes.filter((node) => node.kind === kind).length;
+  const notes = count('text') + count('note');
   element('ground-summary').textContent =
-    `${serviceCount} services · ${current.nodes.length - serviceCount} boundaries`;
+    `${count('service')} services · ${count('group')} boundaries${notes ? ` · ${notes} notes` : ''}`;
   updateLayers();
 }
 function inspect(): void {
   const node = current.nodes.find((n) => n.id === selected);
   element('properties').hidden = !node;
-  element('selection').textContent = node?.label ?? '';
+  element('selection').textContent =
+    node?.kind === 'text' || node?.kind === 'note'
+      ? node.label.split('\n')[0] ||
+        (node.kind === 'note' ? 'Sticky note' : 'Text')
+      : (node?.label ?? '');
   inputElement('node-label').value = node?.label ?? '';
+  const annotation = node?.kind === 'text' || node?.kind === 'note';
+  inputElement('node-label').hidden = annotation;
+  field('node-text').hidden = !annotation;
+  element('node-label-caption').textContent = annotation ? 'Text' : 'Label';
+  element('node-label-caption').setAttribute(
+    'for',
+    annotation ? 'node-text' : 'node-label',
+  );
+  element('node-font-row').hidden = !annotation;
+  if (node) {
+    field('node-text').value = node.label;
+    inputElement('node-font').value = String(fontSize(node));
+    inputElement('node-color').value = node.color;
+  }
   const edge = current.edges.find((e) => e.id === selectedEdge);
   element('edge-properties').hidden = !edge;
   if (node) {
@@ -374,9 +404,13 @@ function inspect(): void {
   element('selection-note').textContent =
     node?.kind === 'group'
       ? 'Architecture boundary'
-      : node?.shape
-        ? 'Flowchart shape'
-        : 'AWS service';
+      : node?.kind === 'text'
+        ? 'Text · double-click to edit'
+        : node?.kind === 'note'
+          ? 'Sticky note · double-click to edit'
+          : node?.shape
+            ? 'Flowchart shape'
+            : 'AWS service · double-click to rename';
   for (const id of ['delete', 'tool-edit']) {
     const button = element(id);
     if (button instanceof HTMLButtonElement) button.disabled = !node && !edge;
@@ -530,9 +564,9 @@ element('ground-toggle').onclick = () => {
     diagramVisible ? 'Hide diagram' : 'Show diagram',
   );
 };
-function selectTool(tool: 'select' | 'pan' | 'connect'): void {
+function selectTool(tool: Tool): void {
   scene.setTool(tool);
-  for (const name of ['select', 'pan', 'connect']) {
+  for (const name of ['select', 'pan', 'connect', 'text', 'note']) {
     const button = element(`tool-${name}`);
     button.classList.toggle('active', name === tool);
     button.setAttribute('aria-pressed', String(name === tool));
@@ -540,6 +574,14 @@ function selectTool(tool: 'select' | 'pan' | 'connect'): void {
 }
 element('tool-select').onclick = () => selectTool('select');
 element('tool-pan').onclick = () => selectTool('pan');
+element('tool-text').onclick = () => {
+  selectTool('text');
+  notify('Click the board to place text.');
+};
+element('tool-note').onclick = () => {
+  selectTool('note');
+  notify('Click the board to pin a sticky note.');
+};
 element('tool-connect').onclick = () => {
   selectTool('connect');
   notify(
@@ -565,9 +607,41 @@ element('help').onclick = () => {
   element('help').setAttribute('aria-expanded', String(!help.hidden));
 };
 element('tool-edit').onclick = () => {
-  showLayers(true);
-  inputElement('node-label').focus();
-  inputElement('node-label').select();
+  if (selected) openEditor({ kind: 'node', id: selected });
+  else if (selectedEdge) openEditor({ kind: 'edge', id: selectedEdge });
+};
+field('node-text').onchange = () => {
+  const node = current.nodes.find((n) => n.id === selected);
+  const label = field('node-text').value.slice(0, MAX_TEXT);
+  if (!node || label === node.label) return;
+  commit({
+    type: 'graph',
+    label: 'Edit text',
+    nodes: [{ id: node.id, value: { ...node, label } }],
+  });
+};
+field('node-font').onchange = () => {
+  const node = current.nodes.find((n) => n.id === selected);
+  const size = Number(field('node-font').value);
+  if (!node || !Number.isFinite(size) || size < 4 || size > 400) {
+    inspect();
+    return;
+  }
+  commit({
+    type: 'graph',
+    label: 'Text size',
+    nodes: [{ id: node.id, value: { ...node, fontSize: size } }],
+  });
+};
+field('node-color').onchange = () => {
+  const node = current.nodes.find((n) => n.id === selected);
+  const color = field('node-color').value;
+  if (!node || !/^#[0-9a-f]{6}$/i.test(color) || color === node.color) return;
+  commit({
+    type: 'graph',
+    label: 'Change colour',
+    nodes: [{ id: node.id, value: { ...node, color } }],
+  });
 };
 element('node-label').onchange = () => {
   const node = current.nodes.find((n) => n.id === selected);
@@ -670,8 +744,7 @@ function populateServices(query = ''): void {
 }
 function addService(service: (typeof services)[number]): void {
   const id = crypto.randomUUID();
-  const width = service.kind === 'group' ? 500 : 150;
-  const depth = service.kind === 'group' ? 320 : 96;
+  const [width, depth] = defaultSize(service.kind);
   let point: { x: number; z: number };
   try {
     point = insertionSlot(current, scene.insertionPoint(), width, depth);
@@ -702,6 +775,178 @@ function addService(service: (typeof services)[number]): void {
   showComponents(false);
   selectTool('select');
   notify(`${service.label} added`);
+  if (service.kind === 'text' || service.kind === 'note')
+    openEditor({ kind: 'node', id }, true);
+}
+function defaultSize(kind: DiagramNode['kind']): [number, number] {
+  if (kind === 'group') return [500, 320];
+  if (kind === 'text') return [280, 60];
+  if (kind === 'note') return [220, 170];
+  return [150, 96];
+}
+/** Drop a text or note at a board point and start typing into it. */
+function placeAnnotation(kind: 'text' | 'note', x: number, z: number): void {
+  const service = services.find((s) => s.kind === kind);
+  if (!service) return;
+  const id = crypto.randomUUID();
+  const [width, depth] = defaultSize(kind);
+  const snap = (value: number) =>
+    scene.snapping ? Math.round(value / 10) * 10 : value;
+  history.execute({
+    type: 'insert',
+    node: {
+      id,
+      kind,
+      serviceId: service.id,
+      label: '',
+      x: snap(x + width / 2 - 20),
+      z: snap(z),
+      width,
+      depth,
+      color: service.color,
+    },
+  });
+  scene.load(current);
+  scene.select(id);
+  updateHeader();
+  selectTool('select');
+  openEditor({ kind: 'node', id }, true);
+}
+scene.onPlace = placeAnnotation;
+scene.onEditRequest = (target) => openEditor(target);
+
+let closeEditor: ((save: boolean) => void) | undefined;
+/**
+ * Edit text in place over the canvas. Annotations get a multi-line editor
+ * matching their box; services, boundaries and connections a one-line field.
+ */
+function openEditor(target: EditTarget, created = false): void {
+  closeEditor?.(true);
+  if (target.kind === 'empty') {
+    placeAnnotation('text', target.x, target.z);
+    return;
+  }
+  const node =
+    target.kind === 'node'
+      ? current.nodes.find((n) => n.id === target.id)
+      : undefined;
+  const edge =
+    target.kind === 'edge'
+      ? current.edges.find((e) => e.id === target.id)
+      : undefined;
+  if (!node && !edge) return;
+  const annotation = node?.kind === 'text' || node?.kind === 'note';
+  const editor = document.createElement(annotation ? 'textarea' : 'input');
+  editor.className = `inline-editor${node ? ` ${node.kind}` : ' edge'}`;
+  editor.value = node?.label ?? edge?.label ?? '';
+  editor.maxLength = annotation ? MAX_TEXT : 1000;
+  editor.setAttribute('aria-label', annotation ? 'Text' : 'Label');
+  editor.spellcheck = annotation;
+  if (node && annotation) {
+    const rect = scene.nodeScreenRect(node.id);
+    const scale = scene.nodePixelScale(node.id);
+    if (!rect) return;
+    Object.assign(editor.style, {
+      left: `${rect.left}px`,
+      top: `${rect.top}px`,
+      width: `${Math.max(rect.width, 160)}px`,
+      height: `${Math.max(rect.height, 48)}px`,
+      fontSize: `${Math.max(11, fontSize(node) * scale)}px`,
+      padding: `${(node.kind === 'note' ? 14 : 4) * scale}px`,
+      background: node.kind === 'note' ? node.color : '',
+    });
+  } else {
+    const anchor = node
+      ? (() => {
+          const rect = scene.nodeScreenRect(node.id);
+          return rect
+            ? {
+                x: rect.left + rect.width / 2,
+                y:
+                  node.kind === 'group'
+                    ? rect.top + 18
+                    : rect.top + rect.height + 22,
+              }
+            : undefined;
+        })()
+      : edge
+        ? scene.edgeScreenPosition(edge.id)
+        : undefined;
+    if (!anchor) return;
+    Object.assign(editor.style, {
+      left: `${anchor.x - 110}px`,
+      top: `${anchor.y - 18}px`,
+      width: '220px',
+    });
+  }
+  document.body.append(editor);
+  editor.focus();
+  editor.select();
+  let done = false;
+  const finish = (save: boolean) => {
+    if (done) return;
+    done = true;
+    closeEditor = undefined;
+    const value = editor.value;
+    editor.remove();
+    if (!save) {
+      // Cancelling a just-placed annotation removes it again.
+      if (created && annotation) travelHistory(false);
+      return;
+    }
+    if (node) {
+      const live = current.nodes.find((n) => n.id === node.id);
+      if (!live) return;
+      if (created && live.kind === 'text' && !value.trim()) {
+        travelHistory(false);
+        return;
+      }
+      if (value === live.label) return;
+      commit(
+        {
+          type: 'graph',
+          label: annotation ? 'Edit text' : 'Rename component',
+          nodes: [{ id: live.id, value: { ...live, label: value } }],
+        },
+        [live.id],
+      );
+    } else if (edge) {
+      const live = current.edges.find((e) => e.id === edge.id);
+      if (!live || value === live.label) return;
+      commit(
+        {
+          type: 'graph',
+          label: 'Label connection',
+          edges: [
+            { id: live.id, value: { ...live, label: value.slice(0, 1000) } },
+          ],
+        },
+        [],
+      );
+      scene.selectEdge(live.id);
+    }
+  };
+  closeEditor = finish;
+  editor.addEventListener('blur', () => finish(true));
+  editor.addEventListener('keydown', (event) => {
+    const keyboard = event as KeyboardEvent;
+    keyboard.stopPropagation();
+    if (keyboard.key === 'Escape') {
+      keyboard.preventDefault();
+      finish(!created);
+    } else if (
+      keyboard.key === 'Enter' &&
+      (!annotation || keyboard.ctrlKey || keyboard.metaKey)
+    ) {
+      keyboard.preventDefault();
+      finish(true);
+    }
+  });
+  notify(
+    annotation
+      ? 'Typing · Ctrl+Enter or click away to finish · Esc cancels'
+      : 'Enter to rename · Esc cancels',
+  );
 }
 let highlighted = 0;
 function serviceButtons(): HTMLButtonElement[] {
@@ -1009,6 +1254,21 @@ for (const button of document.querySelectorAll<HTMLButtonElement>(
     element('context-menu').hidden = true;
     element(button.dataset.action ?? 'fit').click();
   };
+// The canvas claims pointerdown (no blur), so finish inline edits explicitly.
+window.addEventListener(
+  'pointerdown',
+  (event) => {
+    if (
+      closeEditor &&
+      !(
+        event.target instanceof Element &&
+        event.target.closest('.inline-editor')
+      )
+    )
+      closeEditor(true);
+  },
+  { capture: true },
+);
 window.addEventListener('pointerdown', (event) => {
   if (
     event.target instanceof Node &&
@@ -1136,6 +1396,7 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (event.key === 'Escape') {
+    closeEditor?.(false);
     scene.cancelInteraction();
     element('context-menu').hidden = true;
     selectTool('select');
@@ -1183,6 +1444,12 @@ window.addEventListener('keydown', (event) => {
   if (event.key.toLowerCase() === 'v') selectTool('select');
   if (event.key.toLowerCase() === 'c') element('tool-connect').click();
   if (event.key.toLowerCase() === 'm') selectTool('pan');
+  if (event.key.toLowerCase() === 't') element('tool-text').click();
+  if (event.key.toLowerCase() === 'n') element('tool-note').click();
+  if (event.key === 'Enter' && selected) {
+    event.preventDefault();
+    openEditor({ kind: 'node', id: selected });
+  }
   if (event.key.toLowerCase() === 'f') scene.fit();
   if (event.key === 'Delete' || event.key === 'Backspace') {
     event.preventDefault();

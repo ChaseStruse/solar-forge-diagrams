@@ -133,14 +133,16 @@ export class TileDetails {
       this.source.count * 3,
     );
     this.colors.needsUpdate = true;
+    // Shapes and annotations draw their own outline (or none).
+    const flat = !!node.shape || node.kind === 'text' || node.kind === 'note';
     for (let vertex = 0; vertex < this.source.count; vertex++)
       this.positions.setXYZ(
         index * this.source.count + vertex,
-        world.x + this.source.getX(vertex) * (node.shape ? 0 : node.width),
+        world.x + this.source.getX(vertex) * (flat ? 0 : node.width),
         world.y +
           this.source.getY(vertex) *
-            (node.shape ? 0 : node.kind === 'group' ? 2 : 24),
-        world.z + this.source.getZ(vertex) * (node.shape ? 0 : node.depth),
+            (flat ? 0 : node.kind === 'group' ? 2 : 24),
+        world.z + this.source.getZ(vertex) * (flat ? 0 : node.depth),
       );
     this.positions.addUpdateRange(
       index * this.source.count * 3,
