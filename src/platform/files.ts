@@ -3,15 +3,28 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 export function nativeAvailable(): boolean {
   return isTauri();
 }
-export async function openDocumentFile(): Promise<string | null> {
+export interface SavedFile {
+  handle: number;
+  name: string;
+}
+export interface OpenedFile extends SavedFile {
+  content: string;
+}
+export async function openDocumentFile(): Promise<OpenedFile | null> {
   if (!isTauri())
     throw new Error('Open is available in the native desktop application.');
-  return invoke<string | null>('open_document');
+  return invoke<OpenedFile | null>('open_document');
 }
-export async function saveDocumentFile(content: string): Promise<boolean> {
+export async function saveDocumentFile(
+  content: string,
+  handle?: number,
+): Promise<SavedFile | null> {
   if (!isTauri())
     throw new Error('Save is available in the native desktop application.');
-  return invoke<boolean>('save_document', { content });
+  return invoke<SavedFile | null>('save_document', {
+    content,
+    handle: handle ?? null,
+  });
 }
 export async function exportPng(blob: Blob): Promise<boolean> {
   if (!isTauri())

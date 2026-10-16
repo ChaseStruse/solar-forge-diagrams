@@ -119,3 +119,11 @@ Validation:
 - Native rebuild/smoke check not run: the temporary Cargo/Rust toolchain from the previous session no longer exists. No Rust source or native permissions changed. Do not treat the existing executable as containing this continuation.
 
 Next: provision a native build toolchain, run native history/renderer acceptance, then implement durable file handles and unsaved-close protection, followed by recovery. UI polish, official AWS artwork, connection editing and complete M2 workflows remain open; this continuation does not establish a finished usable-editor milestone.
+
+## M1 persistence continuation — in validation
+
+Implemented native session file handles and Save As, serialized/debounced recovery writes (750 ms / maximum five seconds), startup recovery choice, save/discard/cancel replacement and native-close dialogs, XDG application-data storage, and a process-held recovery lock. New/open/save errors preserve the current document; recovery opens unsaved with no original-file overwrite handle. Atomic writes use unique temporary names. Added recovery ordering, failure/retry, and debounce/max-wait tests. Document format/migration and recovery guarantees are documented in `docs/DOCUMENTS.md`.
+
+Validation so far: 14 Bun tests / 74 assertions; frontend verification passes (152,659 bytes gzip). Native Rust toolchain restored under `/tmp`; locked dependency fetch and initial atomic-write tests pass. Native rebuild, close/recovery workflow and persistence acceptance are in progress. M1 is not marked complete until those pass.
+
+M1 native validation (2026-10-16): Cargo fmt/clippy/build pass. Real WebKitGTK smoke passes snapped drag, native roundtrip, both view captures, and zero idle frames. Native AT-SPI exercised close → Cancel, Save through the actual portal into `/tmp/solar-forge-native-m1.sforge.json`, edit → Save again without a chooser (durable handle), and recovery after SIGKILL of only the isolated test process. The saved file retained two nodes while the recovery snapshot retained three; restart displayed the recovery dialog and restored three nodes. Testing used `XDG_DATA_HOME=/tmp/solar-forge-native-data`, preserving personal app data. M1 functional gate is passed for these workflows; corrupt-disk/power-loss simulation beyond atomic replacement tests and broader hardware acceptance remain release checks.

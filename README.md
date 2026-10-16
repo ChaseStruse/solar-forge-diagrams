@@ -30,7 +30,7 @@ The opt-in smoke check (debug builds, or release builds compiled with `--feature
 
 ## Current checkpoint
 
-M0 native feasibility is implemented; the first M1 command/history slice is implemented and browser-verified. Native verification of this slice and document recovery are next. The prototype supports view switching, dragging, service insertion, native Save/Open, and labeled PNG export. See the plan's execution table and `docs/PROGRESS.md` for exact commits and remaining acceptance checks. Move, rename, add, and delete support bounded undo/redo (Ctrl+Z / Ctrl+Shift+Z). Save currently asks for a destination each time; autosave is not yet implemented. Existing desktop binaries predate this slice until rebuilt.
+M0 native feasibility and the M1 durable-document workflows are implemented. The editor supports undo/redo, Save/Save As with native session handles, debounced recovery snapshots, restart recovery, and save/discard/cancel close protection. M2 editing workflows are in progress; see `docs/PROGRESS.md` for current validation and remaining milestones. Document and recovery behavior is described in [docs/DOCUMENTS.md](docs/DOCUMENTS.md).
 
 The Linux file chooser uses XDG desktop portals. Omarchy must have its normal portal service and file-chooser backend available; the app does not edit desktop configuration.
 

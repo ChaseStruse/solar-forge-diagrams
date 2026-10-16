@@ -1,13 +1,25 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use serde::Serialize;
+use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex,
+};
+use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path.parent().ok_or("Missing parent directory")?;
-    let temporary = parent.join(format!(".solar-forge-{}.tmp", std::process::id()));
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let temporary = parent.join(format!(
+        ".solar-forge-{}-{}.tmp",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -26,11 +38,58 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     result.map_err(|e| e.to_string())
 }
 
+struct RecoveryLock {
+    _file: std::fs::File,
+}
+
+#[derive(Default)]
+struct FileSessions {
+    paths: Mutex<HashMap<u64, PathBuf>>,
+    next: AtomicU64,
+}
+#[derive(Serialize)]
+struct OpenedDocument {
+    content: String,
+    handle: u64,
+    name: String,
+}
+#[derive(Serialize)]
+struct SavedDocument {
+    handle: u64,
+    name: String,
+}
+fn register_path(app: &tauri::AppHandle, path: PathBuf) -> Result<SavedDocument, String> {
+    let state = app.state::<FileSessions>();
+    let name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
+    let mut paths = state.paths.lock().map_err(|e| e.to_string())?;
+    let handle = paths
+        .iter()
+        .find_map(|(id, existing)| if *existing == path { Some(*id) } else { None })
+        .unwrap_or_else(|| state.next.fetch_add(1, Ordering::Relaxed));
+    paths.insert(handle, path);
+    Ok(SavedDocument { handle, name })
+}
+fn read_document(path: &Path) -> Result<String, String> {
+    let mut content = String::new();
+    fs::File::open(path)
+        .map_err(|e| e.to_string())?
+        .take(10_000_001)
+        .read_to_string(&mut content)
+        .map_err(|e| e.to_string())?;
+    if content.len() > 10_000_000 {
+        return Err("Document exceeds 10 MB limit".into());
+    }
+    Ok(content)
+}
 #[tauri::command]
 async fn open_document(
     app: tauri::AppHandle,
     window: tauri::Window,
-) -> Result<Option<String>, String> {
+) -> Result<Option<OpenedDocument>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let Some(file) = app
             .dialog()
@@ -42,50 +101,86 @@ async fn open_document(
             return Ok(None);
         };
         let path = file.into_path().map_err(|e| e.to_string())?;
-        let mut content = String::new();
-        fs::File::open(path)
-            .map_err(|e| e.to_string())?
-            .take(10_000_001)
-            .read_to_string(&mut content)
-            .map_err(|e| e.to_string())?;
-        if content.len() > 10_000_000 {
-            return Err("Document exceeds 10 MB limit".into());
-        }
-        Ok(Some(content))
+        let content = read_document(&path)?;
+        let saved = register_path(&app, path)?;
+        Ok(Some(OpenedDocument {
+            content,
+            handle: saved.handle,
+            name: saved.name,
+        }))
     })
     .await
     .map_err(|e| e.to_string())?
 }
-
 #[tauri::command]
 async fn save_document(
     app: tauri::AppHandle,
     window: tauri::Window,
     content: String,
-) -> Result<bool, String> {
+    handle: Option<u64>,
+) -> Result<Option<SavedDocument>, String> {
     if content.len() > 10_000_000 {
         return Err("Document exceeds 10 MB limit".into());
     }
     let _: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(move || {
-        let Some(file) = app
-            .dialog()
-            .file()
-            .set_parent(&window)
-            .add_filter("Solar Forge diagram", &["json"])
-            .set_file_name("diagram.sforge.json")
-            .blocking_save_file()
-        else {
-            return Ok(false);
+        let path = if let Some(id) = handle {
+            app.state::<FileSessions>()
+                .paths
+                .lock()
+                .map_err(|e| e.to_string())?
+                .get(&id)
+                .cloned()
+                .ok_or("File handle expired. Use Save as.")?
+        } else {
+            let Some(file) = app
+                .dialog()
+                .file()
+                .set_parent(&window)
+                .add_filter("Solar Forge diagram", &["json"])
+                .set_file_name("diagram.sforge.json")
+                .blocking_save_file()
+            else {
+                return Ok(None);
+            };
+            file.into_path().map_err(|e| e.to_string())?
         };
-        atomic_write(
-            &file.into_path().map_err(|e| e.to_string())?,
-            content.as_bytes(),
-        )?;
-        Ok(true)
+        atomic_write(&path, content.as_bytes())?;
+        register_path(&app, path).map(Some)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+fn recovery_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let directory = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    Ok(directory.join("recovery.sforge.json"))
+}
+#[tauri::command]
+fn read_recovery(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = recovery_path(&app)?;
+    if path.exists() {
+        read_document(&path).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+#[tauri::command]
+fn write_recovery(app: tauri::AppHandle, content: Option<String>) -> Result<(), String> {
+    let path = recovery_path(&app)?;
+    if let Some(content) = content {
+        if content.len() > 10_000_000 {
+            return Err("Recovery exceeds 10 MB limit".into());
+        }
+        let _: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        atomic_write(&path, content.as_bytes())
+    } else {
+        match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
 }
 
 #[tauri::command]
@@ -167,11 +262,28 @@ fn diagnostic_finish(
 
 fn main() {
     tauri::Builder::default()
+        .manage(FileSessions::default())
+        .setup(|app| {
+            let directory = app.path().app_data_dir()?;
+            fs::create_dir_all(&directory)?;
+            let file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(directory.join("session.lock"))?;
+            file.try_lock()
+                .map_err(|_| "Solar Forge Diagrams is already running")?;
+            app.manage(RecoveryLock { _file: file });
+            Ok(())
+        })
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             open_document,
             save_document,
             export_png,
+            read_recovery,
+            write_recovery,
             diagnostic_mode,
             diagnostic_build,
             diagnostic_capture,

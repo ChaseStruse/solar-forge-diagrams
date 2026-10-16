@@ -1,4 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { RecoveryWriter } from './persistence/recovery';
+import { choose } from './ui/dialogs';
 import './style.css';
 import { services } from './catalog/services';
 import {
@@ -25,7 +28,7 @@ root.innerHTML = `
     <div class="board-heading"><button id="menu" class="icon-button" aria-label="File menu" aria-expanded="false" title="File menu">${icon('menu')}</button><span class="forge-mark" aria-hidden="true">✦</span><span class="brand">Solar Forge</span><span class="heading-divider"></span><span id="title" class="document-title"></span><span id="save-state" class="save-state">Unchanged</span></div>
     <div class="top-actions"><button id="components" class="quiet-button" title="AWS components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
   </header>
-  <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="export">Export PNG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">EXAMPLES</p><button id="example-starter">Two-service starter</button><button id="example-serverless">Serverless architecture</button></section>
+  <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="export">Export PNG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">EXAMPLES</p><button id="example-starter">Two-service starter</button><button id="example-serverless">Serverless architecture</button></section>
   <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add AWS service" title="Add AWS service (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
   <section id="component-palette" class="popover component-palette" aria-label="AWS components" hidden><div class="popover-heading"><h2>AWS components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a service to add it to your board.</p></section>
   <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label">Label</label><input id="node-label"><dl><dt>X</dt><dd id="position-x">—</dd><dt>Z</dt><dd id="position-z">—</dd></dl></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
@@ -50,6 +53,16 @@ let history = new DocumentHistory(current);
 let selected: string | undefined;
 let dirty = false;
 let busy = false;
+let fileHandle: number | undefined;
+let recoveryReady = false;
+const recovery = new RecoveryWriter(
+  () => (history.isDirty ? serializeDocument(current) : null),
+  (content) =>
+    nativeAvailable()
+      ? invoke('write_recovery', { content })
+      : Promise.resolve(),
+  (error) => notify(`Recovery failed: ${String(error)}. Save your diagram.`),
+);
 let layersVisible = true;
 let diagramVisible = true;
 const notify = (message: string): void => {
@@ -102,6 +115,7 @@ function updateLayers(): void {
 }
 function updateHeader(): void {
   dirty = history.isDirty;
+  if (recoveryReady) recovery.schedule();
   element('save-state').textContent = dirty ? 'Unsaved changes' : 'Unchanged';
   for (const [id, enabled] of [
     ['undo', history.canUndo],
@@ -152,6 +166,7 @@ scene.onZoom = (percent) => {
     element('zoom-level').textContent = value;
 };
 function replaceDocument(next: typeof current): void {
+  fileHandle = undefined;
   current = next;
   history = new DocumentHistory(current);
   selected = undefined;
@@ -173,34 +188,63 @@ async function action(task: () => Promise<void>): Promise<void> {
     busy = false;
   }
 }
-function canReplace(): boolean {
+async function saveCurrent(saveAs = false): Promise<boolean> {
   scene.finishInteraction();
-  return !dirty || window.confirm('Discard unsaved changes?');
+  const savedHistory = history;
+  const token = history.token;
+  const saved = await saveDocumentFile(
+    serializeDocument(current),
+    saveAs ? undefined : fileHandle,
+  );
+  if (!saved) return false;
+  if (history === savedHistory) fileHandle = saved.handle;
+  savedHistory.markSaved(token);
+  updateHeader();
+  await recovery.flush();
+  notify(`Saved ${saved.name}`);
+  return !history.isDirty;
 }
+async function canReplace(): Promise<boolean> {
+  scene.finishInteraction();
+  if (!history.isDirty) return true;
+  const decision = await choose(
+    'Save your changes?',
+    'This diagram has unsaved changes.',
+    ['Cancel', 'Discard changes', 'Save'],
+  );
+  if (decision === 'Save') return saveCurrent();
+  return decision === 'Discard changes';
+}
+element('new').onclick = () =>
+  void action(async () => {
+    if (!(await canReplace())) return;
+    replaceDocument({
+      version: 1,
+      title: 'Untitled diagram',
+      nodes: [],
+      edges: [],
+    });
+    element('file-menu').hidden = true;
+  });
 element('open').onclick = () => {
   element('file-menu').hidden = true;
   void action(async () => {
-    if (!canReplace()) return;
-    const content = await openDocumentFile();
-    if (content !== null) {
-      replaceDocument(parseDocument(content));
-      notify('Diagram opened');
+    if (!(await canReplace())) return;
+    const opened = await openDocumentFile();
+    if (opened !== null) {
+      replaceDocument(parseDocument(opened.content));
+      fileHandle = opened.handle;
+      notify(`Opened ${opened.name}`);
     }
   });
 };
-element('save').onclick = () => {
-  element('file-menu').hidden = true;
-  void action(async () => {
-    const savedHistory = history;
-    const token = history.token;
-    const snapshot = serializeDocument(current);
-    if (await saveDocumentFile(snapshot)) {
-      savedHistory.markSaved(token);
-      updateHeader();
-      notify('Diagram saved');
-    }
-  });
-};
+for (const id of ['save', 'save-as'])
+  element(id).onclick = () => {
+    element('file-menu').hidden = true;
+    void action(async () => {
+      await saveCurrent(id === 'save-as');
+    });
+  };
 element('export').onclick = () => {
   element('file-menu').hidden = true;
   void action(async () => {
@@ -211,12 +255,13 @@ for (const [id, create] of [
   ['example-starter', starterDocument],
   ['example-serverless', sampleDocument],
 ] as const) {
-  element(id).onclick = () => {
-    if (!canReplace()) return;
-    replaceDocument(create());
-    element('file-menu').hidden = true;
-    notify('Example loaded');
-  };
+  element(id).onclick = () =>
+    void action(async () => {
+      if (!(await canReplace())) return;
+      replaceDocument(create());
+      element('file-menu').hidden = true;
+      notify('Example loaded');
+    });
 }
 element('quick-save').onclick = () => element('save').click();
 element('quick-export').onclick = () => element('export').click();
@@ -384,9 +429,20 @@ window.addEventListener('keydown', (event) => {
     travelHistory(event.shiftKey || event.key.toLowerCase() === 'y');
     return;
   }
-  if ((event.ctrlKey || event.metaKey) && ['s', 'o'].includes(event.key)) {
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    ['s', 'o', 'n'].includes(event.key.toLowerCase())
+  ) {
     event.preventDefault();
-    element(event.key === 's' ? 'save' : 'open').click();
+    element(
+      event.key.toLowerCase() === 's'
+        ? event.shiftKey
+          ? 'save-as'
+          : 'save'
+        : event.key.toLowerCase() === 'n'
+          ? 'new'
+          : 'open',
+    ).click();
     return;
   }
   if (event.key === 'Escape') {
@@ -441,7 +497,54 @@ if (nativeAvailable())
     if (await invoke<boolean>('diagnostic_mode')) {
       const { runNativeDiagnostics } = await import('./renderer/diagnostics');
       await runNativeDiagnostics(scene);
+      return;
     }
+    let closing = false;
+    await getCurrentWindow().onCloseRequested((event) => {
+      event.preventDefault();
+      if (closing || busy) return;
+      closing = true;
+      void (async () => {
+        if (!(await canReplace())) return;
+        // A deliberate discard also removes the recovery snapshot.
+        if (recoveryReady) {
+          await recovery.flush();
+          await invoke('write_recovery', { content: null });
+        }
+        recovery.dispose();
+        await getCurrentWindow().destroy();
+      })()
+        .catch((error) => notify(`Could not close: ${String(error)}`))
+        .finally(() => {
+          closing = false;
+        });
+    });
+    const content = await invoke<string | null>('read_recovery');
+    if (content) {
+      const decision = await choose(
+        'Recover your diagram?',
+        'An unsaved diagram was found from a previous session.',
+        ['Close app', 'Discard recovery', 'Recover'],
+      );
+      if (decision === 'Recover') {
+        replaceDocument(parseDocument(content));
+        history.markSaved(-1);
+        updateHeader();
+        notify('Recovered diagram. Save to choose a destination.');
+      } else if (decision === 'Discard recovery')
+        await invoke('write_recovery', { content: null });
+      else {
+        await getCurrentWindow().destroy();
+        return;
+      }
+    }
+    recoveryReady = true;
+    window.addEventListener('blur', () => {
+      if (history.isDirty) {
+        recovery.schedule();
+        void recovery.flush().catch(() => {});
+      }
+    });
   })().catch((error) =>
-    notify(`Native diagnostic check failed: ${String(error)}`),
+    notify(`Startup recovery check failed: ${String(error)}`),
   );
