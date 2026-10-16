@@ -1,0 +1,20 @@
+{
+  "sourceCommit": "75fadd4",
+  "upgrade": "0.1.0-1 to 0.1.0-2",
+  "upgradePreservesDocumentsAndRecovery": true,
+  "uninstallPreservesDocumentsAndRecovery": true,
+  "reinstall": true,
+  "desktopValidation": true,
+  "packageSha256": "eb5365f81c6b057ff58db8257aeece3dbf01ac28f306fe8d9e83755225b6af0a",
+  "binaryBytes": 8103136,
+  "nativeOfflineBundledLaunch": true,
+  "v1DocumentReopen": true,
+  "singleInstanceFileOpen": true,
+  "sourceArchiveSha256": "fb076483c675668f0d3434f5b003341fc0117d7208b939ff6e68faf09303a1a2",
+  "containerNativeExport": "passed",
+  "installScope": "isolated /tmp pacman root; host runtime libraries; dependency checks/scripts disabled",
+  "alphaPerformanceExceptions": [
+    "250 MiB summed RSS target unmet",
+    "33 ms scheduled input target unmet"
+  ]
+}

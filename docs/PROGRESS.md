@@ -1,10 +1,20 @@
 # Implementation progress
 
-## Where to resume
+## Current alpha status
 
-**Continue M2–M5 native acceptance, performance and packaging.** M1 durable save/close/recovery workflows pass native checks. Manual editing, AWS catalog/templates, SVG export and usability features are implemented; their expanded native acceptance suite and performance correction are in progress. Packaging and Docker build files are present, with the first container checks passing. M2–M5 are not yet release-complete; M6 remains optional/deferred.
+**M1–M5 alpha implementation is complete.** Implementation, native editing and final package checks passed. The user accepted measured memory and scheduled-input misses for the alpha; original targets remain unmet. M6 is optional/deferred. No source or binaries have been pushed or published. No desktop configuration or Docker context was changed.
 
-Use the current Rust 1.99.1 toolchain in `/tmp/solar-forge-cargo` and `/tmp/solar-forge-rustup`, plus ignored `.tools/package/bin/bun`. Do not use older executable measurements as current acceptance evidence. No user desktop configuration or Docker context was changed.
+## Current verification
+
+- Frontend: lint, strict TypeScript, 20 tests / 130 assertions, production build, 182,245-byte gzip initial JS (358,400-byte budget).
+- Rust: formatting, both atomic replacement tests, clippy with warnings denied, optimized native builds.
+- Native: save/open/recovery/close guards, clipboard, grouping/history, resize/multi-drag/ports, repeated scene loads, context restoration, portal PNG/SVG exports, and visual checks in both views.
+- Optimized native 1920×1080 DPR 1: standard board 170 ms load, 23 draws, 5 ms pan submission p95 / 49 ms scheduled update p95; stress 639 ms, 67 draws, 12 ms / 93 ms. Zero idle frames in 500 ms; real 30-second idle CPU 0.90% normalized.
+- Resource sample: 603.11 MiB summed RSS / 350.15 MiB PSS. Memory and scheduled input exceed original targets and are explicitly accepted alpha limits. Configured display is 120 Hz; exact 60 Hz, cold-cache and physical fractional-DPI certification remain follow-ups.
+
+## Historical checkpoints
+
+The entries below retain the original measurements and open tasks at each checkpoint. They are historical; the current status above and final acceptance entry supersede their old pending-work lists.
 
 ## Task-to-commit map
 
@@ -18,6 +28,10 @@ Use the current Rust 1.99.1 toolchain in `/tmp/solar-forge-cargo` and `/tmp/sola
 | `19925c0` | M1 persistence | Durable native handles/Save As, recovery, close protection; actual native interrupted-session recovery verified |
 | `c336dee` | UI reference composition | Floating editor controls, Layers/properties, raised service tiles, spatial camera and projection tests |
 | `ae63cff` | M1 history / usability | Bounded edit transactions, undo/redo controls, responsive control strip and fitted camera, batched tile details; frontend verified, native pending |
+| `63aa4b4` | M2–M4 editing/catalog/exports | Complete graph workflows, official offline AWS assets/templates, command search and portable exports |
+| `4579060` | M5 build/distribution | Arch package, desktop/MIME integration, pinned Docker checks/artifact builders and dependency notices |
+| `c073e7f` | Native workflow acceptance | Stable service identity, asynchronous persistence and expanded native lifecycle diagnostics |
+| `75fadd4` | Alpha performance/limits | Reused Layers DOM, opaque renderer, WebKit cache policy, final measurements and accepted alpha exceptions |
 | Documentation checkpoint following `57cc746` | Handoff | Exact milestone mapping in the plan, final native measurements, remaining work and launch instructions |
 
 The documentation checkpoint refers to prior implementation hashes to avoid self-referential commit IDs. All changes are local commits; nothing was pushed.
@@ -158,3 +172,13 @@ After Layers/cache-policy tuning, a real native standard-board run measured 0.85
 The user explicitly accepted documented memory and scheduled-input limits for an alpha. The original engineering targets remain recorded; measurements above those targets are accepted alpha limitations, not passing performance results. Continue final package/artifact and upgrade/uninstall checks, then close the M1–M5 alpha implementation. M6 remains optional/deferred as specified by the plan. Full release certification (especially the exact 60 Hz baseline, cold-launch trials and physical high-DPI hardware) must not be implied by alpha acceptance.
 
 Final source verification passes: 20 Bun tests / 130 assertions, lint, strict TypeScript, production build (182,245 bytes initial JS gzip), Rust fmt, both atomic-write tests, and clippy with warnings denied. Final alpha package rebuild and isolated upgrade/removal are next. Spatial-camera deviation is already recorded in `docs/decisions/0002-reference-editor.md`.
+
+## Final alpha acceptance — 2026-10-16
+
+M1 persistence/history, M2 manual editing, M3 offline AWS authoring, M4 exports/usability, and M5 packaging/documentation are complete for the accepted alpha scope. Optional automatic layout was evaluated and deferred to preserve predictable manual positions/history. M6 remains optional/deferred. The spatial-camera decision is recorded in ADR 0002.
+
+Final package is `artifacts/arch/solar-forge-diagrams-0.1.0-2-x86_64.pkg.tar.zst`; normal native executable is `artifacts/native/solar-forge-diagrams` (8,103,136 bytes). Source archive and binaries were built from `75fadd4`; this final documentation checkpoint follows that source commit. Package is approximately 3 MiB compressed / 10.14 MiB installed including dependency notices. Source/package checksums and validation are recorded in `benchmarks/results/2026-10-16-alpha-package.json`.
+
+Final source frontend verification, Rust tests, clippy and fmt pass. The checksum-verified Arch rebuild and pinned Docker native artifact export both pass. Isolated pacman upgrade 0.1.0-1 → 0.1.0-2, removal and reinstall preserve identical document and recovery hashes. Desktop validation and isolated MIME database generation pass. These checks use host runtime libraries with dependency duplication and package hooks disabled in `/tmp`; they do not claim a fresh-OS installation. The normal packaged executable launches with bundled assets, reopens existing version-1 documents and accepts second-instance file-manager arguments. No schema migration is needed because the format remains version 1; unsupported future versions are rejected by tested parsing.
+
+Remaining work is production certification and optional exploration, not unfinished alpha implementation: original 250 MiB RSS / 33 ms scheduled-input targets are missed; exact 60 Hz, true cold-cache launch trials and physical fractional-DPI testing remain. See the raw reports and user guide. All delivery is local; no push, publication, system installation, global MIME defaults, compositor configuration or Docker context changes were made.
