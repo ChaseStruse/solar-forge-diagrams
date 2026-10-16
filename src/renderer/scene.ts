@@ -39,6 +39,11 @@ import { worldPosition } from '../domain/document';
 import { portPosition, routeEdge } from '../domain/routing';
 import { createBackdrop } from './backdrop';
 import { LabelAtlas } from './labels';
+import {
+  nodesInSelectionRect,
+  type ScreenPoint,
+  selectionRect,
+} from './selection';
 import { TileBodies } from './tile-bodies';
 import { TileDetails } from './tile-details';
 import { BoardView, type ViewMode } from './view';
@@ -143,6 +148,18 @@ export class DiagramScene {
     | { id: string; x: number; z: number; startX: number; startZ: number }
     | undefined;
   private pan: { x: number; z: number } | undefined;
+  private activePointer: number | undefined;
+  private readonly selectionBox = document.createElement('div');
+  private marquee:
+    | {
+        start: ScreenPoint;
+        end: ScreenPoint;
+        initial: readonly string[];
+        additive: boolean;
+        clickId: string | undefined;
+        active: boolean;
+      }
+    | undefined;
   private selected: string | undefined;
   private disposed = false;
   private fitted = false;
@@ -183,6 +200,10 @@ export class DiagramScene {
       'Architecture diagram canvas',
     );
     this.host.append(this.renderer.domElement);
+    this.selectionBox.className = 'selection-box';
+    this.selectionBox.hidden = true;
+    this.selectionBox.setAttribute('aria-hidden', 'true');
+    this.host.append(this.selectionBox);
     this.scene.add(this.ports);
     this.scene.add(this.content, new AmbientLight('#c9def1', 2));
     const light = new DirectionalLight('#ffe5bf', 2);
@@ -201,6 +222,18 @@ export class DiagramScene {
     this.renderer.domElement.addEventListener('pointermove', this.move);
     this.renderer.domElement.addEventListener('pointerup', this.up);
     this.renderer.domElement.addEventListener('pointercancel', this.cancel);
+    this.renderer.domElement.addEventListener(
+      'lostpointercapture',
+      this.lostCapture,
+    );
+    this.renderer.domElement.addEventListener(
+      'mousedown',
+      this.preventNativeDrag,
+    );
+    this.renderer.domElement.addEventListener(
+      'dragstart',
+      this.preventNativeDrag,
+    );
     this.renderer.domElement.addEventListener('wheel', this.wheel, {
       passive: false,
     });
@@ -236,6 +269,16 @@ export class DiagramScene {
     this.edgeIndex.clear();
   }
   public load(document: DiagramDocument): void {
+    // History may already have changed parent IDs. Do not refresh the old scene
+    // against that edited graph while replacing its node index.
+    this.releasePointer();
+    this.marquee = undefined;
+    this.selectionBox.hidden = true;
+    this.drag = undefined;
+    this.dragOrigins = [];
+    this.resizing = undefined;
+    this.pan = undefined;
+    this.connectionStart = undefined;
     this.document = document;
     this.releaseContent();
     this.selected = undefined;
@@ -423,6 +466,7 @@ export class DiagramScene {
     this.invalidate();
   }
   public setTool(tool: 'select' | 'pan' | 'connect'): void {
+    this.cancelInteraction();
     this.tool = tool;
     this.renderer.domElement.style.cursor =
       tool === 'pan' ? 'grab' : tool === 'connect' ? 'crosshair' : 'default';
@@ -467,8 +511,12 @@ export class DiagramScene {
     return this.ray.ray.intersectPlane(this.plane, this.point) ?? undefined;
   }
   private down = (event: PointerEvent): void => {
+    if (this.activePointer !== undefined || event.button > 2) return;
+    // Claim canvas gestures before WebKit/GTK can interpret an unhandled drag.
+    event.preventDefault();
     const point = this.locate(event);
     if (!point) return;
+    this.activePointer = event.pointerId;
     if (event.isTrusted)
       this.renderer.domElement.setPointerCapture(event.pointerId);
     if (
@@ -536,7 +584,28 @@ export class DiagramScene {
       }
       return;
     }
-    if (event.shiftKey || typeof id !== 'string' || !this.selectedIds.has(id))
+    const hitNode =
+      typeof id === 'string' ? this.tiles.get(id)?.node : undefined;
+    if (
+      typeof id !== 'string' ||
+      (hitNode?.kind === 'group' && !this.selectedIds.has(id))
+    ) {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      const start = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
+      this.marquee = {
+        start,
+        end: start,
+        initial: this.selection,
+        additive: event.shiftKey,
+        clickId: typeof id === 'string' ? id : undefined,
+        active: false,
+      };
+      return;
+    }
+    if (event.shiftKey || !this.selectedIds.has(id))
       this.select(typeof id === 'string' ? id : undefined, event.shiftKey);
     else this.selected = id;
     const node = this.selected
@@ -564,6 +633,33 @@ export class DiagramScene {
     }
   };
   private move = (event: PointerEvent): void => {
+    if (event.pointerId !== this.activePointer) return;
+    event.preventDefault();
+    if (this.marquee) {
+      const bounds = this.renderer.domElement.getBoundingClientRect();
+      this.marquee.end = {
+        x: Math.max(0, Math.min(this.width, event.clientX - bounds.left)),
+        y: Math.max(0, Math.min(this.height, event.clientY - bounds.top)),
+      };
+      if (
+        Math.hypot(
+          this.marquee.end.x - this.marquee.start.x,
+          this.marquee.end.y - this.marquee.start.y,
+        ) >= 4
+      )
+        this.marquee.active = true;
+      if (this.marquee.active) {
+        const rect = selectionRect(this.marquee.start, this.marquee.end);
+        this.selectionBox.hidden = false;
+        Object.assign(this.selectionBox.style, {
+          left: `${rect.left}px`,
+          top: `${rect.top}px`,
+          width: `${rect.right - rect.left}px`,
+          height: `${rect.bottom - rect.top}px`,
+        });
+      }
+      return;
+    }
     const point = this.locate(event);
     if (!point) return;
     if (this.resizing) {
@@ -667,6 +763,26 @@ export class DiagramScene {
     this.invalidate();
   }
   private up = (event?: PointerEvent): void => {
+    if (event && event.pointerId !== this.activePointer) return;
+    if (this.marquee) {
+      if (event) this.move(event);
+      const marquee = this.marquee;
+      this.marquee = undefined;
+      this.selectionBox.hidden = true;
+      if (marquee.active) {
+        const ids = nodesInSelectionRect(
+          this.nodeIndex,
+          this.camera,
+          this.width,
+          this.height,
+          selectionRect(marquee.start, marquee.end),
+        );
+        this.selectMany(
+          marquee.additive ? [...new Set([...marquee.initial, ...ids])] : ids,
+        );
+      } else this.select(marquee.clickId, marquee.additive);
+    }
+    this.releasePointer();
     if (this.resizing) {
       const resizing = this.resizing;
       this.resizing = undefined;
@@ -718,6 +834,9 @@ export class DiagramScene {
     } else if (moves.length) this.onMoves(moves);
   };
   public cancelInteraction = (): void => {
+    this.marquee = undefined;
+    this.selectionBox.hidden = true;
+    this.releasePointer();
     if (this.resizing) {
       const node = this.tiles.get(this.resizing.id)?.node;
       if (node) {
@@ -745,6 +864,19 @@ export class DiagramScene {
     this.invalidate();
   };
   private cancel = (): void => this.cancelInteraction();
+  private lostCapture = (event: PointerEvent): void => {
+    if (event.pointerId === this.activePointer) this.cancelInteraction();
+  };
+  private releasePointer(): void {
+    const pointer = this.activePointer;
+    this.activePointer = undefined;
+    if (
+      pointer !== undefined &&
+      this.renderer.domElement.hasPointerCapture(pointer)
+    )
+      this.renderer.domElement.releasePointerCapture(pointer);
+  }
+  private preventNativeDrag = (event: Event): void => event.preventDefault();
   private wheel = (event: WheelEvent): void => {
     this.fitted = false;
     event.preventDefault();
@@ -950,6 +1082,7 @@ export class DiagramScene {
     );
   }
   public dispose(): void {
+    this.cancelInteraction();
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     this.observer.disconnect();
@@ -975,6 +1108,7 @@ export class DiagramScene {
     this.backdrop.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
+    this.selectionBox.remove();
   }
 }
 

@@ -76,6 +76,63 @@ export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
   scene.load(workflow);
   scene.fit();
   await frame();
+  const canvasRect = canvas.getBoundingClientRect();
+  const marqueeStart = { x: canvasRect.left + 90, y: canvasRect.top + 100 };
+  const marqueeEnd = { x: canvasRect.right - 280, y: canvasRect.bottom - 120 };
+  const pointer = (
+    type: string,
+    point: { x: number; y: number },
+    shiftKey = false,
+  ) =>
+    canvas.dispatchEvent(
+      new PointerEvent(type, {
+        clientX: point.x,
+        clientY: point.y,
+        pointerId: 6,
+        button: 0,
+        shiftKey,
+        cancelable: true,
+      }),
+    );
+  const selectionOriginal = serializeDocument(workflow);
+  if (pointer('pointerdown', marqueeStart))
+    throw Error('Canvas press was not claimed');
+  pointer('pointermove', marqueeEnd);
+  const selectionBox =
+    canvas.parentElement?.querySelector<HTMLElement>('.selection-box');
+  if (!selectionBox || selectionBox.hidden)
+    throw Error('Missing selection rectangle');
+  pointer('pointerup', marqueeEnd);
+  if (scene.selection.length !== 2 || !selectionBox.hidden)
+    throw Error('Native rectangle selection failed');
+  scene.selectMany([]);
+  pointer('pointerdown', marqueeEnd);
+  pointer('pointermove', marqueeStart);
+  pointer('pointerup', marqueeStart);
+  if (scene.selection.length !== 2)
+    throw Error('Reverse rectangle selection failed');
+  scene.select('database');
+  const functionPoint = scene.nodeScreenPosition('function');
+  if (!functionPoint) throw Error('Missing additive rectangle target');
+  pointer('pointerdown', marqueeStart, true);
+  pointer('pointermove', functionPoint, true);
+  pointer('pointerup', functionPoint, true);
+  if (scene.selection.length !== 2)
+    throw Error('Additive rectangle selection failed');
+  pointer('pointerdown', marqueeStart);
+  pointer('pointermove', marqueeEnd);
+  pointer('pointercancel', marqueeEnd);
+  if (scene.selection.length !== 2 || !selectionBox.hidden)
+    throw Error('Cancelled rectangle changed selection');
+  if (serializeDocument(workflow) !== selectionOriginal)
+    throw Error('Rectangle selection moved nodes or changed the document');
+  if (
+    canvas.dispatchEvent(new MouseEvent('mousedown', { cancelable: true })) ||
+    canvas.dispatchEvent(new Event('dragstart', { cancelable: true }))
+  )
+    throw Error('Canvas native dragging was not prevented');
+  results.rectangleSelection =
+    'pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented';
   const original = serializeDocument(workflow);
   history.execute(
     groupNodes(
