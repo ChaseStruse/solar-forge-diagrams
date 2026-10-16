@@ -2,7 +2,6 @@ import {
   AmbientLight,
   BoxGeometry,
   BufferGeometry,
-  CanvasTexture,
   DirectionalLight,
   GridHelper,
   Group,
@@ -15,7 +14,6 @@ import {
   Raycaster,
   Scene,
   Sprite,
-  SpriteMaterial,
   Vector2,
   Vector3,
   WebGLRenderer,
@@ -26,15 +24,18 @@ import type {
   DiagramNode,
 } from '../domain/document';
 import { worldPosition } from '../domain/document';
+import { LabelAtlas } from './labels';
 
 export type ViewMode = 'isometric' | 'top';
 interface Tile {
   node: DiagramNode;
   group: Group;
   material: MeshLambertMaterial;
+  label: Sprite;
 }
 export class DiagramScene {
   private readonly scene = new Scene();
+  private readonly labels = new LabelAtlas();
   private readonly camera = new OrthographicCamera(
     -700,
     700,
@@ -49,6 +50,7 @@ export class DiagramScene {
   private readonly edgeMaterial = new LineBasicMaterial({ color: '#e8b56b' });
   private readonly tiles = new Map<string, Tile>();
   private readonly edges = new Map<string, Line>();
+  private readonly edgeLabels = new Map<string, Sprite>();
   private readonly nodeIndex = new Map<string, DiagramNode>();
   private readonly edgeIndex = new Map<string, DiagramEdge>();
   private readonly incident = new Map<string, Set<string>>();
@@ -75,7 +77,12 @@ export class DiagramScene {
     to: { x: number; z: number },
   ) => void = () => {};
   public onError: (message: string) => void = () => {};
-  public readonly metrics = { frames: 0, lastRenderMs: 0 };
+  public readonly metrics = {
+    frames: 0,
+    lastRenderMs: 0,
+    textures: 0,
+    drawCalls: 0,
+  };
 
   constructor(
     private readonly host: HTMLElement,
@@ -117,25 +124,6 @@ export class DiagramScene {
     this.resize();
     this.setView('isometric');
   }
-  private label(text: string, width = 512, height = 96): Sprite {
-    const canvas = window.document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Text canvas unavailable');
-    ctx.font = '600 33px system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#f5eee1';
-    ctx.fillText(text, width / 2, height / 2, width - 16);
-    const texture = new CanvasTexture(canvas);
-    const sprite = new Sprite(
-      new SpriteMaterial({ map: texture, depthTest: false }),
-    );
-    sprite.scale.set(width / 3.5, height / 3.5, 1);
-    sprite.renderOrder = 10;
-    return sprite;
-  }
   private releaseContent(): void {
     this.content.traverse((object) => {
       if (object instanceof Sprite) {
@@ -149,9 +137,11 @@ export class DiagramScene {
         object.material.dispose();
       if (object instanceof Line) object.geometry.dispose();
     });
+    this.labels.dispose();
     this.content.clear();
     this.tiles.clear();
     this.edges.clear();
+    this.edgeLabels.clear();
     this.incident.clear();
     this.nodeIndex.clear();
     this.edgeIndex.clear();
@@ -167,7 +157,7 @@ export class DiagramScene {
       mesh.scale.set(node.width, node.kind === 'group' ? 8 : 24, node.depth);
       mesh.userData.nodeId = node.id;
       group.add(mesh);
-      const label = this.label(node.label);
+      const label = this.labels.create(node.label, this.camera.zoom);
       label.position.set(
         0,
         node.kind === 'group' ? 13 : 37,
@@ -175,19 +165,25 @@ export class DiagramScene {
       );
       group.add(label);
       this.content.add(group);
-      this.tiles.set(node.id, { node, group, material });
+      this.tiles.set(node.id, { node, group, material, label });
     }
     for (const edge of document.edges) {
       this.edgeIndex.set(edge.id, edge);
       const line = new Line(new BufferGeometry(), this.edgeMaterial);
       this.content.add(line);
       this.edges.set(edge.id, line);
+      if (edge.label) {
+        const label = this.labels.create(edge.label, this.camera.zoom);
+        this.content.add(label);
+        this.edgeLabels.set(edge.id, label);
+      }
       for (const id of [edge.source, edge.target]) {
         const ids = this.incident.get(id) ?? new Set<string>();
         ids.add(edge.id);
         this.incident.set(id, ids);
       }
     }
+    this.labels.finish();
     this.updatePositions();
     this.invalidate();
     this.onSelect(undefined);
@@ -208,15 +204,42 @@ export class DiagramScene {
     if (!source || !target) return;
     const a = source.group.position;
     const b = target.group.position;
-    const y = Math.max(a.y, b.y) + 15;
+    const y = Math.max(a.y, b.y) + 14;
+    const horizontal = Math.abs(b.x - a.x) >= Math.abs(b.z - a.z);
+    const direction = horizontal ? Math.sign(b.x - a.x) : Math.sign(b.z - a.z);
+    const ax = a.x + (horizontal ? (direction * source.node.width) / 2 : 0);
+    const az = a.z + (horizontal ? 0 : (direction * source.node.depth) / 2);
+    const bx = b.x - (horizontal ? (direction * target.node.width) / 2 : 0);
+    const bz = b.z - (horizontal ? 0 : (direction * target.node.depth) / 2);
     line.geometry.dispose();
     line.geometry = new BufferGeometry().setFromPoints([
-      new Vector3(a.x, y, a.z),
-      new Vector3((a.x + b.x) / 2, y, a.z),
-      new Vector3((a.x + b.x) / 2, y, b.z),
-      new Vector3(b.x, y, b.z),
+      new Vector3(ax, y, az),
+      new Vector3(
+        horizontal ? (ax + bx) / 2 : ax,
+        y,
+        horizontal ? az : (az + bz) / 2,
+      ),
+      new Vector3(
+        horizontal ? (ax + bx) / 2 : bx,
+        y,
+        horizontal ? bz : (az + bz) / 2,
+      ),
+      new Vector3(bx, y, bz),
     ]);
+    this.edgeLabels.get(id)?.position.set((ax + bx) / 2, y + 20, (az + bz) / 2);
   }
+  private scaleLabels(): void {
+    const scale = 0.5 / this.camera.zoom;
+    const apply = (label: Sprite): void => {
+      const width: unknown = label.userData.labelWidth;
+      const height: unknown = label.userData.labelHeight;
+      if (typeof width === 'number' && typeof height === 'number')
+        label.scale.set(width * scale, height * scale, 1);
+    };
+    for (const tile of this.tiles.values()) apply(tile.label);
+    for (const label of this.edgeLabels.values()) apply(label);
+  }
+
   public setView(mode: ViewMode): void {
     this.mode = mode;
     this.camera.up.set(0, 0, -1);
@@ -229,6 +252,7 @@ export class DiagramScene {
       );
     this.camera.lookAt(this.target);
     this.camera.updateMatrixWorld();
+    this.scaleLabels();
     this.invalidate();
   }
   public fit(): void {
@@ -244,12 +268,30 @@ export class DiagramScene {
     }
     if (!Number.isFinite(minX)) return;
     this.target.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
-    const extent = Math.max(maxX - minX, maxZ - minZ) * 1.6;
-    this.camera.zoom =
-      Math.min(this.width, this.height) / Math.max(extent, 200);
+    this.camera.zoom = 1;
     this.camera.updateProjectionMatrix();
     this.setView(this.mode);
+    let extent = 0;
+    const corner = new Vector3();
+    for (const tile of this.tiles.values()) {
+      for (const x of [-1, 1])
+        for (const z of [-1, 1]) {
+          corner
+            .set(
+              tile.group.position.x + (x * tile.node.width) / 2,
+              tile.group.position.y + 40,
+              tile.group.position.z + (z * tile.node.depth) / 2,
+            )
+            .project(this.camera);
+          extent = Math.max(extent, Math.abs(corner.x), Math.abs(corner.y));
+        }
+    }
+    this.camera.zoom = Math.min(3, 0.82 / Math.max(extent, 0.01));
+    this.camera.updateProjectionMatrix();
+    this.scaleLabels();
+    this.invalidate();
   }
+
   private resize(): void {
     this.width = Math.max(this.host.clientWidth, 1);
     this.height = Math.max(this.host.clientHeight, 1);
@@ -401,6 +443,8 @@ export class DiagramScene {
   private render(): void {
     const start = performance.now();
     this.renderer.render(this.scene, this.camera);
+    this.metrics.textures = this.renderer.info.memory.textures;
+    this.metrics.drawCalls = this.renderer.info.render.calls;
     this.metrics.frames++;
     this.metrics.lastRenderMs = performance.now() - start;
   }

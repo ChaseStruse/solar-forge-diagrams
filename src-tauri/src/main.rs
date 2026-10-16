@@ -101,14 +101,88 @@ async fn export_png(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<bool, Strin
     .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+fn diagnostic_mode() -> bool {
+    cfg!(debug_assertions) && std::env::args().any(|arg| arg == "--smoke-test")
+}
+
+#[tauri::command]
+fn diagnostic_capture(name: String, bytes: Vec<u8>) -> Result<(), String> {
+    if !diagnostic_mode()
+        || !matches!(name.as_str(), "isometric" | "top")
+        || bytes.len() > 50_000_000
+    {
+        return Err("Diagnostics unavailable".into());
+    }
+    let directory = std::env::temp_dir().join("solar-forge-native-smoke");
+    fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    atomic_write(&directory.join(format!("{name}.png")), &bytes)
+}
+
+#[tauri::command]
+fn diagnostic_finish(
+    app: tauri::AppHandle,
+    report: String,
+    document: String,
+) -> Result<(), String> {
+    if !diagnostic_mode() || report.len() > 100_000 || document.len() > 10_000_000 {
+        return Err("Diagnostics unavailable".into());
+    }
+    let directory = std::env::temp_dir().join("solar-forge-native-smoke");
+    fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    let path = directory.join("roundtrip.sforge.json");
+    atomic_write(&path, document.as_bytes())?;
+    if fs::read_to_string(&path).map_err(|e| e.to_string())? != document {
+        return Err("Native document roundtrip failed".into());
+    }
+    atomic_write(&directory.join("report.json"), report.as_bytes())?;
+    println!("SOLAR_FORGE_SMOKE {report}");
+    app.exit(0);
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             open_document,
             save_document,
-            export_png
+            export_png,
+            diagnostic_mode,
+            diagnostic_capture,
+            diagnostic_finish
         ])
         .run(tauri::generate_context!())
         .expect("failed to launch Solar Forge Diagrams");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn atomic_replacement_preserves_complete_documents() {
+        let directory =
+            std::env::temp_dir().join(format!("solar-forge-atomic-{}", std::process::id()));
+        fs::create_dir_all(&directory).unwrap();
+        let target = directory.join("board.json");
+        atomic_write(&target, b"old document").unwrap();
+        atomic_write(&target, b"replacement document").unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"replacement document");
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn failed_rename_keeps_existing_target() {
+        let directory =
+            std::env::temp_dir().join(format!("solar-forge-failure-{}", std::process::id()));
+        fs::create_dir_all(&directory).unwrap();
+        let target = directory.join("existing-directory");
+        fs::create_dir_all(&target).unwrap();
+        assert!(atomic_write(&target, b"replacement").is_err());
+        assert!(target.is_dir());
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+        fs::remove_dir_all(directory).unwrap();
+    }
 }

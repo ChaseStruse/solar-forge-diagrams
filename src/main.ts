@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import './style.css';
 import { benchmarkDocument } from '../benchmarks/fixtures';
 import {
@@ -238,3 +239,14 @@ notify(
     ? 'Native workspace · Offline and ready'
     : 'Browser development preview · Open, Save, and Export require the desktop app',
 );
+
+if (nativeAvailable()) {
+  void (async () => {
+    if (await invoke<boolean>('diagnostic_mode')) {
+      const { runNativeDiagnostics } = await import('./renderer/diagnostics');
+      await runNativeDiagnostics(scene);
+    }
+  })().catch((error) =>
+    notify(`Native diagnostic check failed: ${String(error)}`),
+  );
+}
