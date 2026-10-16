@@ -99,6 +99,8 @@ function showComponents(show: boolean): void {
   element('components').setAttribute('aria-expanded', String(show));
   if (show) {
     element('file-menu').hidden = true;
+    inputElement('search').value = '';
+    populateServices();
     inputElement('search').focus();
   }
 }
@@ -600,38 +602,7 @@ function populateServices(query = ''): void {
     detail.textContent = service.description;
     text.append(name, detail);
     button.append(symbol, text);
-    button.onclick = () => {
-      const id = crypto.randomUUID();
-      const point = insertionSlot(
-        current,
-        scene.insertionPoint(),
-        service.kind === 'group' ? 500 : 150,
-        service.kind === 'group' ? 320 : 96,
-      );
-      history.execute({
-        type: 'insert',
-        node: {
-          id,
-          kind: service.kind,
-          serviceId: service.id,
-          ...(service.shape ? { shape: service.shape } : {}),
-          ...(service.boundary ? { boundary: service.boundary } : {}),
-          label: service.label,
-          x: Math.round(point.x / 10) * 10,
-          z: Math.round(point.z / 10) * 10,
-          width: service.kind === 'group' ? 500 : 150,
-          depth: service.kind === 'group' ? 320 : 96,
-          color: service.color,
-        },
-      });
-      scene.load(current);
-      scene.select(id);
-      updateHeader();
-      showComponents(false);
-      selectTool('select');
-      scene.fit();
-      notify(`${service.label} added`);
-    };
+    button.onclick = () => addService(service);
     list.append(button);
   }
   if (!list.childElementCount) {
@@ -640,9 +611,69 @@ function populateServices(query = ''): void {
     empty.textContent = 'No matching services. Try another name.';
     list.append(empty);
   }
+  highlightService(0);
+}
+function addService(service: (typeof services)[number]): void {
+  const id = crypto.randomUUID();
+  const width = service.kind === 'group' ? 500 : 150;
+  const depth = service.kind === 'group' ? 320 : 96;
+  let point: { x: number; z: number };
+  try {
+    point = insertionSlot(current, scene.insertionPoint(), width, depth);
+  } catch (error) {
+    notify(String(error));
+    return;
+  }
+  history.execute({
+    type: 'insert',
+    node: {
+      id,
+      kind: service.kind,
+      serviceId: service.id,
+      ...(service.shape ? { shape: service.shape } : {}),
+      ...(service.boundary ? { boundary: service.boundary } : {}),
+      label: service.label,
+      x: Math.round(point.x / 10) * 10,
+      z: Math.round(point.z / 10) * 10,
+      width,
+      depth,
+      color: service.color,
+    },
+  });
+  scene.load(current);
+  scene.select(id);
+  scene.reveal(id);
+  updateHeader();
+  showComponents(false);
+  selectTool('select');
+  notify(`${service.label} added`);
+}
+let highlighted = 0;
+function serviceButtons(): HTMLButtonElement[] {
+  return [...element('services').querySelectorAll<HTMLButtonElement>('button')];
+}
+function highlightService(index: number): void {
+  const buttons = serviceButtons();
+  highlighted = buttons.length ? (index + buttons.length) % buttons.length : 0;
+  for (const [i, button] of buttons.entries())
+    button.classList.toggle('highlighted', i === highlighted);
+  buttons[highlighted]?.scrollIntoView({ block: 'nearest' });
 }
 element('search').oninput = () =>
   populateServices(inputElement('search').value);
+// Type to filter, arrows to choose, Enter drops the match on the board.
+element('search').onkeydown = (event) => {
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    highlightService(highlighted + (event.key === 'ArrowDown' ? 1 : -1));
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    serviceButtons()[highlighted]?.click();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    showComponents(false);
+  }
+};
 function field(
   id: string,
 ): HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {

@@ -942,3 +942,7 @@ textarea:focus-visible {
 .quality-label select {
   margin-top: 8px;
 }
+.service.highlighted {
+  background: #1b2838;
+  border-color: var(--accent);
+}

@@ -559,6 +559,21 @@ export class DiagramScene {
   public insertionPoint(): { x: number; z: number } {
     return { x: this.target.x, z: this.target.z };
   }
+  /** Pan just enough to bring a node on screen; the zoom stays put. */
+  public reveal(id: string): void {
+    const tile = this.tiles.get(id);
+    const point = this.nodeScreenPosition(id);
+    if (!tile || !point) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const x = point.x - rect.left,
+      y = point.y - rect.top;
+    if (x > 120 && x < this.width - 300 && y > 120 && y < this.height - 120)
+      return;
+    this.fitted = false;
+    this.target.x = tile.group.position.x;
+    this.target.z = tile.group.position.z;
+    this.setView(this.mode);
+  }
   public setPanelVisible(visible: boolean): void {
     this.view.setPanelVisible(visible);
     this.fit();
