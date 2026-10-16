@@ -2,34 +2,45 @@ import {
   AmbientLight,
   BoxGeometry,
   BufferAttribute,
-  BufferGeometry,
   DirectionalLight,
   DynamicDrawUsage,
+  EdgesGeometry,
+  FogExp2,
   GridHelper,
   Group,
+  type InterleavedBuffer,
+  InterleavedBufferAttribute,
   Line,
   LineBasicMaterial,
   LineSegments,
   Mesh,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   type Object3D,
-  OrthographicCamera,
   Plane,
+  PlaneGeometry,
   Raycaster,
   Scene,
   Vector2,
   Vector3,
   WebGLRenderer,
 } from 'three';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { serviceGlyph } from '../catalog/services';
 import type {
   DiagramDocument,
   DiagramEdge,
   DiagramNode,
 } from '../domain/document';
 import { worldPosition } from '../domain/document';
+import { createBackdrop } from './backdrop';
 import { LabelAtlas } from './labels';
+import { BoardView, type ViewMode } from './view';
 
-export type ViewMode = 'isometric' | 'top';
+export type { ViewMode } from './view';
+
 interface Tile {
   node: DiagramNode;
   group: Group;
@@ -38,19 +49,52 @@ interface Tile {
 }
 export class DiagramScene {
   private readonly scene = new Scene();
+  private readonly backdrop = createBackdrop();
   private readonly labels = new LabelAtlas();
-  private readonly camera = new OrthographicCamera(
-    -700,
-    700,
-    500,
-    -500,
-    0.1,
-    20000,
-  );
-  private readonly renderer = new WebGLRenderer({ antialias: true });
+  private readonly view = new BoardView();
+  private get camera() {
+    return this.view.camera;
+  }
+  private get target() {
+    return this.view.target;
+  }
+  private readonly renderer = new WebGLRenderer({
+    antialias: true,
+    alpha: true,
+  });
   private readonly content = new Group();
   private readonly geometry = new BoxGeometry(1, 1, 1);
-  private readonly edgeMaterial = new LineBasicMaterial({ color: '#e8b56b' });
+  private readonly tileOutline = new EdgesGeometry(this.geometry);
+  private readonly outlineMaterial = new LineBasicMaterial({
+    color: '#778895',
+    transparent: true,
+    opacity: 0.7,
+  });
+  private readonly insetGeometry = new PlaneGeometry(1, 1);
+  private readonly insetMaterial = new MeshLambertMaterial({
+    color: '#345064',
+  });
+  private readonly shadowMaterial = new MeshBasicMaterial({
+    color: '#02080d',
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false,
+  });
+  private readonly edgeMaterial = new LineMaterial({
+    color: '#ffe1a2',
+    linewidth: 1.6,
+    transparent: true,
+    depthWrite: false,
+  });
+  private readonly haloMaterial = new LineMaterial({
+    color: '#ffae42',
+    linewidth: 8,
+    transparent: true,
+    opacity: 0.12,
+    depthWrite: false,
+  });
+  private edgeGeometry: LineSegmentsGeometry | undefined;
+  private edgeBuffer: InterleavedBuffer | undefined;
   private readonly tiles = new Map<string, Tile>();
   private readonly edges = new Map<string, number>();
   private edgePositions = new BufferAttribute(new Float32Array(), 3);
@@ -62,12 +106,12 @@ export class DiagramScene {
   private readonly pointer = new Vector2();
   private readonly plane = new Plane(new Vector3(0, 1, 0), 0);
   private readonly point = new Vector3();
-  private readonly target = new Vector3();
   private readonly observer: ResizeObserver;
   private frame = 0;
   private width = 1;
   private height = 1;
   private mode: ViewMode = 'isometric';
+  private tool: 'select' | 'pan' = 'select';
   private drag:
     | { id: string; x: number; z: number; startX: number; startZ: number }
     | undefined;
@@ -80,6 +124,7 @@ export class DiagramScene {
     from: { x: number; z: number },
     to: { x: number; z: number },
   ) => void = () => {};
+  public onZoom: (percent: number) => void = () => {};
   public onError: (message: string) => void = () => {};
   public readonly metrics = {
     frames: 0,
@@ -93,18 +138,24 @@ export class DiagramScene {
     document: DiagramDocument,
   ) {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-    this.renderer.setClearColor('#151b20');
+    this.renderer.setClearColor('#0b111a', 0);
+    this.scene.background = this.backdrop;
+    this.scene.fog = new FogExp2('#0b111a', 0.00012);
     this.renderer.domElement.setAttribute(
       'aria-label',
       'Architecture diagram canvas',
     );
     this.host.append(this.renderer.domElement);
-    this.scene.add(this.content, new AmbientLight('#ffffff', 2));
-    const light = new DirectionalLight('#ffe5bf', 3);
+    this.scene.add(this.content, new AmbientLight('#c9def1', 2));
+    const light = new DirectionalLight('#ffe5bf', 2);
     light.position.set(-200, 500, 300);
     this.scene.add(light);
-    const grid = new GridHelper(10000, 200, '#3b4247', '#242d34');
-    grid.position.y = -8;
+    const grid = new GridHelper(16000, 320, '#62503a', '#253543');
+    grid.position.y = -12;
+    if (!Array.isArray(grid.material)) {
+      grid.material.transparent = true;
+      grid.material.opacity = 0.22;
+    }
     this.scene.add(grid);
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
@@ -132,11 +183,16 @@ export class DiagramScene {
     this.content.traverse((object) => {
       if (
         object instanceof Mesh &&
-        object.material instanceof MeshLambertMaterial
+        object.material instanceof MeshLambertMaterial &&
+        object.material !== this.insetMaterial
       )
         object.material.dispose();
-      if (object instanceof Line) object.geometry.dispose();
+      if (object instanceof Line && object.geometry !== this.tileOutline)
+        object.geometry.dispose();
     });
+    this.edgeGeometry?.dispose();
+    this.edgeGeometry = undefined;
+    this.edgeBuffer = undefined;
     this.labels.dispose();
     this.content.clear();
     this.tiles.clear();
@@ -152,32 +208,69 @@ export class DiagramScene {
     for (const node of document.nodes) {
       this.nodeIndex.set(node.id, node);
       const group = new Group();
-      const material = new MeshLambertMaterial({ color: node.color });
+      const material = new MeshLambertMaterial({
+        color: node.kind === 'group' ? '#172c3a' : '#172b3a',
+        transparent: node.kind === 'group',
+        opacity: node.kind === 'group' ? 0.12 : 1,
+        depthWrite: node.kind !== 'group',
+      });
       const mesh = new Mesh(this.geometry, material);
-      mesh.scale.set(node.width, node.kind === 'group' ? 3 : 10, node.depth);
+      mesh.scale.set(node.width, node.kind === 'group' ? 2 : 24, node.depth);
       mesh.userData.nodeId = node.id;
       group.add(mesh);
-      const label = this.labels.create(node.label, this.camera.zoom);
+      const outline = new LineSegments(this.tileOutline, this.outlineMaterial);
+      outline.scale.copy(mesh.scale);
+      group.add(outline);
+      if (node.kind === 'service') {
+        const inset = new Mesh(this.insetGeometry, this.insetMaterial);
+        inset.rotation.x = -Math.PI / 2;
+        inset.scale.set(node.width * 0.82, node.depth * 0.76, 1);
+        inset.position.y = 12.5;
+        group.add(inset);
+        const shadow = new Mesh(this.insetGeometry, this.shadowMaterial);
+        shadow.rotation.x = -Math.PI / 2;
+        shadow.scale.set(node.width * 1.04, node.depth * 1.05, 1);
+        shadow.position.set(8, -14, 11);
+        group.add(shadow);
+        const glyph = this.labels.create(
+          serviceGlyph(node.label),
+          this.camera.zoom,
+          'icon',
+        );
+        glyph.position.y = 28;
+        glyph.userData.nodeWidth = node.width;
+        group.add(glyph);
+      }
+      const label = this.labels.create(
+        node.label,
+        this.camera.zoom,
+        node.kind === 'group' ? 'group' : 'node',
+      );
+      label.userData.nodeWidth = node.width;
       label.position.set(
         node.kind === 'group'
           ? -node.width / 2 + Math.min(node.width / 2, 150)
           : 0,
-        node.kind === 'group' ? 9 : 22,
-        node.kind === 'group' ? -node.depth / 2 + 25 : 0,
+        node.kind === 'group' ? 5 : 0,
+        node.kind === 'group' ? -node.depth / 2 + 22 : node.depth / 2 + 43,
       );
       group.add(label);
       this.content.add(group);
       this.tiles.set(node.id, { node, group, material, label });
     }
-    this.edgePositions = new BufferAttribute(
-      new Float32Array(document.edges.length * 18),
-      3,
-    ).setUsage(DynamicDrawUsage);
-    const edgeGeometry = new BufferGeometry();
-    edgeGeometry.setAttribute('position', this.edgePositions);
-    const connections = new LineSegments(edgeGeometry, this.edgeMaterial);
+    const positions = new Float32Array(document.edges.length * 30);
+    this.edgePositions = new BufferAttribute(positions, 3);
+    this.edgeGeometry = new LineSegmentsGeometry().setPositions(positions);
+    const attribute = this.edgeGeometry.getAttribute('instanceStart');
+    if (attribute instanceof InterleavedBufferAttribute) {
+      this.edgeBuffer = attribute.data;
+      this.edgeBuffer.setUsage(DynamicDrawUsage);
+    }
+    const halo = new LineSegments2(this.edgeGeometry, this.haloMaterial);
+    halo.frustumCulled = false;
+    const connections = new LineSegments2(this.edgeGeometry, this.edgeMaterial);
     connections.frustumCulled = false;
-    this.content.add(connections);
+    this.content.add(halo, connections);
     for (const [index, edge] of document.edges.entries()) {
       this.edgeIndex.set(edge.id, edge);
       this.edges.set(edge.id, index);
@@ -200,7 +293,7 @@ export class DiagramScene {
   private updatePositions(): void {
     for (const tile of this.tiles.values()) {
       const p = worldPosition(tile.node, this.nodeIndex);
-      tile.group.position.set(p.x, p.level * 6, p.z);
+      tile.group.position.set(p.x, p.level * 4, p.z);
     }
     for (const id of this.edges.keys()) this.updateEdge(id);
   }
@@ -224,91 +317,91 @@ export class DiagramScene {
     const mz = horizontal ? az : (az + bz) / 2;
     const nx = horizontal ? (ax + bx) / 2 : bx;
     const nz = horizontal ? bz : (az + bz) / 2;
-    const offset = index * 6;
+    const offset = index * 10;
     this.edgePositions.setXYZ(offset, ax, y, az);
     this.edgePositions.setXYZ(offset + 1, mx, y, mz);
     this.edgePositions.setXYZ(offset + 2, mx, y, mz);
     this.edgePositions.setXYZ(offset + 3, nx, y, nz);
     this.edgePositions.setXYZ(offset + 4, nx, y, nz);
     this.edgePositions.setXYZ(offset + 5, bx, y, bz);
-    this.edgePositions.addUpdateRange(index * 18, 18);
-    this.edgePositions.needsUpdate = true;
-    this.edgeLabels.get(id)?.position.set((ax + bx) / 2, y + 20, (az + bz) / 2);
+    const dx = horizontal ? direction : 0;
+    const dz = horizontal ? 0 : direction;
+    this.edgePositions.setXYZ(
+      offset + 6,
+      bx - dx * 8 + dz * 4,
+      y,
+      bz - dz * 8 - dx * 4,
+    );
+    this.edgePositions.setXYZ(offset + 7, bx, y, bz);
+    this.edgePositions.setXYZ(
+      offset + 8,
+      bx - dx * 8 - dz * 4,
+      y,
+      bz - dz * 8 + dx * 4,
+    );
+    this.edgePositions.setXYZ(offset + 9, bx, y, bz);
+    if (this.edgeBuffer) {
+      this.edgeBuffer.addUpdateRange(index * 30, 30);
+      this.edgeBuffer.needsUpdate = true;
+    }
+    const label = this.edgeLabels.get(id);
+    if (label) {
+      label.position.set((ax + bx) / 2, y + 8, (az + bz) / 2);
+      label.userData.offsetX = horizontal ? 0 : 46;
+      label.userData.offsetY = horizontal ? 22 : 0;
+    }
   }
-  private scaleLabels(): void {
-    const scale = 0.5 / this.camera.zoom;
-    const apply = (label: Object3D): void => {
-      const width: unknown = label.userData.labelWidth;
-      const height: unknown = label.userData.labelHeight;
-      if (typeof width === 'number' && typeof height === 'number')
-        label.scale.set(width * scale, height * scale, 1);
-    };
-    for (const tile of this.tiles.values()) apply(tile.label);
-    for (const label of this.edgeLabels.values()) apply(label);
-  }
-
   public setView(mode: ViewMode): void {
     this.mode = mode;
-    this.camera.up.set(0, 0, -1);
-    // Tilt about 15 degrees from top-down, with almost no diagonal skew.
-    this.camera.position
-      .copy(this.target)
-      .add(
-        mode === 'top' ? new Vector3(0, 2000, 0) : new Vector3(180, 2600, 700),
-      );
-    this.camera.lookAt(this.target);
-    this.camera.updateMatrixWorld();
-    this.scaleLabels();
+    this.view.setMode(mode);
+    this.onZoom(this.view.percent);
     this.invalidate();
+  }
+  public setDiagramVisible(visible: boolean): void {
+    this.content.visible = visible;
+    this.invalidate();
+  }
+  public insertionPoint(): { x: number; z: number } {
+    return { x: this.target.x, z: this.target.z };
+  }
+  public setPanelVisible(visible: boolean): void {
+    this.view.setPanelVisible(visible);
+    this.fit();
+  }
+  public zoomBy(factor: number): void {
+    this.view.zoomBy(factor);
+    this.onZoom(this.view.percent);
+    this.invalidate();
+  }
+  public setTool(tool: 'select' | 'pan'): void {
+    this.tool = tool;
+    this.renderer.domElement.style.cursor = tool === 'pan' ? 'grab' : 'default';
   }
   public fit(): void {
     let minX = Infinity;
     let maxX = -Infinity;
     let minZ = Infinity;
     let maxZ = -Infinity;
+    let maxY = 0;
     for (const tile of this.tiles.values()) {
       minX = Math.min(minX, tile.group.position.x - tile.node.width / 2);
       maxX = Math.max(maxX, tile.group.position.x + tile.node.width / 2);
       minZ = Math.min(minZ, tile.group.position.z - tile.node.depth / 2);
-      maxZ = Math.max(maxZ, tile.group.position.z + tile.node.depth / 2);
+      maxZ = Math.max(maxZ, tile.group.position.z + tile.node.depth / 2 + 70);
+      maxY = Math.max(maxY, tile.group.position.y + 45);
     }
-    if (!Number.isFinite(minX)) return;
-    this.target.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
-    this.camera.zoom = 1;
-    this.camera.updateProjectionMatrix();
-    this.setView(this.mode);
-    let extent = 0;
-    const corner = new Vector3();
-    for (const tile of this.tiles.values()) {
-      for (const x of [-1, 1])
-        for (const z of [-1, 1]) {
-          corner
-            .set(
-              tile.group.position.x + (x * tile.node.width) / 2,
-              tile.group.position.y + 40,
-              tile.group.position.z + (z * tile.node.depth) / 2,
-            )
-            .project(this.camera);
-          extent = Math.max(extent, Math.abs(corner.x), Math.abs(corner.y));
-        }
-    }
-    this.camera.zoom = Math.min(3, 0.82 / Math.max(extent, 0.01));
-    this.camera.updateProjectionMatrix();
-    this.scaleLabels();
+    if (Number.isFinite(minX)) this.view.fit({ minX, maxX, minZ, maxZ, maxY });
+    this.onZoom(this.view.percent);
     this.invalidate();
   }
-
   private resize(): void {
     this.width = Math.max(this.host.clientWidth, 1);
     this.height = Math.max(this.host.clientHeight, 1);
     this.renderer.setSize(this.width, this.height);
-    this.camera.left = -this.width / 2;
-    this.camera.right = this.width / 2;
-    this.camera.top = this.height / 2;
-    this.camera.bottom = -this.height / 2;
-    this.camera.updateProjectionMatrix();
+    this.view.resize(this.width, this.height);
     this.invalidate();
   }
+
   private locate(event: PointerEvent | WheelEvent): Vector3 | undefined {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.set(
@@ -323,7 +416,12 @@ export class DiagramScene {
     if (!point) return;
     if (event.isTrusted)
       this.renderer.domElement.setPointerCapture(event.pointerId);
-    if (event.button === 1 || event.button === 2 || event.altKey) {
+    if (
+      event.button === 1 ||
+      event.button === 2 ||
+      event.altKey ||
+      this.tool === 'pan'
+    ) {
       this.pan = { x: point.x, z: point.z };
       return;
     }
@@ -371,7 +469,7 @@ export class DiagramScene {
     if (tile.node.kind === 'group') this.updatePositions();
     else {
       const position = worldPosition(tile.node, this.nodeIndex);
-      tile.group.position.set(position.x, position.level * 6, position.z);
+      tile.group.position.set(position.x, position.level * 4, position.z);
       for (const id of this.incident.get(tile.node.id) ?? [])
         this.updateEdge(id);
     }
@@ -417,6 +515,7 @@ export class DiagramScene {
       this.target.z += before.z - after.z;
       this.setView(this.mode);
     }
+    this.onZoom(this.view.percent);
     this.invalidate();
   };
   private context = (event: Event): void => event.preventDefault();
@@ -450,7 +549,7 @@ export class DiagramScene {
   private render(): void {
     const start = performance.now();
     this.scene.updateMatrixWorld();
-    this.labels.sync(this.camera, this.camera.zoom);
+    this.labels.sync(this.camera, this.height);
     this.renderer.render(this.scene, this.camera);
     this.metrics.textures = this.renderer.info.memory.textures;
     this.metrics.drawCalls = this.renderer.info.render.calls;
@@ -479,7 +578,7 @@ export class DiagramScene {
     const tile = this.tiles.get(id);
     if (!tile) return undefined;
     const point = tile.group.position.clone();
-    point.y += tile.node.kind === 'group' ? 1.5 : 5;
+    point.y += tile.node.kind === 'group' ? 1 : 12;
     point.project(this.camera);
     const rect = this.renderer.domElement.getBoundingClientRect();
     return {
@@ -513,7 +612,14 @@ export class DiagramScene {
       }
     });
     this.geometry.dispose();
+    this.tileOutline.dispose();
+    this.outlineMaterial.dispose();
+    this.insetGeometry.dispose();
+    this.insetMaterial.dispose();
+    this.shadowMaterial.dispose();
+    this.haloMaterial.dispose();
     this.edgeMaterial.dispose();
+    this.backdrop.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

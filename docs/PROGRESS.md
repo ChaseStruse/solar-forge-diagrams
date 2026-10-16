@@ -92,3 +92,11 @@ User feedback: the default angle was exaggerated and the diagram unreadable. The
 Validated with `bun run verify`, native build, and the native smoke runner; both view captures were inspected. Snapped dragging and idle invalidation still pass. The final debug-shell run at 900×918 measured 123 ms standard-board load, 5 ms render submission p95, 17 ms scheduled camera-update p95; 10 atlas textures and 512 draw calls. These are preliminary debug measurements; earlier release results remain historical. Compressed JS is 135,030 bytes. The optimized native binary is rebuilt for this correction. Existing running windows require reopening to load bundled asset changes; they are not forcibly closed.
 
 Resume remains M1. This readability correction does not change the document format or complete later milestones.
+
+## Reference-style redesign in progress
+
+The live Sketchlab page was finally rendered and visually inspected at 1440×1000 (two raised tiles, captions below, floating rail, right Layers panel, luminous connector). The earlier sidebar dashboard and colored platforms were a poor match. The redesign uses that composition with original Solar Forge UI/code: full canvas, compact floating controls, Layers/selection properties, an on-demand AWS palette, dark raised tiles, subtle boundaries, warm glowing arrows, a static sky backdrop, and readable captions beneath nodes. Default startup is a two-service AWS starter; the serverless example is in the file menu.
+
+A centered perspective camera replaces the previous rolled/near-flat orthographic spatial view; Plan remains orthographic. Projection tests enforce level rows and fit margins. Native snapped dragging and zero-idle-frame checks pass. Native whole-window capture was inspected at 1440×1000; no upstream source or assets were copied. Runtime JS dependencies remain unchanged. Generic service glyphs remain placeholders for official artwork in M3.
+
+The first redesigned native benchmark at 900×918 passed the standard submission budget (10 ms p95) but used about 2,000 draw calls for tile outlines/insets/shadows. Batch those shared surfaces before completing this correction; stress performance is not yet acceptable. Narrow-window Layers behavior is also being checked. M1 remains the next full milestone.

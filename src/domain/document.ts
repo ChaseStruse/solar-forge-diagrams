@@ -144,7 +144,7 @@ export function sampleDocument(): DiagramDocument {
         x: 0,
         z: 0,
         width: 940,
-        depth: 610,
+        depth: 900,
         color: '#27323b',
       },
       {
@@ -154,7 +154,7 @@ export function sampleDocument(): DiagramDocument {
         x: 50,
         z: 10,
         width: 650,
-        depth: 400,
+        depth: 720,
         color: '#34413b',
         parentId: 'region',
       },
@@ -196,7 +196,7 @@ export function sampleDocument(): DiagramDocument {
         kind: 'service',
         label: 'SQS',
         x: -40,
-        z: 110,
+        z: 310,
         width: 150,
         depth: 96,
         color: '#cb6186',
@@ -207,7 +207,7 @@ export function sampleDocument(): DiagramDocument {
         kind: 'service',
         label: 'S3',
         x: 190,
-        z: 110,
+        z: 310,
         width: 150,
         depth: 96,
         color: '#79a950',
@@ -219,6 +219,44 @@ export function sampleDocument(): DiagramDocument {
       { id: 'write', source: 'lambda', target: 'db', label: 'Read / write' },
       { id: 'event', source: 'lambda', target: 'queue', label: 'Events' },
       { id: 'archive', source: 'queue', target: 'storage', label: 'Archive' },
+    ],
+  };
+}
+
+/** A clear first board matching the reference's two-node composition. */
+export function starterDocument(): DiagramDocument {
+  return {
+    version: 1,
+    title: 'Untitled architecture',
+    nodes: [
+      {
+        id: 'function',
+        kind: 'service',
+        label: 'Lambda',
+        x: -300,
+        z: 0,
+        width: 180,
+        depth: 150,
+        color: '#f6bd72',
+      },
+      {
+        id: 'database',
+        kind: 'service',
+        label: 'DynamoDB',
+        x: 300,
+        z: 0,
+        width: 180,
+        depth: 150,
+        color: '#82b7df',
+      },
+    ],
+    edges: [
+      {
+        id: 'request',
+        source: 'function',
+        target: 'database',
+        label: 'Read / write',
+      },
     ],
   };
 }

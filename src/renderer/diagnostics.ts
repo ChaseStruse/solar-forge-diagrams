@@ -1,6 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import { benchmarkDocument } from '../../benchmarks/fixtures';
-import { sampleDocument, serializeDocument } from '../domain/document';
+import {
+  sampleDocument,
+  serializeDocument,
+  starterDocument,
+} from '../domain/document';
 import type { DiagramScene } from './scene';
 
 const frame = (): Promise<void> =>
@@ -58,7 +62,7 @@ export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
     throw new Error('Native snapped-drag check failed');
   results.syntheticSnappedDrag =
     'pass: one completed gesture, coordinates snapped to grid';
-  scene.load(sampleDocument());
+  scene.load(starterDocument());
   scene.fit();
   await frame();
   for (const mode of ['isometric', 'top'] as const) {
