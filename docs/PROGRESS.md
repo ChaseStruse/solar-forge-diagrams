@@ -2,9 +2,9 @@
 
 ## Where to resume
 
-**Continue M1: native verification of command history, then durable saves, close protection, and autosave/recovery.** The first command/history slice is implemented with domain tests and browser workflows; native verification remains outstanding. M1–M6 remain open.
+**Continue M2–M5 native acceptance, performance and packaging.** M1 durable save/close/recovery workflows pass native checks. Manual editing, AWS catalog/templates, SVG export and usability features are implemented; their expanded native acceptance suite and performance correction are in progress. Packaging and Docker build files are present, with the first container checks passing. M2–M5 are not yet release-complete; M6 remains optional/deferred.
 
-The current slice routes move, rename, insertion, and cascading deletion through bounded undo/redo. Next, rebuild the desktop app and verify actual keyboard/drag/save behavior before completing M1 persistence work. The Rust toolchain previously installed under `/tmp` is absent in this session; existing native binaries still contain the previous frontend. Save currently prompts for a destination every time.
+Use the current Rust 1.99.1 toolchain in `/tmp/solar-forge-cargo` and `/tmp/solar-forge-rustup`, plus ignored `.tools/package/bin/bun`. Do not use older executable measurements as current acceptance evidence. No user desktop configuration or Docker context was changed.
 
 ## Task-to-commit map
 
@@ -15,8 +15,9 @@ The current slice routes move, rename, insertion, and cascading deletion through
 | `50bfcb4` | M0 native verification / label efficiency | Bundled native assets, readable labels, shared atlases, native smoke runner, atomic writer tests |
 | `57cc746` | M0 performance / Wayland integration | Instanced label draws, batched connector buffer, XDG portal dialogs with parent handles, nested fixtures, snapped-drag check, size-budget enforcement |
 | `62b91fb` | M0 readability correction | Shallow camera angle, subtle depth, larger text and separated connection labels |
+| `19925c0` | M1 persistence | Durable native handles/Save As, recovery, close protection; actual native interrupted-session recovery verified |
 | `c336dee` | UI reference composition | Floating editor controls, Layers/properties, raised service tiles, spatial camera and projection tests |
-| Current continuation (commit follows this record) | M1 history / usability | Bounded edit transactions, undo/redo controls, responsive control strip and fitted camera, batched tile details; frontend verified, native pending |
+| `ae63cff` | M1 history / usability | Bounded edit transactions, undo/redo controls, responsive control strip and fitted camera, batched tile details; frontend verified, native pending |
 | Documentation checkpoint following `57cc746` | Handoff | Exact milestone mapping in the plan, final native measurements, remaining work and launch instructions |
 
 The documentation checkpoint refers to prior implementation hashes to avoid self-referential commit IDs. All changes are local commits; nothing was pushed.
@@ -127,3 +128,15 @@ Implemented native session file handles and Save As, serialized/debounced recove
 Validation so far: 14 Bun tests / 74 assertions; frontend verification passes (152,659 bytes gzip). Native Rust toolchain restored under `/tmp`; locked dependency fetch and initial atomic-write tests pass. Native rebuild, close/recovery workflow and persistence acceptance are in progress. M1 is not marked complete until those pass.
 
 M1 native validation (2026-10-16): Cargo fmt/clippy/build pass. Real WebKitGTK smoke passes snapped drag, native roundtrip, both view captures, and zero idle frames. Native AT-SPI exercised close → Cancel, Save through the actual portal into `/tmp/solar-forge-native-m1.sforge.json`, edit → Save again without a chooser (durable handle), and recovery after SIGKILL of only the isolated test process. The saved file retained two nodes while the recovery snapshot retained three; restart displayed the recovery dialog and restored three nodes. Testing used `XDG_DATA_HOME=/tmp/solar-forge-native-data`, preserving personal app data. M1 functional gate is passed for these workflows; corrupt-disk/power-loss simulation beyond atomic replacement tests and broader hardware acceptance remain release checks.
+
+## M2–M4 implementation checkpoint — native acceptance in progress
+
+Implemented manual multi-selection (Shift-click / Ctrl+A), grouped snapped movement and nudge keys, drag and numeric resize, nested group/ungroup and parent changes with world-coordinate preservation, duplicate/delete, native clipboard event handling, right-click actions, connection creation by clicks or dragging a named port, endpoint/port reconnection, labels, orthogonal route/bend controls, and diagram renaming. Added ordinary flowchart process/decision/terminal shapes and New from an empty board. Insertion finds free slots instead of stacking components. Graph transactions retain affected records and preserve prior command references through undo/redo.
+
+Curated catalog now contains 14 AWS services with stable IDs, search aliases/categories, original official July 2026 artwork, five boundary kinds, architecture metadata, and five templates (including the four planned AWS examples). Source hashes/usage provenance are in `assets/aws/`. Added Ctrl+K command search, document-driven self-contained light SVG export, native SVG writer, recent files, quality settings, and file-manager open queuing through the pinned official single-instance plugin. AWS artwork remains unchanged and offline. Optional automatic layout remains deferred: manual editing is the priority and an unvalidated global layout would violate position/history guarantees.
+
+Validation: 20 Bun tests / 130 assertions, strict TS, lint, production build and initial bundle budget pass (approximately 182 kB gzip). Browser workflow passes New → insert flowchart shapes → Shift-select → group/ungroup → undo/redo → resize → duplicate, plus actual canvas connection and drag tests. Plan/2.5D PNG and wide/narrow screenshots have been inspected. Extended native diagnostics now cover graph/clipboard roundtrips, resize, multi-drag, named ports, repeated texture lifecycle and context-loss recovery; native rerun is pending. The first optimized run before tile-body batching missed scheduled-input timing targets, so performance is not accepted yet.
+
+Performance correction in progress: batched tile bodies into at most five draws, retaining invisible picking geometry; shared fallback icon atlas regions. Browser draw counts fell from 530 to 23 on the standard board and from 2,102 to 67 on stress. Headless timings under concurrent builds are not certification. M2 is still open until native workflow and standard-board acceptance pass.
+
+M5 scaffolding: Arch package recipe, desktop/MIME/icon assets, pinned-digest glibc Docker builders, Compose artifact tasks, source archive and dependency-notice collection. The first Docker check image builds successfully and passes frontend + Rust tests. Clean native package/install/uninstall and container artifact export checks remain in progress. No source or binaries have been published.

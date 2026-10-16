@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
@@ -9,6 +9,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Mutex,
 };
+use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
@@ -46,6 +47,8 @@ struct RecoveryLock {
 struct FileSessions {
     paths: Mutex<HashMap<u64, PathBuf>>,
     next: AtomicU64,
+    pending: Mutex<Vec<PathBuf>>,
+    recent_lock: Mutex<()>,
 }
 #[derive(Serialize)]
 struct OpenedDocument {
@@ -70,7 +73,9 @@ fn register_path(app: &tauri::AppHandle, path: PathBuf) -> Result<SavedDocument,
         .iter()
         .find_map(|(id, existing)| if *existing == path { Some(*id) } else { None })
         .unwrap_or_else(|| state.next.fetch_add(1, Ordering::Relaxed));
-    paths.insert(handle, path);
+    paths.insert(handle, path.clone());
+    drop(paths);
+    remember_path(app, &path)?;
     Ok(SavedDocument { handle, name })
 }
 fn read_document(path: &Path) -> Result<String, String> {
@@ -183,6 +188,95 @@ fn write_recovery(app: tauri::AppHandle, content: Option<String>) -> Result<(), 
     }
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct RecentFile {
+    path: PathBuf,
+    name: String,
+}
+fn recent_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(recovery_path(app)?.with_file_name("recent.json"))
+}
+fn recent_files(app: &tauri::AppHandle) -> Result<Vec<RecentFile>, String> {
+    let path = recent_path(app)?;
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = read_document(&path)?;
+    let files: Vec<RecentFile> = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    Ok(files.into_iter().take(20).collect())
+}
+fn remember_path(app: &tauri::AppHandle, path: &Path) -> Result<(), String> {
+    let state = app.state::<FileSessions>();
+    let _guard = state.recent_lock.lock().map_err(|e| e.to_string())?;
+    let mut files = recent_files(app).unwrap_or_default();
+    files.retain(|entry| entry.path != path);
+    files.insert(
+        0,
+        RecentFile {
+            path: path.to_path_buf(),
+            name: path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned(),
+        },
+    );
+    files.truncate(20);
+    atomic_write(
+        &recent_path(app)?,
+        &serde_json::to_vec(&files).map_err(|e| e.to_string())?,
+    )
+}
+#[tauri::command]
+fn recent_documents(app: tauri::AppHandle) -> Result<Vec<RecentFile>, String> {
+    recent_files(&app)
+}
+fn open_path(app: &tauri::AppHandle, path: PathBuf) -> Result<OpenedDocument, String> {
+    let content = read_document(&path)?;
+    let saved = register_path(app, path)?;
+    Ok(OpenedDocument {
+        content,
+        handle: saved.handle,
+        name: saved.name,
+    })
+}
+#[tauri::command]
+fn open_recent(app: tauri::AppHandle, path: PathBuf) -> Result<OpenedDocument, String> {
+    if !recent_files(&app)?.iter().any(|entry| entry.path == path) {
+        return Err("Unknown recent file".into());
+    }
+    open_path(&app, path)
+}
+#[tauri::command]
+fn take_pending_file(app: tauri::AppHandle) -> Result<Option<OpenedDocument>, String> {
+    let path = app
+        .state::<FileSessions>()
+        .pending
+        .lock()
+        .map_err(|e| e.to_string())?
+        .pop();
+    path.map(|path| open_path(&app, path)).transpose()
+}
+fn queue_arguments(app: &tauri::AppHandle, args: Vec<String>, cwd: &Path) {
+    let paths: Vec<PathBuf> = args
+        .into_iter()
+        .skip(1)
+        .filter(|arg| !arg.starts_with('-'))
+        .map(|arg| {
+            let path = PathBuf::from(arg);
+            if path.is_absolute() {
+                path
+            } else {
+                cwd.join(path)
+            }
+        })
+        .collect();
+    if let Ok(mut pending) = app.state::<FileSessions>().pending.lock() {
+        pending.extend(paths);
+    }
+    let _ = app.emit("pending-file", ());
+}
+
 #[tauri::command]
 async fn export_png(
     app: tauri::AppHandle,
@@ -204,6 +298,36 @@ async fn export_png(
             return Ok(false);
         };
         atomic_write(&file.into_path().map_err(|e| e.to_string())?, &bytes)?;
+        Ok(true)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn export_svg(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    content: String,
+) -> Result<bool, String> {
+    if content.len() > 50_000_000 || !content.starts_with("<svg ") {
+        return Err("Invalid SVG export".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(file) = app
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("SVG image", &["svg"])
+            .set_file_name("diagram.svg")
+            .blocking_save_file()
+        else {
+            return Ok(false);
+        };
+        atomic_write(
+            &file.into_path().map_err(|e| e.to_string())?,
+            content.as_bytes(),
+        )?;
         Ok(true)
     })
     .await
@@ -262,6 +386,13 @@ fn diagnostic_finish(
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            queue_arguments(app, args, Path::new(&cwd));
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .manage(FileSessions::default())
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
@@ -275,6 +406,11 @@ fn main() {
             file.try_lock()
                 .map_err(|_| "Solar Forge Diagrams is already running")?;
             app.manage(RecoveryLock { _file: file });
+            queue_arguments(
+                app.handle(),
+                std::env::args().collect(),
+                &std::env::current_dir()?,
+            );
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
@@ -282,8 +418,12 @@ fn main() {
             open_document,
             save_document,
             export_png,
+            export_svg,
             read_recovery,
             write_recovery,
+            recent_documents,
+            open_recent,
+            take_pending_file,
             diagnostic_mode,
             diagnostic_build,
             diagnostic_capture,

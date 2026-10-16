@@ -12,7 +12,7 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["bun"]
+    "types": ["bun", "vite/client"]
   },
   "include": ["src", "tests", "benchmarks", "scripts"]
 }

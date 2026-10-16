@@ -1,4 +1,8 @@
 const paths = {
+  connect:
+    '<circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 5h7v14h3"/>',
+  group:
+    '<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><rect x="7" y="7" width="10" height="10"/>',
   undo: '<path d="M9 4 4 9l5 5M4 9h9a7 7 0 0 1 0 14"/>',
   redo: '<path d="m15 4 5 5-5 5M20 9h-9a7 7 0 0 0 0 14"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',

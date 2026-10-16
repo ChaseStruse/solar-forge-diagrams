@@ -5,7 +5,18 @@ export type Edit =
   | { type: 'move'; id: string; from: Position; to: Position }
   | { type: 'rename'; id: string; label: string }
   | { type: 'insert'; node: DiagramNode }
-  | { type: 'delete'; id: string };
+  | { type: 'delete'; id: string }
+  | {
+      type: 'graph';
+      label: string;
+      nodes?: Change<DiagramNode>[];
+      edges?: Change<DiagramEdge>[];
+      title?: string;
+    };
+export interface Change<T> {
+  id: string;
+  value: T | null;
+}
 interface Entry {
   edit: Edit;
   undo: () => void;
@@ -51,6 +62,61 @@ export class DocumentHistory {
     let redo: () => void;
     let retained: unknown = edit;
     switch (edit.type) {
+      case 'graph': {
+        function changes<T extends { id: string }>(
+          source: T[],
+          requested: Change<T>[],
+        ) {
+          return requested.map((change) => {
+            const index = source.findIndex((item) => item.id === change.id);
+            const existing = source[index];
+            const before = existing ? structuredClone(existing) : null;
+            const after = change.value ? structuredClone(change.value) : null;
+            if (after && after.id !== change.id)
+              throw Error('Mismatched graph record');
+            return {
+              id: change.id,
+              index,
+              target: existing ?? (after ? structuredClone(after) : null),
+              before,
+              after,
+            };
+          });
+        }
+        const nodes = changes(doc.nodes, edit.nodes ?? []);
+        const edges = changes(doc.edges, edit.edges ?? []);
+        const title = doc.title;
+        function apply<T extends { id: string }>(
+          source: T[],
+          records: ReturnType<typeof changes<T>>,
+          before: boolean,
+        ): T[] {
+          const ids = new Set(records.map((record) => record.id));
+          const result = source.filter((item) => !ids.has(item.id));
+          for (const record of [...records].sort((a, b) => a.index - b.index)) {
+            const value = before ? record.before : record.after;
+            if (!value || !record.target) continue;
+            for (const key of Object.keys(record.target))
+              Reflect.deleteProperty(record.target, key);
+            Object.assign(record.target, structuredClone(value));
+            if (record.index < 0) result.push(record.target);
+            else result.splice(record.index, 0, record.target);
+          }
+          return result;
+        }
+        undo = () => {
+          doc.nodes = apply(doc.nodes, nodes, true);
+          doc.edges = apply(doc.edges, edges, true);
+          doc.title = title;
+        };
+        redo = () => {
+          doc.nodes = apply(doc.nodes, nodes, false);
+          doc.edges = apply(doc.edges, edges, false);
+          if (edit.title !== undefined) doc.title = edit.title;
+        };
+        retained = [nodes, edges, title];
+        break;
+      }
       case 'move': {
         if (!node || (edit.from.x === edit.to.x && edit.from.z === edit.to.z))
           return false;

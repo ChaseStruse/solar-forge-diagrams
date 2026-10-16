@@ -1,3 +1,4 @@
+export type Port = 'north' | 'east' | 'south' | 'west';
 export interface DiagramNode {
   id: string;
   kind: 'service' | 'group';
@@ -8,12 +9,26 @@ export interface DiagramNode {
   depth: number;
   color: string;
   parentId?: string;
+  serviceId?: string;
+  shape?: 'process' | 'decision' | 'terminal';
+  boundary?: 'account' | 'region' | 'vpc' | 'zone' | 'subnet';
+  metadata?: {
+    region?: string;
+    environment?: string;
+    resourceName?: string;
+    notes?: string;
+    tags?: string;
+  };
 }
 export interface DiagramEdge {
   id: string;
   source: string;
   target: string;
   label: string;
+  sourcePort?: Port;
+  targetPort?: Port;
+  routing?: 'horizontal' | 'vertical';
+  bend?: number;
 }
 export interface DiagramDocument {
   version: 1;
@@ -74,6 +89,39 @@ export function parseDocument(json: string): DiagramDocument {
     )
       throw new Error('Invalid node geometry or color');
     if (n.parentId !== undefined) node.parentId = text(n.parentId, 'parent ID');
+    if (n.serviceId !== undefined)
+      node.serviceId = text(n.serviceId, 'service ID');
+    if (n.shape !== undefined) {
+      if (
+        n.shape !== 'process' &&
+        n.shape !== 'decision' &&
+        n.shape !== 'terminal'
+      )
+        throw Error('Invalid flowchart shape');
+      node.shape = n.shape;
+    }
+    if (n.boundary !== undefined) {
+      if (
+        !['account', 'region', 'vpc', 'zone', 'subnet'].includes(
+          String(n.boundary),
+        )
+      )
+        throw Error('Invalid boundary kind');
+      node.boundary = n.boundary as NonNullable<DiagramNode['boundary']>;
+    }
+    if (n.metadata !== undefined) {
+      const metadata = record(n.metadata);
+      node.metadata = {};
+      for (const key of [
+        'region',
+        'environment',
+        'resourceName',
+        'notes',
+        'tags',
+      ] as const)
+        if (metadata[key] !== undefined)
+          node.metadata[key] = text(metadata[key], key);
+    }
     return node;
   });
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -93,7 +141,7 @@ export function parseDocument(json: string): DiagramDocument {
   const edgeIds = new Set<string>();
   const edges = input.edges.map((value: unknown): DiagramEdge => {
     const e = record(value);
-    const edge = {
+    const edge: DiagramEdge = {
       id: text(e.id, 'edge ID'),
       source: text(e.source, 'source'),
       target: text(e.target, 'target'),
@@ -106,6 +154,25 @@ export function parseDocument(json: string): DiagramDocument {
       !byId.has(edge.target)
     )
       throw new Error('Invalid edge reference');
+    for (const key of ['sourcePort', 'targetPort'] as const) {
+      const value = e[key];
+      if (value !== undefined) {
+        if (
+          value !== 'north' &&
+          value !== 'east' &&
+          value !== 'south' &&
+          value !== 'west'
+        )
+          throw Error('Invalid named port');
+        edge[key] = value;
+      }
+    }
+    if (e.routing !== undefined) {
+      if (e.routing !== 'horizontal' && e.routing !== 'vertical')
+        throw Error('Invalid routing');
+      edge.routing = e.routing;
+    }
+    if (e.bend !== undefined) edge.bend = finite(e.bend);
     edgeIds.add(edge.id);
     return edge;
   });

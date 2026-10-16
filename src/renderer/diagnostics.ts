@@ -5,6 +5,13 @@ import {
   serializeDocument,
   starterDocument,
 } from '../domain/document';
+import { DocumentHistory } from '../domain/history';
+import {
+  copyFragment,
+  groupNodes,
+  pasteFragment,
+  ungroupNodes,
+} from '../editor/operations';
 import type { DiagramScene } from './scene';
 
 const frame = (): Promise<void> =>
@@ -14,6 +21,7 @@ const percentile = (samples: number[]): number =>
 
 /** Explicit diagnostic-build --smoke-test run; never runs during an ordinary session. */
 export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
+  await scene.ready;
   const results: Record<string, unknown> = {
     userAgent: navigator.userAgent,
     viewport: [innerWidth, innerHeight],
@@ -62,6 +70,117 @@ export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
     throw new Error('Native snapped-drag check failed');
   results.syntheticSnappedDrag =
     'pass: one completed gesture, coordinates snapped to grid';
+  const workflow = starterDocument();
+  const history = new DocumentHistory(workflow);
+  scene.load(workflow);
+  scene.fit();
+  await frame();
+  const original = serializeDocument(workflow);
+  history.execute(
+    groupNodes(
+      workflow,
+      new Set(workflow.nodes.map((n) => n.id)),
+      'workflow-group',
+    ),
+  );
+  scene.load(workflow);
+  scene.fit();
+  history.execute(ungroupNodes(workflow, new Set(['workflow-group'])));
+  history.undo();
+  history.undo();
+  if (serializeDocument(workflow) !== original)
+    throw Error('Native graph history roundtrip failed');
+  let sequence = 0;
+  history.execute(
+    pasteFragment(
+      copyFragment(workflow, new Set(workflow.nodes.map((n) => n.id))),
+      () => `copy-${sequence++}`,
+    ),
+  );
+  history.undo();
+  if (serializeDocument(workflow) !== original)
+    throw Error('Native clipboard graph roundtrip failed');
+  scene.load(workflow);
+  scene.fit();
+  scene.select('lambda');
+  await frame();
+  const handle = scene.handleScreenPosition('lambda', 'resize');
+  if (!handle) throw Error('Missing resize handle');
+  let resizes = 0;
+  const previousResize = scene.onResize;
+  scene.onResize = () => {
+    resizes++;
+  };
+  for (const [type, x, y] of [
+    ['pointerdown', handle.x, handle.y],
+    ['pointermove', handle.x + 24, handle.y + 16],
+    ['pointerup', handle.x + 24, handle.y + 16],
+  ] as const)
+    canvas.dispatchEvent(
+      new PointerEvent(type, {
+        clientX: x,
+        clientY: y,
+        pointerId: 3,
+        button: 0,
+      }),
+    );
+  scene.onResize = previousResize;
+  if (resizes !== 1) throw Error('Native resize gesture failed');
+  scene.selectMany(['lambda', 'dynamodb']);
+  await frame();
+  const moveAnchor = scene.nodeScreenPosition('lambda');
+  if (!moveAnchor) throw Error('Missing multiselect anchor');
+  let groupedMoves = 0;
+  const previousMoves = scene.onMoves;
+  scene.onMoves = (changes) => {
+    if (changes.length === 2) groupedMoves++;
+  };
+  for (const [type, x, y] of [
+    ['pointerdown', moveAnchor.x, moveAnchor.y],
+    ['pointermove', moveAnchor.x + 30, moveAnchor.y + 20],
+    ['pointerup', moveAnchor.x + 30, moveAnchor.y + 20],
+  ] as const)
+    canvas.dispatchEvent(
+      new PointerEvent(type, {
+        clientX: x,
+        clientY: y,
+        pointerId: 4,
+        button: 0,
+      }),
+    );
+  scene.onMoves = previousMoves;
+  if (groupedMoves !== 1) throw Error('Native multi-selection drag failed');
+  scene.select('lambda');
+  await frame();
+  const sourceHandle = scene.handleScreenPosition('lambda', 'east'),
+    targetAnchor = scene.nodeScreenPosition('dynamodb');
+  if (!sourceHandle || !targetAnchor) throw Error('Missing port target');
+  let connects = 0;
+  const previousConnect = scene.onConnect;
+  scene.onConnect = (source, port, target) => {
+    if (source === 'lambda' && port === 'east' && target === 'dynamodb')
+      connects++;
+  };
+  canvas.dispatchEvent(
+    new PointerEvent('pointerdown', {
+      clientX: sourceHandle.x,
+      clientY: sourceHandle.y,
+      pointerId: 5,
+      button: 0,
+    }),
+  );
+  canvas.dispatchEvent(
+    new PointerEvent('pointerup', {
+      clientX: targetAnchor.x,
+      clientY: targetAnchor.y,
+      pointerId: 5,
+      button: 0,
+    }),
+  );
+  scene.onConnect = previousConnect;
+  if (connects !== 1) throw Error('Native port connection failed');
+  results.editorWorkflows =
+    'pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection';
   scene.load(starterDocument());
   scene.fit();
   await frame();
@@ -140,6 +259,26 @@ export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
       cameraChangeToFrameP95Ms: percentile(eventToFrame),
     };
   }
+  scene.load(starterDocument());
+  scene.fit();
+  await frame();
+  await frame();
+  const baseTextures = scene.metrics.textures;
+  for (let cycle = 0; cycle < 10; cycle++) {
+    scene.load(starterDocument());
+    scene.fit();
+    await frame();
+    await frame();
+  }
+  if (scene.metrics.textures !== baseTextures)
+    throw Error('Repeated scene loads leaked textures');
+  results.repeatedOpenTextureCheck = {
+    cycles: 10,
+    textures: scene.metrics.textures,
+  };
+  results.contextLossRecovery = await scene.checkContextRecovery();
+  await frame();
+  await frame();
   const document = sampleDocument();
   scene.load(document);
   scene.fit();

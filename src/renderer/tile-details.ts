@@ -67,7 +67,7 @@ export class TileDetails {
     this.root.add(this.faces, this.shadows, outlines);
   }
   public update(index: number, node: DiagramNode, world: Vector3): void {
-    if (node.kind === 'service') {
+    if (node.kind === 'service' && !node.shape) {
       this.position.set(world.x, world.y + 12.5, world.z);
       this.scale.set(node.width * 0.82, node.depth * 0.76, 1);
       this.faces.setMatrixAt(
@@ -92,9 +92,11 @@ export class TileDetails {
     for (let vertex = 0; vertex < this.source.count; vertex++)
       this.positions.setXYZ(
         index * this.source.count + vertex,
-        world.x + this.source.getX(vertex) * node.width,
-        world.y + this.source.getY(vertex) * (node.kind === 'group' ? 2 : 24),
-        world.z + this.source.getZ(vertex) * node.depth,
+        world.x + this.source.getX(vertex) * (node.shape ? 0 : node.width),
+        world.y +
+          this.source.getY(vertex) *
+            (node.shape ? 0 : node.kind === 'group' ? 2 : 24),
+        world.z + this.source.getZ(vertex) * (node.shape ? 0 : node.depth),
       );
     this.positions.addUpdateRange(
       index * this.source.count * 3,

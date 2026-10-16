@@ -5,17 +5,21 @@ import {
   DirectionalLight,
   DynamicDrawUsage,
   EdgesGeometry,
+  ExtrudeGeometry,
   FogExp2,
   GridHelper,
   Group,
   type InterleavedBuffer,
   InterleavedBufferAttribute,
   Mesh,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   type Object3D,
   Plane,
   Raycaster,
   Scene,
+  Shape,
+  SphereGeometry,
   Vector2,
   Vector3,
   WebGLRenderer,
@@ -23,15 +27,19 @@ import {
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { serviceGlyph } from '../catalog/services';
+import { loadServiceImages } from '../catalog/images';
+import { findService } from '../catalog/services';
 import type {
   DiagramDocument,
   DiagramEdge,
   DiagramNode,
+  Port,
 } from '../domain/document';
 import { worldPosition } from '../domain/document';
+import { portPosition, routeEdge } from '../domain/routing';
 import { createBackdrop } from './backdrop';
 import { LabelAtlas } from './labels';
+import { TileBodies } from './tile-bodies';
 import { TileDetails } from './tile-details';
 import { BoardView, type ViewMode } from './view';
 
@@ -45,6 +53,8 @@ interface Tile {
   label: Object3D;
 }
 export class DiagramScene {
+  public readonly ready: Promise<void>;
+  private document: DiagramDocument;
   private readonly scene = new Scene();
   private readonly backdrop = createBackdrop();
   private readonly labels = new LabelAtlas();
@@ -61,8 +71,10 @@ export class DiagramScene {
   });
   private readonly content = new Group();
   private readonly geometry = new BoxGeometry(1, 1, 1);
+  private readonly shapeGeometries = createFlowGeometries();
   private readonly tileOutline = new EdgesGeometry(this.geometry);
   private details: TileDetails | undefined;
+  private bodies: TileBodies | undefined;
   private readonly edgeMaterial = new LineMaterial({
     color: '#ffe1a2',
     linewidth: 1.6,
@@ -94,7 +106,39 @@ export class DiagramScene {
   private width = 1;
   private height = 1;
   private mode: ViewMode = 'isometric';
-  private tool: 'select' | 'pan' = 'select';
+  private tool: 'select' | 'pan' | 'connect' = 'select';
+  public snapping = true;
+  private readonly selectedIds = new Set<string>();
+  private readonly portGeometry = new SphereGeometry(5, 8, 6);
+  private readonly portMaterial = new MeshBasicMaterial({
+    color: '#ffc778',
+    depthTest: false,
+  });
+  private readonly ports = new Group();
+  private connectionStart: { id: string; port: Port } | undefined;
+  public onConnect: (
+    source: string,
+    sourcePort: Port,
+    target: string,
+    targetPort: Port,
+  ) => void = () => {};
+  public onMoves: (
+    moves: {
+      id: string;
+      from: { x: number; z: number };
+      to: { x: number; z: number };
+    }[],
+  ) => void = () => {};
+  public onContextMenu: (x: number, y: number) => void = () => {};
+  public onResize: (
+    id: string,
+    from: { width: number; depth: number },
+    to: { width: number; depth: number },
+  ) => void = () => {};
+  private resizing:
+    | { id: string; width: number; depth: number; x: number; z: number }
+    | undefined;
+  private dragOrigins: { node: DiagramNode; x: number; z: number }[] = [];
   private drag:
     | { id: string; x: number; z: number; startX: number; startZ: number }
     | undefined;
@@ -121,6 +165,15 @@ export class DiagramScene {
     private readonly host: HTMLElement,
     document: DiagramDocument,
   ) {
+    this.document = document;
+    this.ready = loadServiceImages()
+      .then(() => {
+        if (this.disposed) return;
+        const ids = this.selection;
+        this.load(this.document);
+        this.selectMany(ids);
+      })
+      .catch((error) => this.onError(String(error)));
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
     this.renderer.setClearColor('#0b111a', 0);
     this.scene.background = this.backdrop;
@@ -130,6 +183,7 @@ export class DiagramScene {
       'Architecture diagram canvas',
     );
     this.host.append(this.renderer.domElement);
+    this.scene.add(this.ports);
     this.scene.add(this.content, new AmbientLight('#c9def1', 2));
     const light = new DirectionalLight('#ffe5bf', 2);
     light.position.set(-200, 500, 300);
@@ -165,6 +219,8 @@ export class DiagramScene {
   }
   private releaseContent(): void {
     for (const tile of this.tiles.values()) tile.material.dispose();
+    this.bodies?.dispose();
+    this.bodies = undefined;
     this.details?.dispose();
     this.details = undefined;
     this.edgeGeometry?.dispose();
@@ -180,8 +236,17 @@ export class DiagramScene {
     this.edgeIndex.clear();
   }
   public load(document: DiagramDocument): void {
+    this.document = document;
     this.releaseContent();
     this.selected = undefined;
+    this.selectedIds.clear();
+    this.ports.clear();
+    this.bodies = new TileBodies(
+      document.nodes,
+      this.geometry,
+      this.shapeGeometries,
+    );
+    this.content.add(this.bodies.root);
     this.details = new TileDetails(
       document.nodes.length,
       this.tileOutline.getAttribute('position'),
@@ -196,13 +261,17 @@ export class DiagramScene {
         opacity: node.kind === 'group' ? 0.12 : 1,
         depthWrite: node.kind !== 'group',
       });
-      const mesh = new Mesh(this.geometry, material);
+      const mesh = new Mesh(
+        node.shape ? this.shapeGeometries[node.shape] : this.geometry,
+        material,
+      );
       mesh.scale.set(node.width, node.kind === 'group' ? 2 : 24, node.depth);
       mesh.userData.nodeId = node.id;
+      mesh.visible = false;
       group.add(mesh);
-      if (node.kind === 'service') {
+      if (node.kind === 'service' && !node.shape) {
         const glyph = this.labels.create(
-          serviceGlyph(node.label),
+          findService(node.serviceId ?? node.label)?.id ?? node.label,
           this.camera.zoom,
           'icon',
         );
@@ -220,14 +289,18 @@ export class DiagramScene {
         node.kind === 'group'
           ? -node.width / 2 + Math.min(node.width / 2, 150)
           : 0,
-        node.kind === 'group' ? 5 : 0,
-        node.kind === 'group' ? -node.depth / 2 + 22 : node.depth / 2 + 43,
+        node.kind === 'group' ? 5 : node.shape ? 26 : 0,
+        node.kind === 'group'
+          ? -node.depth / 2 + 22
+          : node.shape
+            ? 0
+            : node.depth / 2 + 43,
       );
       group.add(label);
       this.content.add(group);
       this.tiles.set(node.id, { index, node, group, material, label });
     }
-    const positions = new Float32Array(document.edges.length * 30);
+    const positions = new Float32Array(document.edges.length * 42);
     this.edgePositions = new BufferAttribute(positions, 3);
     this.edgeGeometry = new LineSegmentsGeometry().setPositions(positions);
     const attribute = this.edgeGeometry.getAttribute('instanceStart');
@@ -263,6 +336,11 @@ export class DiagramScene {
     for (const tile of this.tiles.values()) {
       const p = worldPosition(tile.node, this.nodeIndex);
       tile.group.position.set(p.x, p.level * 4, p.z);
+      this.bodies?.update(
+        tile.node,
+        tile.group.position,
+        this.selectedIds.has(tile.node.id),
+      );
       this.details?.update(tile.index, tile.node, tile.group.position);
     }
     for (const id of this.edges.keys()) this.updateEdge(id);
@@ -274,49 +352,43 @@ export class DiagramScene {
     const source = this.tiles.get(edge.source);
     const target = this.tiles.get(edge.target);
     if (!source || !target) return;
-    const a = source.group.position;
-    const b = target.group.position;
-    const y = Math.max(a.y, b.y) + 8;
-    const horizontal = Math.abs(b.x - a.x) >= Math.abs(b.z - a.z);
-    const direction = horizontal ? Math.sign(b.x - a.x) : Math.sign(b.z - a.z);
-    const ax = a.x + (horizontal ? (direction * source.node.width) / 2 : 0);
-    const az = a.z + (horizontal ? 0 : (direction * source.node.depth) / 2);
-    const bx = b.x - (horizontal ? (direction * target.node.width) / 2 : 0);
-    const bz = b.z - (horizontal ? 0 : (direction * target.node.depth) / 2);
-    const mx = horizontal ? (ax + bx) / 2 : ax;
-    const mz = horizontal ? az : (az + bz) / 2;
-    const nx = horizontal ? (ax + bx) / 2 : bx;
-    const nz = horizontal ? bz : (az + bz) / 2;
-    const offset = index * 10;
-    this.edgePositions.setXYZ(offset, ax, y, az);
-    this.edgePositions.setXYZ(offset + 1, mx, y, mz);
-    this.edgePositions.setXYZ(offset + 2, mx, y, mz);
-    this.edgePositions.setXYZ(offset + 3, nx, y, nz);
-    this.edgePositions.setXYZ(offset + 4, nx, y, nz);
-    this.edgePositions.setXYZ(offset + 5, bx, y, bz);
-    const dx = horizontal ? direction : 0;
-    const dz = horizontal ? 0 : direction;
+    const { points, targetPort } = routeEdge(edge, this.nodeIndex);
+    const y = Math.max(source.group.position.y, target.group.position.y) + 8;
+    const offset = index * 14;
+    for (let segment = 0; segment < 5; segment++) {
+      const a = points[segment],
+        b = points[segment + 1];
+      if (!a || !b) continue;
+      this.edgePositions.setXYZ(offset + segment * 2, a.x, y, a.z);
+      this.edgePositions.setXYZ(offset + segment * 2 + 1, b.x, y, b.z);
+    }
+    const start = points[0],
+      end = points[points.length - 1];
+    if (!start || !end) return;
+    const dx = targetPort === 'west' ? 1 : targetPort === 'east' ? -1 : 0;
+    const dz = targetPort === 'north' ? 1 : targetPort === 'south' ? -1 : 0;
     this.edgePositions.setXYZ(
-      offset + 6,
-      bx - dx * 8 + dz * 4,
+      offset + 10,
+      end.x - dx * 8 + dz * 4,
       y,
-      bz - dz * 8 - dx * 4,
+      end.z - dz * 8 - dx * 4,
     );
-    this.edgePositions.setXYZ(offset + 7, bx, y, bz);
+    this.edgePositions.setXYZ(offset + 11, end.x, y, end.z);
     this.edgePositions.setXYZ(
-      offset + 8,
-      bx - dx * 8 - dz * 4,
+      offset + 12,
+      end.x - dx * 8 - dz * 4,
       y,
-      bz - dz * 8 + dx * 4,
+      end.z - dz * 8 + dx * 4,
     );
-    this.edgePositions.setXYZ(offset + 9, bx, y, bz);
+    this.edgePositions.setXYZ(offset + 13, end.x, y, end.z);
+    const horizontal = Math.abs(end.x - start.x) >= Math.abs(end.z - start.z);
     if (this.edgeBuffer) {
-      this.edgeBuffer.addUpdateRange(index * 30, 30);
+      this.edgeBuffer.addUpdateRange(index * 42, 42);
       this.edgeBuffer.needsUpdate = true;
     }
     const label = this.edgeLabels.get(id);
     if (label) {
-      label.position.set((ax + bx) / 2, y + 8, (az + bz) / 2);
+      label.position.set((start.x + end.x) / 2, y + 8, (start.z + end.z) / 2);
       label.userData.offsetX = horizontal ? 0 : 46;
       label.userData.offsetY = horizontal ? 22 : 0;
     }
@@ -326,6 +398,12 @@ export class DiagramScene {
     this.view.setMode(mode);
     this.onZoom(this.view.percent);
     this.invalidate();
+  }
+  public setQuality(ratio: number): void {
+    this.renderer.setPixelRatio(
+      Math.min(devicePixelRatio, Math.min(2, Math.max(1, ratio))),
+    );
+    this.resize();
   }
   public setDiagramVisible(visible: boolean): void {
     this.content.visible = visible;
@@ -344,9 +422,10 @@ export class DiagramScene {
     this.onZoom(this.view.percent);
     this.invalidate();
   }
-  public setTool(tool: 'select' | 'pan'): void {
+  public setTool(tool: 'select' | 'pan' | 'connect'): void {
     this.tool = tool;
-    this.renderer.domElement.style.cursor = tool === 'pan' ? 'grab' : 'default';
+    this.renderer.domElement.style.cursor =
+      tool === 'pan' ? 'grab' : tool === 'connect' ? 'crosshair' : 'default';
   }
   public finishInteraction(): void {
     this.up();
@@ -401,6 +480,33 @@ export class DiagramScene {
       this.pan = { x: point.x, z: point.z };
       return;
     }
+    const portHit = this.ray.intersectObjects(this.ports.children, false)[0];
+    if (portHit) {
+      const id: unknown = portHit.object.userData.nodeId;
+      if (portHit.object.userData.resize && typeof id === 'string') {
+        const node = this.tiles.get(id)?.node;
+        if (node)
+          this.resizing = {
+            id,
+            width: node.width,
+            depth: node.depth,
+            x: point.x,
+            z: point.z,
+          };
+        return;
+      }
+      const port: unknown = portHit.object.userData.port;
+      if (
+        typeof id === 'string' &&
+        (port === 'north' ||
+          port === 'east' ||
+          port === 'south' ||
+          port === 'west')
+      ) {
+        this.connectionStart = { id, port };
+        return;
+      }
+    }
     const candidates = [...this.tiles.values()]
       .map((t) => t.group.children[0])
       .filter((item): item is Mesh => item instanceof Mesh);
@@ -413,11 +519,41 @@ export class DiagramScene {
         );
       }) ?? hits[0];
     const id: unknown = hit?.object.userData.nodeId;
-    this.select(typeof id === 'string' ? id : undefined);
+    if (this.tool === 'connect') {
+      if (typeof id === 'string') {
+        if (this.connectionStart) {
+          this.onConnect(
+            this.connectionStart.id,
+            this.connectionStart.port,
+            id,
+            'west',
+          );
+          this.connectionStart = undefined;
+        } else {
+          this.select(id);
+          this.connectionStart = { id, port: 'east' };
+        }
+      }
+      return;
+    }
+    if (event.shiftKey || typeof id !== 'string' || !this.selectedIds.has(id))
+      this.select(typeof id === 'string' ? id : undefined, event.shiftKey);
+    else this.selected = id;
     const node = this.selected
       ? this.tiles.get(this.selected)?.node
       : undefined;
-    if (node)
+    if (node) {
+      this.dragOrigins = [...this.tiles.values()]
+        .filter((tile) => {
+          if (!this.selectedIds.has(tile.node.id)) return false;
+          let parent = tile.node.parentId;
+          while (parent) {
+            if (this.selectedIds.has(parent)) return false;
+            parent = this.nodeIndex.get(parent)?.parentId;
+          }
+          return true;
+        })
+        .map(({ node }) => ({ node, x: node.x, z: node.z }));
       this.drag = {
         id: node.id,
         x: point.x,
@@ -425,10 +561,38 @@ export class DiagramScene {
         startX: node.x,
         startZ: node.z,
       };
+    }
   };
   private move = (event: PointerEvent): void => {
     const point = this.locate(event);
     if (!point) return;
+    if (this.resizing) {
+      const tile = this.tiles.get(this.resizing.id);
+      if (!tile) return;
+      const step = this.snapping ? 10 : 1;
+      tile.node.width = Math.max(
+        30,
+        Math.round(
+          (this.resizing.width + (point.x - this.resizing.x) * 2) / step,
+        ) * step,
+      );
+      tile.node.depth = Math.max(
+        30,
+        Math.round(
+          (this.resizing.depth + (point.z - this.resizing.z) * 2) / step,
+        ) * step,
+      );
+      const mesh = tile.group.children[0];
+      if (mesh instanceof Mesh)
+        mesh.scale.set(
+          tile.node.width,
+          tile.node.kind === 'group' ? 2 : 24,
+          tile.node.depth,
+        );
+      tile.label.userData.nodeWidth = tile.node.width;
+      this.refreshPosition(tile.node.id);
+      return;
+    }
     if (this.pan) {
       this.fitted = false;
       this.target.x += this.pan.x - point.x;
@@ -439,11 +603,14 @@ export class DiagramScene {
     if (!this.drag) return;
     const tile = this.tiles.get(this.drag.id);
     if (!tile) return;
-    tile.node.x =
-      Math.round((this.drag.startX + point.x - this.drag.x) / 10) * 10;
-    tile.node.z =
-      Math.round((this.drag.startZ + point.z - this.drag.z) / 10) * 10;
-    this.refreshPosition(tile.node.id);
+    const step = this.snapping ? 10 : 1;
+    const dx = Math.round((point.x - this.drag.x) / step) * step;
+    const dz = Math.round((point.z - this.drag.z) / step) * step;
+    for (const origin of this.dragOrigins) {
+      origin.node.x = origin.x + dx;
+      origin.node.z = origin.z + dz;
+      this.refreshPosition(origin.node.id);
+    }
   };
   public refreshPosition(id: string): void {
     const tile = this.tiles.get(id);
@@ -452,38 +619,132 @@ export class DiagramScene {
     else {
       const position = worldPosition(tile.node, this.nodeIndex);
       tile.group.position.set(position.x, position.level * 4, position.z);
+      this.bodies?.update(
+        tile.node,
+        tile.group.position,
+        this.selectedIds.has(tile.node.id),
+      );
       this.details?.update(tile.index, tile.node, tile.group.position);
       for (const edgeId of this.incident.get(tile.node.id) ?? [])
         this.updateEdge(edgeId);
     }
-    this.invalidate();
-  }
-  private up = (): void => {
-    if (this.drag) {
-      const node = this.tiles.get(this.drag.id)?.node;
-      if (node && (node.x !== this.drag.startX || node.z !== this.drag.startZ))
-        this.onMove(
-          node.id,
-          { x: this.drag.startX, z: this.drag.startZ },
-          { x: node.x, z: node.z },
+    tile.label.position.set(
+      tile.node.kind === 'group'
+        ? -tile.node.width / 2 + Math.min(tile.node.width / 2, 150)
+        : 0,
+      tile.node.kind === 'group' ? 5 : tile.node.shape ? 26 : 0,
+      tile.node.kind === 'group'
+        ? -tile.node.depth / 2 + 22
+        : tile.node.shape
+          ? 0
+          : tile.node.depth / 2 + 43,
+    );
+    if (this.selected === id) {
+      const p = tile.group.position;
+      for (const port of this.ports.children) {
+        const name: unknown = port.userData.port;
+        port.position.set(
+          p.x +
+            (port.userData.resize
+              ? tile.node.width / 2
+              : name === 'east'
+                ? tile.node.width / 2
+                : name === 'west'
+                  ? -tile.node.width / 2
+                  : 0),
+          p.y + 18,
+          p.z +
+            (port.userData.resize
+              ? tile.node.depth / 2
+              : name === 'south'
+                ? tile.node.depth / 2
+                : name === 'north'
+                  ? -tile.node.depth / 2
+                  : 0),
         );
-    }
-    this.drag = undefined;
-    this.pan = undefined;
-  };
-  private cancel = (): void => {
-    if (this.drag) {
-      const node = this.tiles.get(this.drag.id)?.node;
-      if (node) {
-        node.x = this.drag.startX;
-        node.z = this.drag.startZ;
-        this.updatePositions();
-        this.invalidate();
       }
     }
+    this.invalidate();
+  }
+  private up = (event?: PointerEvent): void => {
+    if (this.resizing) {
+      const resizing = this.resizing;
+      this.resizing = undefined;
+      const node = this.tiles.get(resizing.id)?.node;
+      if (
+        node &&
+        (node.width !== resizing.width || node.depth !== resizing.depth)
+      )
+        this.onResize(
+          node.id,
+          { width: resizing.width, depth: resizing.depth },
+          { width: node.width, depth: node.depth },
+        );
+    }
+    if (this.connectionStart && event && this.tool !== 'connect') {
+      this.locate(event);
+      const hits = this.ray.intersectObjects(
+        [...this.tiles.values()]
+          .map((t) => t.group.children[0])
+          .filter((m): m is Mesh => m instanceof Mesh),
+        false,
+      );
+      const target = hits.find(
+        (h) => h.object.userData.nodeId !== this.connectionStart?.id,
+      );
+      const id: unknown = target?.object.userData.nodeId;
+      if (typeof id === 'string')
+        this.onConnect(
+          this.connectionStart.id,
+          this.connectionStart.port,
+          id,
+          'west',
+        );
+      this.connectionStart = undefined;
+    }
+    const moves = this.dragOrigins
+      .filter((o) => o.node.x !== o.x || o.node.z !== o.z)
+      .map((o) => ({
+        id: o.node.id,
+        from: { x: o.x, z: o.z },
+        to: { x: o.node.x, z: o.node.z },
+      }));
     this.drag = undefined;
+    this.dragOrigins = [];
     this.pan = undefined;
+    if (moves.length === 1) {
+      const move = moves[0];
+      if (move) this.onMove(move.id, move.from, move.to);
+    } else if (moves.length) this.onMoves(moves);
   };
+  public cancelInteraction = (): void => {
+    if (this.resizing) {
+      const node = this.tiles.get(this.resizing.id)?.node;
+      if (node) {
+        node.width = this.resizing.width;
+        node.depth = this.resizing.depth;
+        const mesh = this.tiles.get(node.id)?.group.children[0];
+        if (mesh instanceof Mesh)
+          mesh.scale.set(
+            node.width,
+            node.kind === 'group' ? 2 : 24,
+            node.depth,
+          );
+      }
+      this.resizing = undefined;
+    }
+    for (const origin of this.dragOrigins) {
+      origin.node.x = origin.x;
+      origin.node.z = origin.z;
+    }
+    this.drag = undefined;
+    this.dragOrigins = [];
+    this.pan = undefined;
+    this.connectionStart = undefined;
+    this.updatePositions();
+    this.invalidate();
+  };
+  private cancel = (): void => this.cancelInteraction();
   private wheel = (event: WheelEvent): void => {
     this.fitted = false;
     event.preventDefault();
@@ -502,7 +763,10 @@ export class DiagramScene {
     this.onZoom(this.view.percent);
     this.invalidate();
   };
-  private context = (event: Event): void => event.preventDefault();
+  private context = (event: MouseEvent): void => {
+    event.preventDefault();
+    this.onContextMenu(event.clientX, event.clientY);
+  };
   private contextLost = (event: Event): void => {
     event.preventDefault();
     this.onError('Graphics context lost. Waiting for recovery…');
@@ -511,12 +775,66 @@ export class DiagramScene {
     this.onError('Graphics context restored');
     this.invalidate();
   };
-  public select(id: string | undefined): void {
-    if (this.selected)
-      this.tiles.get(this.selected)?.material.emissive.set('#000000');
-    this.selected = id;
-    if (id) this.tiles.get(id)?.material.emissive.set('#55300c');
-    this.onSelect(id ? this.tiles.get(id)?.node : undefined);
+  public get selection(): readonly string[] {
+    return [...this.selectedIds];
+  }
+  public select(id: string | undefined, additive = false): void {
+    const ids = additive ? new Set(this.selectedIds) : new Set<string>();
+    if (id) {
+      if (additive && ids.has(id)) ids.delete(id);
+      else ids.add(id);
+    }
+    this.selectMany([...ids]);
+  }
+  public selectMany(ids: readonly string[]): void {
+    this.selectedIds.clear();
+    for (const id of ids) if (this.tiles.has(id)) this.selectedIds.add(id);
+    this.selected = [...this.selectedIds].at(-1);
+    for (const tile of this.tiles.values())
+      this.bodies?.update(
+        tile.node,
+        tile.group.position,
+        this.selectedIds.has(tile.node.id),
+      );
+    this.ports.clear();
+    const tile = this.selected ? this.tiles.get(this.selected) : undefined;
+    if (tile)
+      for (const port of ['north', 'east', 'south', 'west'] as const) {
+        const mesh = new Mesh(this.portGeometry, this.portMaterial);
+        mesh.position.set(
+          tile.group.position.x +
+            (port === 'east'
+              ? tile.node.width / 2
+              : port === 'west'
+                ? -tile.node.width / 2
+                : 0),
+          tile.group.position.y + 18,
+          tile.group.position.z +
+            (port === 'south'
+              ? tile.node.depth / 2
+              : port === 'north'
+                ? -tile.node.depth / 2
+                : 0),
+        );
+        mesh.userData.nodeId = tile.node.id;
+        mesh.userData.port = port;
+        mesh.renderOrder = 12;
+        this.ports.add(mesh);
+      }
+    if (tile) {
+      const handle = new Mesh(this.portGeometry, this.portMaterial);
+      handle.position.set(
+        tile.group.position.x + tile.node.width / 2,
+        tile.group.position.y + 18,
+        tile.group.position.z + tile.node.depth / 2,
+      );
+      handle.scale.setScalar(1.5);
+      handle.userData.nodeId = tile.node.id;
+      handle.userData.resize = true;
+      handle.renderOrder = 12;
+      this.ports.add(handle);
+    }
+    this.onSelect(tile?.node);
     this.invalidate();
   }
   public refresh(): void {
@@ -539,6 +857,33 @@ export class DiagramScene {
     this.metrics.drawCalls = this.renderer.info.render.calls;
     this.metrics.frames++;
     this.metrics.lastRenderMs = performance.now() - start;
+  }
+  public async checkContextRecovery(): Promise<boolean> {
+    const extension = this.renderer
+      .getContext()
+      .getExtension('WEBGL_lose_context');
+    if (!extension) return false;
+    const canvas = this.renderer.domElement;
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        canvas.removeEventListener('webglcontextlost', lost);
+        canvas.removeEventListener('webglcontextrestored', restored);
+        reject(Error('Graphics context recovery timed out'));
+      }, 5000);
+      const restored = () => {
+        clearTimeout(timeout);
+        canvas.removeEventListener('webglcontextlost', lost);
+        canvas.removeEventListener('webglcontextrestored', restored);
+        this.invalidate();
+        resolve(true);
+      };
+      const lost = () => {
+        setTimeout(() => extension.restoreContext(), 100);
+      };
+      canvas.addEventListener('webglcontextlost', lost);
+      canvas.addEventListener('webglcontextrestored', restored);
+      extension.loseContext();
+    });
   }
   public gpuDetails(): { renderer: string; vendor: string } {
     const gl = this.renderer.getContext();
@@ -570,6 +915,30 @@ export class DiagramScene {
       y: rect.top + ((1 - point.y) * this.height) / 2,
     };
   }
+  public handleScreenPosition(
+    id: string,
+    port: Port | 'resize',
+  ): { x: number; y: number } | undefined {
+    const tile = this.tiles.get(id);
+    if (!tile) return;
+    const position =
+      port === 'resize'
+        ? {
+            x: tile.group.position.x + tile.node.width / 2,
+            z: tile.group.position.z + tile.node.depth / 2,
+          }
+        : portPosition(tile.node, port, this.nodeIndex);
+    const point = new Vector3(
+      position.x,
+      tile.group.position.y + 18,
+      position.z,
+    ).project(this.camera);
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return {
+      x: rect.left + ((point.x + 1) * this.width) / 2,
+      y: rect.top + ((1 - point.y) * this.height) / 2,
+    };
+  }
   public png(): Promise<Blob> {
     this.render();
     return new Promise((resolve, reject) =>
@@ -595,6 +964,10 @@ export class DiagramScene {
         else object.material.dispose();
       }
     });
+    for (const geometry of Object.values(this.shapeGeometries))
+      geometry.dispose();
+    this.portGeometry.dispose();
+    this.portMaterial.dispose();
     this.geometry.dispose();
     this.tileOutline.dispose();
     this.haloMaterial.dispose();
@@ -603,4 +976,41 @@ export class DiagramScene {
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
+}
+
+function createFlowGeometries(): Record<
+  'process' | 'decision' | 'terminal',
+  BoxGeometry | ExtrudeGeometry
+> {
+  const diamond = new Shape();
+  diamond.moveTo(0, -0.5);
+  diamond.lineTo(0.5, 0);
+  diamond.lineTo(0, 0.5);
+  diamond.lineTo(-0.5, 0);
+  diamond.closePath();
+  const rounded = new Shape();
+  rounded.moveTo(-0.3, -0.5);
+  rounded.lineTo(0.3, -0.5);
+  rounded.quadraticCurveTo(0.5, -0.5, 0.5, -0.3);
+  rounded.lineTo(0.5, 0.3);
+  rounded.quadraticCurveTo(0.5, 0.5, 0.3, 0.5);
+  rounded.lineTo(-0.3, 0.5);
+  rounded.quadraticCurveTo(-0.5, 0.5, -0.5, 0.3);
+  rounded.lineTo(-0.5, -0.3);
+  rounded.quadraticCurveTo(-0.5, -0.5, -0.3, -0.5);
+  const extrude = (shape: Shape) => {
+    const geometry = new ExtrudeGeometry(shape, {
+      depth: 1,
+      bevelEnabled: false,
+      curveSegments: 6,
+    });
+    geometry.rotateX(-Math.PI / 2);
+    geometry.translate(0, -0.5, 0);
+    return geometry;
+  };
+  return {
+    process: new BoxGeometry(1, 1, 1),
+    decision: extrude(diamond),
+    terminal: extrude(rounded),
+  };
 }

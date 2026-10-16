@@ -1,16 +1,30 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { templates } from './catalog/templates';
 import { RecoveryWriter } from './persistence/recovery';
-import { choose } from './ui/dialogs';
+import type { OpenedFile } from './platform/files';
+import { choose, commandPalette, promptText } from './ui/dialogs';
 import './style.css';
-import { services } from './catalog/services';
+import { findService, services } from './catalog/services';
+import type { DiagramEdge, DiagramNode, Port } from './domain/document';
 import {
   parseDocument,
   sampleDocument,
   serializeDocument,
   starterDocument,
+  worldPosition,
 } from './domain/document';
+import type { Edit } from './domain/history';
 import { DocumentHistory } from './domain/history';
+import {
+  copyFragment,
+  deleteNodes,
+  groupNodes,
+  insertionSlot,
+  pasteFragment,
+  ungroupNodes,
+} from './editor/operations';
 import {
   exportPng,
   nativeAvailable,
@@ -25,17 +39,18 @@ if (!root) throw new Error('Application root is missing');
 root.innerHTML = `
   <main class="workspace" aria-label="Diagram workspace"><div id="canvas"></div></main>
   <header class="topbar">
-    <div class="board-heading"><button id="menu" class="icon-button" aria-label="File menu" aria-expanded="false" title="File menu">${icon('menu')}</button><span class="forge-mark" aria-hidden="true">✦</span><span class="brand">Solar Forge</span><span class="heading-divider"></span><span id="title" class="document-title"></span><span id="save-state" class="save-state">Unchanged</span></div>
+    <div class="board-heading"><button id="menu" class="icon-button" aria-label="File menu" aria-expanded="false" title="File menu">${icon('menu')}</button><span class="forge-mark" aria-hidden="true">✦</span><span class="brand">Solar Forge</span><span class="heading-divider"></span><button id="title" class="document-title" title="Rename diagram"></button><span id="save-state" class="save-state">Unchanged</span></div>
     <div class="top-actions"><button id="components" class="quiet-button" title="AWS components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
   </header>
-  <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="export">Export PNG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">EXAMPLES</p><button id="example-starter">Two-service starter</button><button id="example-serverless">Serverless architecture</button></section>
-  <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add AWS service" title="Add AWS service (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
-  <section id="component-palette" class="popover component-palette" aria-label="AWS components" hidden><div class="popover-heading"><h2>AWS components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a service to add it to your board.</p></section>
-  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label">Label</label><input id="node-label"><dl><dt>X</dt><dd id="position-x">—</dd><dt>Z</dt><dd id="position-z">—</dd></dl></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
+  <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="export">Export PNG ${icon('arrow')}</button><button id="export-svg">Export SVG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">RECENT DIAGRAMS</p><div id="recent-files"></div><div class="menu-divider"></div><p class="popover-caption">TEMPLATES</p><button id="example-starter">Two-service starter</button><button id="example-serverless">Serverless architecture</button><div id="templates"></div></section>
+  <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add AWS service" title="Add AWS service (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
+  <section id="component-palette" class="popover component-palette" aria-label="AWS components" hidden><div class="popover-heading"><h2>AWS components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a component to add it to your board.</p></section>
+  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label">Label</label><input id="node-label" maxlength="1000"><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
   <nav class="canvas-controls" aria-label="Canvas controls"><div class="zoom-dock floating-dock" aria-label="Zoom controls"><button id="zoom-out" class="small-icon" aria-label="Zoom out">${icon('minus')}</button><span id="zoom-level">100%</span><button id="zoom-in" class="small-icon" aria-label="Zoom in">${icon('plus')}</button><span class="dock-divider"></span><button id="fit">Fit</button><span class="dock-divider"></span><button id="help" class="small-icon" aria-label="Keyboard help" aria-expanded="false">${icon('help')}</button></div>
   <div class="history-dock floating-dock" aria-label="Edit history"><button id="undo" class="small-icon" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button><button id="redo" class="small-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>${icon('redo')}</button></div>
-  <div class="view-dock floating-dock" aria-label="View controls"><span class="dock-label">View</span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
-  <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add a service <kbd>Esc</kbd> Deselect</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><p>Scroll to zoom. Right-drag to pan.<br>Choose a component in Layers to edit its label.</p></section>
+  <div class="view-dock floating-dock" aria-label="View controls"><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
+  <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add a service <kbd>Esc</kbd> Deselect</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><label class="quality-label">Rendering quality<select id="quality"><option value="1">Efficient · 1×</option><option value="1.5" selected>Balanced · 1.5×</option><option value="2">Sharp · 2×</option></select></label><p>Scroll to zoom. Right-drag to pan.<br>Choose a component in Layers to edit its label.</p></section>
+  <section id="context-menu" class="popover context-menu" aria-label="Selection actions" hidden><button data-action="duplicate">Duplicate</button><button data-action="tool-group">Group</button><button data-action="ungroup">Ungroup</button><button data-action="delete">Delete</button><button data-action="fit">Fit view</button></section>
   <div id="status" class="status" role="status">Ready</div><span id="count" class="board-count"></span>`;
 function element(id: string): HTMLElement {
   const result = document.getElementById(id);
@@ -51,6 +66,8 @@ function inputElement(id: string): HTMLInputElement {
 let current = starterDocument();
 let history = new DocumentHistory(current);
 let selected: string | undefined;
+let selectedIds = new Set<string>();
+let selectedEdge: string | undefined;
 let dirty = false;
 let busy = false;
 let fileHandle: number | undefined;
@@ -96,23 +113,98 @@ function updateLayers(): void {
   list.replaceChildren();
   for (const node of current.nodes) {
     const button = document.createElement('button');
-    button.className = `layer-row ${node.kind}${selected === node.id ? ' selected' : ''}`;
-    button.setAttribute('aria-pressed', String(selected === node.id));
+    button.className = `layer-row ${node.kind}${selectedIds.has(node.id) ? ' selected' : ''}`;
+    button.setAttribute('aria-pressed', String(selectedIds.has(node.id)));
     const symbol = document.createElement('span');
     symbol.className = 'layer-symbol';
     symbol.style.color = node.color;
     symbol.textContent =
       node.kind === 'group'
         ? '▱'
-        : (services.find((service) => service.label === node.label)?.glyph ??
-          '◇');
+        : (findService(node.serviceId ?? node.label)?.glyph ?? '◇');
     const label = document.createElement('span');
     label.textContent = node.label;
     button.append(symbol, label);
-    button.onclick = () => scene.select(node.id);
+    button.onclick = (event) => scene.select(node.id, event.shiftKey);
     list.append(button);
   }
+  if (current.edges.length) {
+    const heading = document.createElement('p');
+    heading.className = 'section-label connections-heading';
+    heading.textContent = 'CONNECTIONS';
+    list.append(heading);
+  }
+  for (const edge of current.edges) {
+    const row = document.createElement('button');
+    row.className = `layer-row connection-row${selectedEdge === edge.id ? ' selected' : ''}`;
+    row.textContent = `↳ ${edge.label || 'Connection'} · ${current.nodes.find((n) => n.id === edge.source)?.label ?? ''} → ${current.nodes.find((n) => n.id === edge.target)?.label ?? ''}`;
+    row.onclick = () => {
+      scene.selectMany([]);
+      selectedEdge = edge.id;
+      inspect();
+    };
+    list.append(row);
+  }
 }
+async function refreshRecents(): Promise<void> {
+  if (!nativeAvailable()) return;
+  try {
+    const files =
+      await invoke<{ name: string; path: string }[]>('recent_documents');
+    const list = element('recent-files');
+    list.replaceChildren();
+    if (!files.length) {
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'No recent diagrams yet';
+      list.append(empty);
+    }
+    for (const file of files) {
+      const button = document.createElement('button');
+      button.textContent = file.name;
+      button.title = file.path;
+      button.onclick = () =>
+        void action(async () => {
+          if (!(await canReplace())) return;
+          const opened = await invoke<OpenedFile>('open_recent', {
+            path: file.path,
+          });
+          replaceDocument(parseDocument(opened.content));
+          fileHandle = opened.handle;
+          element('file-menu').hidden = true;
+          notify(`Opened ${opened.name}`);
+          await refreshRecents();
+        });
+      list.append(button);
+    }
+  } catch (error) {
+    notify(`Recent files unavailable: ${String(error)}`);
+  }
+}
+element('title').onclick = () =>
+  void action(async () => {
+    const title = await promptText('Diagram name', current.title);
+    if (title) commit({ type: 'graph', label: 'Rename diagram', title });
+  });
+for (const template of templates) {
+  const button = document.createElement('button');
+  button.textContent = template.name;
+  button.onclick = () =>
+    void action(async () => {
+      if (!(await canReplace())) return;
+      replaceDocument(template.create());
+      element('file-menu').hidden = true;
+    });
+  element('templates').append(button);
+}
+element('export-svg').onclick = () =>
+  void action(async () => {
+    const { exportSvg } = await import('./export/svg');
+    if (
+      await invoke<boolean>('export_svg', { content: await exportSvg(current) })
+    )
+      notify('SVG exported');
+  });
 function updateHeader(): void {
   dirty = history.isDirty;
   if (recoveryReady) recovery.schedule();
@@ -139,18 +231,67 @@ function inspect(): void {
   element('properties').hidden = !node;
   element('selection').textContent = node?.label ?? '';
   inputElement('node-label').value = node?.label ?? '';
-  element('position-x').textContent = node ? String(node.x) : '—';
-  element('position-z').textContent = node ? String(node.z) : '—';
+  const edge = current.edges.find((e) => e.id === selectedEdge);
+  element('edge-properties').hidden = !edge;
+  if (node) {
+    for (const key of ['x', 'z', 'width', 'depth'] as const)
+      inputElement(`node-${key}`).value = String(node[key]);
+    const excluded = new Set<string>([node.id]);
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const n of current.nodes)
+        if (n.parentId && excluded.has(n.parentId) && !excluded.has(n.id)) {
+          excluded.add(n.id);
+          changed = true;
+        }
+    }
+    fillOptions(
+      'node-parent',
+      [
+        ['', 'Board'],
+        ...current.nodes
+          .filter((n) => n.kind === 'group' && !excluded.has(n.id))
+          .map((n) => [n.id, n.label] as [string, string]),
+      ],
+      node.parentId ?? '',
+    );
+    for (const key of [
+      'region',
+      'environment',
+      'resourceName',
+      'tags',
+      'notes',
+    ] as const)
+      field(`meta-${key}`).value = node.metadata?.[key] ?? '';
+  }
+  if (edge) {
+    inputElement('edge-label').value = edge.label;
+    const options = current.nodes.map(
+      (n) => [n.id, n.label] as [string, string],
+    );
+    fillOptions('edge-source', options, edge.source);
+    fillOptions('edge-target', options, edge.target);
+    field('edge-sourcePort').value = edge.sourcePort ?? 'east';
+    field('edge-targetPort').value = edge.targetPort ?? 'west';
+    field('edge-routing').value = edge.routing ?? 'horizontal';
+    inputElement('edge-bend').value = String(edge.bend ?? 0);
+  }
   element('selection-note').textContent =
-    node?.kind === 'group' ? 'Architecture boundary' : 'AWS service';
+    node?.kind === 'group'
+      ? 'Architecture boundary'
+      : node?.shape
+        ? 'Flowchart shape'
+        : 'AWS service';
   for (const id of ['delete', 'tool-edit']) {
     const button = element(id);
-    if (button instanceof HTMLButtonElement) button.disabled = !node;
+    if (button instanceof HTMLButtonElement) button.disabled = !node && !edge;
   }
   updateLayers();
 }
 scene.onSelect = (node) => {
   selected = node?.id;
+  selectedIds = new Set(scene.selection);
+  selectedEdge = undefined;
   inspect();
 };
 scene.onMove = (id, from, to) => {
@@ -202,6 +343,7 @@ async function saveCurrent(saveAs = false): Promise<boolean> {
   updateHeader();
   await recovery.flush();
   notify(`Saved ${saved.name}`);
+  void refreshRecents();
   return !history.isDirty;
 }
 async function canReplace(): Promise<boolean> {
@@ -235,6 +377,7 @@ element('open').onclick = () => {
       replaceDocument(parseDocument(opened.content));
       fileHandle = opened.handle;
       notify(`Opened ${opened.name}`);
+      void refreshRecents();
     }
   });
 };
@@ -286,9 +429,9 @@ element('ground-toggle').onclick = () => {
     diagramVisible ? 'Hide diagram' : 'Show diagram',
   );
 };
-function selectTool(tool: 'select' | 'pan'): void {
+function selectTool(tool: 'select' | 'pan' | 'connect'): void {
   scene.setTool(tool);
-  for (const name of ['select', 'pan']) {
+  for (const name of ['select', 'pan', 'connect']) {
     const button = element(`tool-${name}`);
     button.classList.toggle('active', name === tool);
     button.setAttribute('aria-pressed', String(name === tool));
@@ -296,6 +439,12 @@ function selectTool(tool: 'select' | 'pan'): void {
 }
 element('tool-select').onclick = () => selectTool('select');
 element('tool-pan').onclick = () => selectTool('pan');
+element('tool-connect').onclick = () => {
+  selectTool('connect');
+  notify(
+    'Choose a source, then a target. Or drag a port dot to another component.',
+  );
+};
 element('iso').onclick = () => {
   scene.setView('isometric');
   element('iso').setAttribute('aria-pressed', 'true');
@@ -335,13 +484,21 @@ element('node-label').onchange = () => {
   updateHeader();
 };
 function deleteSelection(): void {
-  scene.finishInteraction();
-  if (!selected) return;
-  history.execute({ type: 'delete', id: selected });
-  selected = undefined;
-  scene.load(current);
-  updateHeader();
-  inspect();
+  if (selectedEdge) {
+    commit(
+      {
+        type: 'graph',
+        label: 'Delete connection',
+        edges: [{ id: selectedEdge, value: null }],
+      },
+      [],
+    );
+    selectedEdge = undefined;
+    inspect();
+    return;
+  }
+  if (!selectedIds.size) return;
+  commit(deleteNodes(current, selectedIds), []);
   notify('Selection deleted');
 }
 element('delete').onclick = deleteSelection;
@@ -349,14 +506,12 @@ function travelHistory(redo: boolean): void {
   scene.finishInteraction();
   const edit = redo ? history.redo() : history.undo();
   if (!edit) return;
-  const selection = selected;
+  const selection = [...selectedIds];
   if (edit.type === 'move') scene.refreshPosition(edit.id);
   else {
     scene.load(current);
-    scene.select(
-      selection && current.nodes.some((node) => node.id === selection)
-        ? selection
-        : undefined,
+    scene.selectMany(
+      selection.filter((id) => current.nodes.some((node) => node.id === id)),
     );
   }
   updateHeader();
@@ -370,13 +525,23 @@ function populateServices(query = ''): void {
   const list = element('services');
   list.replaceChildren();
   for (const service of services) {
-    if (!service.label.toLowerCase().includes(query.toLowerCase())) continue;
+    if (
+      !`${service.label} ${service.category} ${service.aliases}`
+        .toLowerCase()
+        .includes(query.toLowerCase())
+    )
+      continue;
     const button = document.createElement('button');
     button.className = 'service';
     const symbol = document.createElement('span');
     symbol.className = 'service-symbol';
     symbol.style.color = service.color;
-    symbol.textContent = service.glyph;
+    if (service.icon) {
+      const image = document.createElement('img');
+      image.src = service.icon;
+      image.alt = '';
+      symbol.append(image);
+    } else symbol.textContent = service.glyph;
     const text = document.createElement('span');
     const name = document.createElement('strong');
     name.textContent = service.label;
@@ -386,17 +551,25 @@ function populateServices(query = ''): void {
     button.append(symbol, text);
     button.onclick = () => {
       const id = crypto.randomUUID();
-      const point = scene.insertionPoint();
+      const point = insertionSlot(
+        current,
+        scene.insertionPoint(),
+        service.kind === 'group' ? 500 : 150,
+        service.kind === 'group' ? 320 : 96,
+      );
       history.execute({
         type: 'insert',
         node: {
           id,
-          kind: 'service',
+          kind: service.kind,
+          serviceId: service.id,
+          ...(service.shape ? { shape: service.shape } : {}),
+          ...(service.boundary ? { boundary: service.boundary } : {}),
           label: service.label,
           x: Math.round(point.x / 10) * 10,
           z: Math.round(point.z / 10) * 10,
-          width: 150,
-          depth: 96,
+          width: service.kind === 'group' ? 500 : 150,
+          depth: service.kind === 'group' ? 320 : 96,
           color: service.color,
         },
       });
@@ -405,6 +578,7 @@ function populateServices(query = ''): void {
       updateHeader();
       showComponents(false);
       selectTool('select');
+      scene.fit();
       notify(`${service.label} added`);
     };
     list.append(button);
@@ -418,7 +592,327 @@ function populateServices(query = ''): void {
 }
 element('search').oninput = () =>
   populateServices(inputElement('search').value);
+function field(
+  id: string,
+): HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {
+  const value = element(id);
+  if (
+    value instanceof HTMLInputElement ||
+    value instanceof HTMLSelectElement ||
+    value instanceof HTMLTextAreaElement
+  )
+    return value;
+  throw Error(`Expected field ${id}`);
+}
+function fillOptions(
+  id: string,
+  options: readonly (readonly [string, string])[],
+  value: string,
+): void {
+  const select = field(id);
+  if (!(select instanceof HTMLSelectElement)) return;
+  select.replaceChildren(
+    ...options.map(([id, label]) => {
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = label;
+      return option;
+    }),
+  );
+  select.value = value;
+}
+function hasSelectedAncestor(node: DiagramNode): boolean {
+  let parent = node.parentId;
+  while (parent) {
+    if (selectedIds.has(parent)) return true;
+    parent = current.nodes.find((n) => n.id === parent)?.parentId;
+  }
+  return false;
+}
+function commit(edit: Edit, ids: readonly string[] = [...selectedIds]): void {
+  scene.finishInteraction();
+  if (!history.execute(edit)) return;
+  scene.load(current);
+  scene.selectMany(ids);
+  updateHeader();
+  inspect();
+  notify(edit.type === 'graph' ? edit.label : `Updated ${edit.type}`);
+}
+scene.onResize = (id, from, to) => {
+  const node = current.nodes.find((n) => n.id === id);
+  if (!node) return;
+  const value = { ...node, ...to };
+  Object.assign(node, from);
+  commit({ type: 'graph', label: 'Resize component', nodes: [{ id, value }] });
+};
+scene.onMoves = (moves) => {
+  const nodes = moves.flatMap((move) => {
+    const node = current.nodes.find((n) => n.id === move.id);
+    if (!node) return [];
+    const value = { ...node, ...move.to };
+    Object.assign(node, move.from);
+    return [{ id: node.id, value }];
+  });
+  commit({ type: 'graph', label: 'Move selection', nodes });
+};
+scene.onConnect = (source, sourcePort, target, targetPort) => {
+  if (source === target) {
+    notify('Choose a different target component.');
+    return;
+  }
+  const id = crypto.randomUUID();
+  commit({
+    type: 'graph',
+    label: 'Connect components',
+    edges: [
+      { id, value: { id, source, target, sourcePort, targetPort, label: '' } },
+    ],
+  });
+  selectTool('select');
+};
+field('quality').onchange = () => {
+  const ratio = Number(field('quality').value);
+  scene.setQuality(ratio);
+  try {
+    localStorage.setItem('solar-forge-quality', String(ratio));
+  } catch {
+    notify('Quality changed for this session.');
+  }
+};
+try {
+  const quality = localStorage.getItem('solar-forge-quality');
+  if (quality && ['1', '1.5', '2'].includes(quality)) {
+    field('quality').value = quality;
+    scene.setQuality(Number(quality));
+  }
+} catch {}
+element('snap').onclick = () => {
+  scene.snapping = !scene.snapping;
+  element('snap').setAttribute('aria-pressed', String(scene.snapping));
+};
+element('tool-group').onclick = () => {
+  try {
+    const id = crypto.randomUUID();
+    commit(groupNodes(current, selectedIds, id), [id]);
+  } catch (error) {
+    notify(String(error));
+  }
+};
+element('ungroup').onclick = () =>
+  commit(ungroupNodes(current, selectedIds), []);
+element('duplicate').onclick = () => {
+  const edit = pasteFragment(copyFragment(current, selectedIds), () =>
+    crypto.randomUUID(),
+  );
+  commit(
+    edit,
+    edit.type === 'graph' ? (edit.nodes?.map((n) => n.id) ?? []) : [],
+  );
+};
+for (const key of ['x', 'z', 'width', 'depth'] as const)
+  field(`node-${key}`).onchange = () => {
+    const node = current.nodes.find((n) => n.id === selected);
+    if (!node) return;
+    const value = Number(field(`node-${key}`).value);
+    if (
+      !Number.isFinite(value) ||
+      Math.abs(value) > 1000000 ||
+      ((key === 'width' || key === 'depth') && value < 30)
+    ) {
+      notify('Enter a valid size or coordinate.');
+      inspect();
+      return;
+    }
+    commit({
+      type: 'graph',
+      label: `Change ${key}`,
+      nodes: [{ id: node.id, value: { ...node, [key]: value } }],
+    });
+  };
+field('node-parent').onchange = () => {
+  const node = current.nodes.find((n) => n.id === selected);
+  if (!node) return;
+  const index = new Map(current.nodes.map((n) => [n.id, n]));
+  const world = worldPosition(node, index);
+  const parent = field('node-parent').value;
+  const target = index.get(parent);
+  const p = target ? worldPosition(target, index) : { x: 0, z: 0 };
+  const value = { ...node, x: world.x - p.x, z: world.z - p.z };
+  delete value.parentId;
+  if (parent) value.parentId = parent;
+  commit({
+    type: 'graph',
+    label: 'Move into boundary',
+    nodes: [{ id: node.id, value }],
+  });
+};
+for (const key of [
+  'region',
+  'environment',
+  'resourceName',
+  'notes',
+  'tags',
+] as const)
+  field(`meta-${key}`).onchange = () => {
+    const node = current.nodes.find((n) => n.id === selected);
+    if (node)
+      commit({
+        type: 'graph',
+        label: `Edit ${key}`,
+        nodes: [
+          {
+            id: node.id,
+            value: {
+              ...node,
+              metadata: {
+                ...node.metadata,
+                [key]: field(`meta-${key}`).value.slice(0, 1000),
+              },
+            },
+          },
+        ],
+      });
+  };
+for (const key of [
+  'label',
+  'source',
+  'target',
+  'sourcePort',
+  'targetPort',
+  'routing',
+  'bend',
+] as const)
+  field(`edge-${key}`).onchange = () => {
+    const edge = current.edges.find((e) => e.id === selectedEdge);
+    if (!edge) return;
+    const value = { ...edge };
+    const input = field(`edge-${key}`).value;
+    if (key === 'bend') {
+      const bend = Number(input);
+      if (!Number.isFinite(bend) || Math.abs(bend) > 1000000) {
+        inspect();
+        return;
+      }
+      value.bend = bend;
+    } else if (key === 'sourcePort' || key === 'targetPort')
+      value[key] = input as Port;
+    else if (key === 'routing')
+      value.routing = input as NonNullable<DiagramEdge['routing']>;
+    else value[key] = input.slice(0, 1000);
+    const id = edge.id;
+    commit(
+      { type: 'graph', label: 'Edit connection', edges: [{ id, value }] },
+      [],
+    );
+    selectedEdge = id;
+    inspect();
+  };
+element('delete-edge').onclick = deleteSelection;
+scene.onContextMenu = (x, y) => {
+  const menu = element('context-menu');
+  menu.hidden = false;
+  menu.style.left = `${Math.min(x, innerWidth - 190)}px`;
+  menu.style.top = `${Math.min(y, innerHeight - 250)}px`;
+};
+for (const button of document.querySelectorAll<HTMLButtonElement>(
+  '#context-menu button',
+))
+  button.onclick = () => {
+    element('context-menu').hidden = true;
+    element(button.dataset.action ?? 'fit').click();
+  };
+window.addEventListener('pointerdown', (event) => {
+  if (
+    event.target instanceof Node &&
+    !element('context-menu').contains(event.target)
+  )
+    element('context-menu').hidden = true;
+});
+function isTextTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  );
+}
+for (const type of ['copy', 'cut'] as const)
+  window.addEventListener(type, (event) => {
+    if (isTextTarget(event.target) || !selectedIds.size) return;
+    event.preventDefault();
+    event.clipboardData?.setData(
+      'text/plain',
+      serializeDocument(copyFragment(current, selectedIds)),
+    );
+    if (type === 'cut') deleteSelection();
+  });
+window.addEventListener('paste', (event) => {
+  if (isTextTarget(event.target)) return;
+  const text = event.clipboardData?.getData('text/plain');
+  if (!text) return;
+  try {
+    const doc = parseDocument(text);
+    const edit = pasteFragment(doc, () => crypto.randomUUID());
+    event.preventDefault();
+    commit(
+      edit,
+      edit.type === 'graph' ? (edit.nodes?.map((n) => n.id) ?? []) : [],
+    );
+  } catch {
+    notify('Clipboard does not contain a valid Solar Forge selection.');
+  }
+});
 window.addEventListener('keydown', (event) => {
+  if (isTextTarget(event.target)) return;
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    ['a', 'g', 'd'].includes(event.key.toLowerCase())
+  ) {
+    event.preventDefault();
+    const key = event.key.toLowerCase();
+    if (key === 'a') scene.selectMany(current.nodes.map((n) => n.id));
+    else
+      element(
+        key === 'd' ? 'duplicate' : event.shiftKey ? 'ungroup' : 'tool-group',
+      ).click();
+  }
+});
+
+window.addEventListener('keydown', (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    commandPalette([
+      ...[
+        'new',
+        'open',
+        'save',
+        'save-as',
+        'export',
+        'export-svg',
+        'fit',
+        'iso',
+        'top',
+        'tool-group',
+        'ungroup',
+        'duplicate',
+        'delete',
+      ].map((id) => ({
+        label:
+          element(id).getAttribute('title') ??
+          element(id).textContent?.trim() ??
+          id,
+        run: () => element(id).click(),
+      })),
+      ...services.map((service) => ({
+        label: `Add ${service.label} · ${service.category}`,
+        run: () => {
+          showComponents(true);
+          inputElement('search').value = service.label;
+          populateServices(service.label);
+        },
+      })),
+    ]);
+    return;
+  }
   if (
     (event.ctrlKey || event.metaKey) &&
     ['z', 'y'].includes(event.key.toLowerCase()) &&
@@ -446,6 +940,9 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (event.key === 'Escape') {
+    scene.cancelInteraction();
+    element('context-menu').hidden = true;
+    selectTool('select');
     showComponents(false);
     element('file-menu').hidden = true;
     element('help-panel').hidden = true;
@@ -457,16 +954,37 @@ window.addEventListener('keydown', (event) => {
   if (
     event.target instanceof HTMLInputElement ||
     event.target instanceof HTMLTextAreaElement ||
+    event.target instanceof HTMLSelectElement ||
     event.ctrlKey ||
     event.metaKey ||
     event.altKey
   )
     return;
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+    event.preventDefault();
+    const step = event.shiftKey ? 50 : scene.snapping ? 10 : 1;
+    const dx =
+      event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
+    const dz =
+      event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
+    const roots = current.nodes.filter(
+      (n) => selectedIds.has(n.id) && !hasSelectedAncestor(n),
+    );
+    commit({
+      type: 'graph',
+      label: 'Nudge selection',
+      nodes: roots.map((n) => ({
+        id: n.id,
+        value: { ...n, x: n.x + dx, z: n.z + dz },
+      })),
+    });
+  }
   if (event.key === '/') {
     event.preventDefault();
     showComponents(true);
   }
   if (event.key.toLowerCase() === 'v') selectTool('select');
+  if (event.key.toLowerCase() === 'c') element('tool-connect').click();
   if (event.key.toLowerCase() === 'm') selectTool('pan');
   if (event.key.toLowerCase() === 'f') scene.fit();
   if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -539,6 +1057,24 @@ if (nativeAvailable())
       }
     }
     recoveryReady = true;
+    await refreshRecents();
+    const openPending = async () => {
+      if (busy) return;
+      const opened = await invoke<OpenedFile | null>('take_pending_file');
+      if (!opened) return;
+      await action(async () => {
+        if (!(await canReplace())) return;
+        replaceDocument(parseDocument(opened.content));
+        fileHandle = opened.handle;
+        notify(`Opened ${opened.name}`);
+        await refreshRecents();
+      });
+    };
+    await listen(
+      'pending-file',
+      () => void openPending().catch((error) => notify(String(error))),
+    );
+    await openPending();
     window.addEventListener('blur', () => {
       if (history.isDirty) {
         recovery.schedule();

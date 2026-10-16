@@ -1,0 +1,5 @@
+# Native single-instance file opening
+
+Use the official `tauri-plugin-single-instance` Rust plugin, pinned to 2.5.4 (MIT OR Apache-2.0), registered before other plugins. It forwards file-manager arguments to the running window and focuses it. The native side queues paths and exposes their contents through a narrow command; the frontend still validates documents and offers unsaved-change protection before replacement.
+
+Purpose: a second application process must not overwrite recovery or strand file-manager opens. The previous process-held file lock remains a final recovery-storage guard. A custom D-Bus/Unix-socket implementation was considered but would duplicate platform lifecycle code and add maintenance/security work. The official plugin shares Tauri's maintained plugin workspace. It adds no frontend runtime dependency; Cargo.lock records its Rust dependencies. Compare the resulting optimized executable size in the current benchmark report before release. Source license metadata was checked in the downloaded crate manifest. No deep-link or shell-execution features are enabled.

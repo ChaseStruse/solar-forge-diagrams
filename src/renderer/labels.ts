@@ -13,6 +13,8 @@ import {
   SRGBColorSpace,
   Vector3,
 } from 'three';
+import { serviceImages } from '../catalog/images';
+import { serviceGlyph } from '../catalog/services';
 
 type LabelKind = 'node' | 'edge' | 'icon' | 'group';
 interface Entry {
@@ -61,6 +63,7 @@ export class LabelAtlas {
     _zoom: number,
     kind: LabelKind = 'node',
   ): Object3D {
+    if (kind === 'icon' && !serviceImages.has(text)) text = serviceGlyph(text);
     const key = `${kind}:${text}`;
     const cached = this.regions.get(key);
     if (cached) {
@@ -86,10 +89,10 @@ export class LabelAtlas {
             : '600 34px system-ui';
     page.context.font = font;
     const height = kind === 'icon' ? 92 : 56;
-    const width = Math.min(
-      520,
-      Math.ceil(page.context.measureText(text).width) + 30,
-    );
+    const width =
+      kind === 'icon'
+        ? 92
+        : Math.min(520, Math.ceil(page.context.measureText(text).width) + 30);
     if (page.x + width > SIZE) {
       page.x = 0;
       page.y += page.rowHeight;
@@ -111,7 +114,9 @@ export class LabelAtlas {
     }
     context.fillStyle =
       kind === 'group' ? '#93a6b6' : kind === 'icon' ? '#f6d7a5' : '#e9eef4';
-    context.fillText(text, x + width / 2, y + height / 2, width - 20);
+    const image = kind === 'icon' ? serviceImages.get(text) : undefined;
+    if (image) context.drawImage(image, x + 8, y + 8, width - 16, height - 16);
+    else context.fillText(text, x + width / 2, y + height / 2, width - 20);
     const object = new Object3D();
     page.entries.push({ object, x, y, width, height, kind });
     this.regions.set(key, { page, x, y, width, height, kind });

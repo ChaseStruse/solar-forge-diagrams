@@ -789,3 +789,146 @@ canvas {
   background: var(--accent);
   color: #20170e;
 }
+select,
+textarea {
+  width: 100%;
+  padding: 8px;
+  background: #0c1420;
+  border: 1px solid #344155;
+  border-radius: 7px;
+  color: #e8edf4;
+  font: inherit;
+}
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.properties {
+  max-height: 55vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.property-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
+}
+.property-grid input {
+  min-width: 0;
+}
+.property-actions {
+  display: flex;
+  gap: 5px;
+  margin: 14px 0;
+}
+.property-actions button {
+  border-color: var(--border);
+  font-size: 11px;
+}
+.properties details {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.properties summary {
+  cursor: pointer;
+  color: #b9c8da;
+  font-size: 11px;
+}
+.connections-heading {
+  margin: 16px 7px 6px;
+}
+.connection-row {
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.context-menu {
+  width: 178px;
+  padding: 6px;
+}
+.context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+.canvas-controls button[aria-pressed="false"]#snap {
+  color: var(--muted);
+}
+.canvas-controls button[aria-pressed="true"]#snap {
+  color: var(--accent);
+}
+@media (max-width: 1050px) {
+  .canvas-controls {
+    flex-wrap: wrap;
+  }
+  .canvas-controls .view-dock {
+    margin-left: 0;
+  }
+  .status {
+    bottom: 130px;
+  }
+}
+@media (max-height: 700px) {
+  .tool-rail {
+    gap: 0;
+  }
+  .tool {
+    height: 34px;
+  }
+  .rail-divider {
+    margin: 2px 0;
+  }
+  .properties {
+    max-height: 45vh;
+  }
+}
+.service-symbol img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+#services {
+  max-height: min(58vh, 540px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+#templates > button {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 10px 8px;
+  font-size: 12px;
+}
+.file-menu {
+  max-height: calc(100dvh - 90px);
+  overflow-y: auto;
+}
+.command-palette {
+  width: min(540px, calc(100vw - 32px));
+}
+.command-results {
+  max-height: 50vh;
+  overflow-y: auto;
+  margin-top: 12px;
+}
+.command-results button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+}
+#recent-files > button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+.quality-label {
+  display: block;
+  color: #9eafc4;
+  font-size: 12px;
+}
+.quality-label select {
+  margin-top: 8px;
+}
