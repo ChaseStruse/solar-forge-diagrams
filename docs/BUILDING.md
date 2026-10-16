@@ -10,7 +10,7 @@ Opt-in native diagnostics: build with `--features diagnostics`, then run `--smok
 
 ## Omarchy install bundle
 
-The deliverable is `artifacts/omarchy/solar-forge-diagrams-0.1.0-5-omarchy-x86_64.tar.gz`. Extract it and run `./install.sh --check`, then `./install.sh` in a terminal. The installer verifies Omarchy, x86_64, checksums and package identity, then uses the normal `sudo pacman -U` transaction for the included local package. It does not bypass dependency checks or confirmation. No build tools are required to install it. Dependencies may be downloaded on first installation; running the app is offline.
+The deliverable is `artifacts/omarchy/solar-forge-diagrams-0.1.0-6-omarchy-x86_64.tar.gz`. Extract it and run `./install.sh --check`, then `./install.sh` in a terminal. The installer verifies Omarchy, x86_64, checksums and package identity, then uses the normal `sudo pacman -U` transaction for the included local package. It does not bypass dependency checks or confirmation. No build tools are required to install it. Dependencies may be downloaded on first installation; running the app is offline.
 
 Launch **Solar Forge Diagrams** using `Super+Space`. The package installs the native executable, desktop entry, icon and MIME definition for `.sforge.json`. Desktop database updates use normal package hooks. File-manager arguments reach the running app with unsaved-change protection. Choose Open With to associate documents; no global default or compositor configuration is forced.
 
@@ -23,7 +23,7 @@ The recipe lives at `packaging/omarchy/pkgbuilds/solar-forge-diagrams/`, includi
 After a reviewed commit, run `scripts/source-archive.sh`. Copy `artifacts/solar-forge-diagrams-0.1.0.tar.gz` beside the recipe. Replace `SKIP` with the printed SHA-256 (or run `updpkgsums`). Run `makepkg --cleanbuild` from that directory after installing its build dependencies. Then create the install bundle:
 
 ```sh
-scripts/omarchy-bundle.sh /path/to/solar-forge-diagrams-0.1.0-5-x86_64.pkg.tar.zst
+scripts/omarchy-bundle.sh /path/to/solar-forge-diagrams-0.1.0-6-x86_64.pkg.tar.zst
 ```
 
 The bundle includes the verified package, installer, checksums and user/build/recovery guides. Recipe metadata uses local sources and disables automatic upstream sync because the alpha has no published release feed. This local unsigned delivery is not an official Omarchy repository listing. Repository submission needs a published source archive/checksum and a public source license selected by the owner. Once accepted and published, `omarchy pkg add solar-forge-diagrams` becomes the by-name install path. That command currently uses repository package names, so it cannot install this unpublished local archive.
