@@ -1,7 +1,7 @@
 import { findService } from '../catalog/services';
 import type { DiagramDocument } from '../domain/document';
 import { worldPosition } from '../domain/document';
-import { routeEdge } from '../domain/routing';
+import { obstaclesOf, routeEdge } from '../domain/routing';
 import { fontSize, wrapText } from '../domain/text';
 
 const xmlText = (text: string) =>
@@ -22,7 +22,11 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
     node,
     p: worldPosition(node, nodes),
   }));
-  const routes = doc.edges.map((edge) => ({ edge, ...routeEdge(edge, nodes) }));
+  const obstacles = obstaclesOf(nodes);
+  const routes = doc.edges.map((edge) => ({
+    edge,
+    ...routeEdge(edge, nodes, obstacles),
+  }));
   const xs = [
     ...positioned.flatMap(({ node, p }) => [
       p.x - node.width / 2,

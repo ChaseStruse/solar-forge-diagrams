@@ -58,9 +58,23 @@ function automaticPorts(
       ? ['south', 'north']
       : ['north', 'south'];
 }
+export interface Obstacle extends Rect {
+  id: string;
+}
+/** Tiles that routes steer around; compute once and reuse across many routes. */
+export function obstaclesOf(
+  nodes: ReadonlyMap<string, DiagramNode>,
+): Obstacle[] {
+  const result: Obstacle[] = [];
+  for (const node of nodes.values())
+    if (node.kind !== 'group')
+      result.push({ id: node.id, ...rect(node, nodes) });
+  return result;
+}
 export function routeEdge(
   edge: DiagramEdge,
   nodes: ReadonlyMap<string, DiagramNode>,
+  obstacles: readonly Obstacle[] = obstaclesOf(nodes),
 ): { points: Point[]; sourcePort: Port; targetPort: Port } {
   const source = nodes.get(edge.source),
     target = nodes.get(edge.target);
@@ -101,6 +115,7 @@ export function routeEdge(
         source,
         target,
         nodes,
+        obstacles,
       ),
       end,
     ],
@@ -152,17 +167,33 @@ function bestPath(
   source: DiagramNode,
   target: DiagramNode,
   nodes: ReadonlyMap<string, DiagramNode>,
+  all: readonly Obstacle[],
 ): Point[] {
   const ends = [rect(source, nodes), rect(target, nodes)];
-  const obstacles = [...ends];
-  for (const node of nodes.values())
-    if (node.kind !== 'group' && node !== source && node !== target)
-      obstacles.push(rect(node, nodes));
   const bend = edge.bend ?? 0;
   const minX = Math.min(...ends.map((r) => r.minX)) - 30;
   const maxX = Math.max(...ends.map((r) => r.maxX)) + 30;
   const minZ = Math.min(...ends.map((r) => r.minZ)) - 30;
   const maxZ = Math.max(...ends.map((r) => r.maxZ)) + 30;
+  // Only tiles inside the area any candidate can reach are worth testing.
+  const reach = Math.abs(bend) + 10;
+  const area = {
+    minX: Math.min(minX, first.x, last.x) - reach,
+    maxX: Math.max(maxX, first.x, last.x) + reach,
+    minZ: Math.min(minZ, first.z, last.z) - reach,
+    maxZ: Math.max(maxZ, first.z, last.z) + reach,
+  };
+  const obstacles: Rect[] = [...ends];
+  for (const box of all)
+    if (
+      box.id !== source.id &&
+      box.id !== target.id &&
+      box.maxX > area.minX &&
+      box.minX < area.maxX &&
+      box.maxZ > area.minZ &&
+      box.minZ < area.maxZ
+    )
+      obstacles.push(box);
   const candidates: Point[][] = [];
   for (const x of [(first.x + last.x) / 2 + bend, minX + bend, maxX + bend])
     candidates.push([first, { x, z: first.z }, { x, z: last.z }, last]);
