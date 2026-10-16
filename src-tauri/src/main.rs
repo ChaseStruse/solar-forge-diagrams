@@ -27,11 +27,15 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn open_document(app: tauri::AppHandle) -> Result<Option<String>, String> {
+async fn open_document(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let Some(file) = app
             .dialog()
             .file()
+            .set_parent(&window)
             .add_filter("Solar Forge diagram", &["json"])
             .blocking_pick_file()
         else {
@@ -54,7 +58,11 @@ async fn open_document(app: tauri::AppHandle) -> Result<Option<String>, String> 
 }
 
 #[tauri::command]
-async fn save_document(app: tauri::AppHandle, content: String) -> Result<bool, String> {
+async fn save_document(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    content: String,
+) -> Result<bool, String> {
     if content.len() > 10_000_000 {
         return Err("Document exceeds 10 MB limit".into());
     }
@@ -63,6 +71,7 @@ async fn save_document(app: tauri::AppHandle, content: String) -> Result<bool, S
         let Some(file) = app
             .dialog()
             .file()
+            .set_parent(&window)
             .add_filter("Solar Forge diagram", &["json"])
             .set_file_name("diagram.sforge.json")
             .blocking_save_file()
@@ -80,7 +89,11 @@ async fn save_document(app: tauri::AppHandle, content: String) -> Result<bool, S
 }
 
 #[tauri::command]
-async fn export_png(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<bool, String> {
+async fn export_png(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    bytes: Vec<u8>,
+) -> Result<bool, String> {
     if bytes.len() > 50_000_000 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         return Err("Invalid PNG export".into());
     }
@@ -88,6 +101,7 @@ async fn export_png(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<bool, Strin
         let Some(file) = app
             .dialog()
             .file()
+            .set_parent(&window)
             .add_filter("PNG image", &["png"])
             .set_file_name("diagram.png")
             .blocking_save_file()
@@ -103,7 +117,17 @@ async fn export_png(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<bool, Strin
 
 #[tauri::command]
 fn diagnostic_mode() -> bool {
-    cfg!(debug_assertions) && std::env::args().any(|arg| arg == "--smoke-test")
+    cfg!(any(debug_assertions, feature = "diagnostics"))
+        && std::env::args().any(|arg| arg == "--smoke-test")
+}
+
+#[tauri::command]
+fn diagnostic_build() -> &'static str {
+    if cfg!(debug_assertions) {
+        "debug shell / production frontend"
+    } else {
+        "optimized shell / production frontend / diagnostics feature"
+    }
 }
 
 #[tauri::command]
@@ -149,6 +173,7 @@ fn main() {
             save_document,
             export_png,
             diagnostic_mode,
+            diagnostic_build,
             diagnostic_capture,
             diagnostic_finish
         ])

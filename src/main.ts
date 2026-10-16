@@ -37,10 +37,22 @@ root.innerHTML = `
     <aside class="inspector"><p class="eyebrow">PROPERTIES</p><h2 id="selection">Your architecture</h2><p class="muted" id="selection-note">Select a tile to inspect its position.</p><label for="node-label">LABEL</label><input id="node-label" disabled><dl><dt>Position X</dt><dd id="position-x">—</dd><dt>Position Z</dt><dd id="position-z">—</dd></dl><div class="divider"></div><p class="eyebrow">VIEW & PERFORMANCE</p><p class="muted">The scene rests when you do. Rendering happens only when the canvas changes.</p><label for="benchmark">Load a board</label><select id="benchmark"><option value="sample">Serverless example</option><option value="standard">500 nodes / 750 edges</option><option value="stress">2,000 nodes / 3,000 edges</option></select><p class="muted small">Prototype tiles use text identifiers. Official AWS artwork arrives in M3.</p></aside>
   </main>
   <footer><span id="status" role="status">Ready</span><span>✦ SOLAR FORGE <span class="version">PREVIEW 0.1</span></span></footer>`;
-function element<T extends HTMLElement>(id: string): T {
+function element(id: string): HTMLElement {
   const result = document.getElementById(id);
   if (!result) throw new Error(`Missing element: ${id}`);
-  return result as T;
+  return result;
+}
+function inputElement(id: string): HTMLInputElement {
+  const result = element(id);
+  if (!(result instanceof HTMLInputElement))
+    throw new Error(`Expected input: ${id}`);
+  return result;
+}
+function selectElement(id: string): HTMLSelectElement {
+  const result = element(id);
+  if (!(result instanceof HTMLSelectElement))
+    throw new Error(`Expected select: ${id}`);
+  return result;
 }
 let current = sampleDocument();
 let selected: string | undefined;
@@ -67,7 +79,7 @@ function updateHeader(): void {
 function inspect(): void {
   const node = current.nodes.find((n) => n.id === selected);
   element('selection').textContent = node?.label ?? 'Your architecture';
-  const input = element<HTMLInputElement>('node-label');
+  const input = inputElement('node-label');
   input.disabled = !node;
   input.value = node?.label ?? '';
   element('position-x').textContent = node ? String(node.x) : '—';
@@ -149,7 +161,7 @@ element('fit').onclick = () => scene.fit();
 element('node-label').onchange = () => {
   const node = current.nodes.find((n) => n.id === selected);
   if (!node) return;
-  node.label = element<HTMLInputElement>('node-label').value.slice(0, 1000);
+  node.label = inputElement('node-label').value.slice(0, 1000);
   dirty = true;
   scene.load(current);
   scene.select(node.id);
@@ -157,7 +169,7 @@ element('node-label').onchange = () => {
 };
 element('benchmark').onchange = () => {
   if (!canReplace()) return;
-  const value = element<HTMLSelectElement>('benchmark').value;
+  const value = selectElement('benchmark').value;
   replaceDocument(
     value === 'sample'
       ? sampleDocument()
@@ -216,7 +228,7 @@ function populateServices(query = ''): void {
   }
 }
 element('search').oninput = () =>
-  populateServices(element<HTMLInputElement>('search').value);
+  populateServices(inputElement('search').value);
 window.addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === 's') {
     event.preventDefault();

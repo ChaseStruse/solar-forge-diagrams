@@ -12,7 +12,9 @@
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
     "lint": "biome check .",
-    "format": "biome check --write ."
+    "format": "biome check --write .",
+    "check:size": "bun scripts/check-budgets.ts",
+    "verify": "bun run lint && bun run check && bun test && bun run build && bun run check:size"
   },
   "dependencies": {
     "@tauri-apps/api": "2.10.1",

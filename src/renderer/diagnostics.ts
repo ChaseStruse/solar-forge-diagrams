@@ -8,15 +8,59 @@ const frame = (): Promise<void> =>
 const percentile = (samples: number[]): number =>
   samples.sort((a, b) => a - b)[Math.floor(samples.length * 0.95)] ?? 0;
 
-/** Explicit debug-only --smoke-test run; never runs during an ordinary session. */
+/** Explicit diagnostic-build --smoke-test run; never runs during an ordinary session. */
 export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
   const results: Record<string, unknown> = {
     userAgent: navigator.userAgent,
     viewport: [innerWidth, innerHeight],
     pixelRatio: devicePixelRatio,
-    startupToScriptMs: performance.now(),
-    build: 'debug shell / production frontend',
+    navigationToScriptMs: performance.now(),
+    build: await invoke<string>('diagnostic_build'),
+    gpu: scene.gpuDetails(),
   };
+  const interactionDocument = sampleDocument();
+  scene.load(interactionDocument);
+  scene.fit();
+  await frame();
+  const anchor = scene.nodeScreenPosition('lambda');
+  const canvas = window.document.querySelector('canvas');
+  if (!anchor || !canvas) throw new Error('Missing native interaction target');
+  let moves = 0;
+  const previousMove = scene.onMove;
+  scene.onMove = () => {
+    moves++;
+  };
+  canvas.dispatchEvent(
+    new PointerEvent('pointerdown', {
+      clientX: anchor.x,
+      clientY: anchor.y,
+      pointerId: 1,
+      button: 0,
+    }),
+  );
+  canvas.dispatchEvent(
+    new PointerEvent('pointermove', {
+      clientX: anchor.x + 45,
+      clientY: anchor.y + 20,
+      pointerId: 1,
+    }),
+  );
+  canvas.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 }));
+  scene.onMove = previousMove;
+  const moved = interactionDocument.nodes.find((node) => node.id === 'lambda');
+  if (
+    moves !== 1 ||
+    !moved ||
+    (moved.x === -40 && moved.z === -80) ||
+    moved.x % 10 !== 0 ||
+    moved.z % 10 !== 0
+  )
+    throw new Error('Native snapped-drag check failed');
+  results.syntheticSnappedDrag =
+    'pass: one completed gesture, coordinates snapped to grid';
+  scene.load(sampleDocument());
+  scene.fit();
+  await frame();
   for (const mode of ['isometric', 'top'] as const) {
     scene.setView(mode);
     await frame();

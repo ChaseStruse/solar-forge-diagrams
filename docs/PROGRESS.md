@@ -2,7 +2,7 @@
 
 ## Current position
 
-M0 native feasibility is demonstrated; performance and manual desktop checks are still in progress. M1–M6 are not complete. Continue with draw-call reduction and the native checks below before expanding the editor toolset.
+M0 functional native feasibility is demonstrated, including actual Save/Open/PNG dialogs. The final optimized portal-backend build and updated nested-fixture benchmark are being checked. M1–M6 are not implemented. Continue with M1 after this checkpoint; retain the outstanding acceptance checks below for M2/M5.
 
 ## Commit/task map
 
@@ -10,7 +10,9 @@ M0 native feasibility is demonstrated; performance and manual desktop checks are
 | --- | --- | --- |
 | `f489981` | Plan baseline | Approved native direction recorded |
 | `41ee697` | M0 scaffold and first editor slice | Bun/strict TS/Vite/Three.js/Tauri, portable documents, benchmark fixtures, basic native file commands and initial UI |
-| Next implementation commit | M0 native validation and efficient labels | Bundled native assets, debug smoke runner, shared label atlases, readable labels, edge labels, native writer tests |
+| `50bfcb4` | M0 native validation and efficient labels | Bundled native assets, debug smoke runner, shared label atlases, readable labels, edge labels, native writer tests |
+
+| Next implementation commit | M0 batched rendering and Wayland dialogs | Instanced text, one connector buffer, package-size checks, portal backend, nested fixtures, native snapped-drag check |
 
 Hashes are added in the following documentation checkpoint to avoid self-referential commit hashes. Use the commit subject in git log if the final row still says “next”.
 
@@ -32,16 +34,16 @@ Debug native shell / production frontend, 1253×1376 window, DPR 1, WebKitGTK 2.
 | 500 nodes / 750 edges | 237 ms | 22 ms | 25 ms | 9 | 2,501 |
 | 2,000 nodes / 3,000 edges | 705 ms | 63 ms | 68 ms | 41 | 10,001 |
 
-Idle: zero render frames over a 500 ms sample. `startupToScriptMs` was 210 ms from Web Performance timing, **not full process-start-to-editable latency**. These are single debug-shell runs, not the release acceptance benchmark or physical latency measurements. Standard render-time budget is currently missed; reduce draw calls next.
+Idle: zero render frames over a 500 ms sample. `startupToScriptMs` was 210 ms from Web Performance timing, **not full process-start-to-editable latency**. These are single debug-shell runs, not the release acceptance benchmark or physical latency measurements. This pre-batching result missed the standard render-time budget; see the subsequent optimized run below.
 
 A per-label-texture experiment regressed board loads to 8.5 s / 31 s. Shared atlases reduced these to 237 ms / 705 ms. Do not reintroduce independent full-size canvases per label.
 
 ## Next actions and remaining gates
 
-1. Batch connectors and label draws; repeat the native benchmark and inspect PNGs.
-2. Verify native Open/Save/Export dialogs, drag and pan interactions, close behavior, clipboard, fractional scaling, and multiple monitors. Automated writer checks are not dialog validation.
-3. Capture release-mode startup, process-tree CPU/RSS, active GPU, and 1920×1080 reference results. Current measurements use the actual tiled window.
-4. Once M0 gates are satisfied, implement M1 commands/history, version migration policy, recovery/autosave and durable document handles.
+1. Finalize the optimized portal build and current nested-fixture report; then start M1 commands/history, version migration policy, recovery/autosave, close protection, and durable document handles.
+2. Remaining native acceptance: manual pan, clipboard, fractional scaling, multiple monitors, and interrupted-close behavior. A synthetic snapped drag passed in the real native WebView.
+3. Measure process-start-to-ready, 30-second process-tree CPU/RSS, actual active GPU, and the 1920×1080 reference workload. Current timings use tiled windows.
+4. Actual portal Save and PNG Export wrote temporary output files; Open returned the saved document and the app status was verified as `Diagram opened`. The portal chooser is floating at 875×600. No user desktop configuration was changed.
 
 ## Current limits
 
@@ -65,3 +67,11 @@ src-tauri/target/debug/solar-forge-diagrams --smoke-test
 ```
 
 Normal application usage does not require these temporary paths. A debug native binary is currently at `src-tauri/target/debug/solar-forge-diagrams`; it is not a release package.
+
+## Optimized native follow-up
+
+The pre-portal optimized shell (1046×918, DPR 1) recorded 139 ms standard load, 6 ms render submission p95, and 19 ms camera-update-to-frame p95. Stress results: 520 ms load / 20 ms submission p95 / 27 ms camera-update p95. Draw calls fell to 511 / 2,043; texture counts remained 9 / 41. Idle render count remained zero. This earlier benchmark had one group; the current fixture has three nested groups and must be measured separately.
+
+The WebGL renderer string reported `Apple GPU` on Linux Intel/NVIDIA hardware; treat this as privacy-masked and do not claim an identified GPU. The earlier optimized native executable was 5,309,528 bytes; the portal backend adds native dependencies and requires a fresh size report. Initial JS is now 134,888 bytes gzip. `bun run check:size` enforces the compressed-JS budget; add `--native` when invoking its script to check the optimized executable.
+
+Verified desktop outputs: `/tmp/solar-forge-dialog-smoke.sforge.json` and `/tmp/solar-forge-dialog-smoke.png`. Chooser buttons were activated with AT-SPI accessibility APIs after inspecting their actual names; the input-injection path was unreliable, so do not mistake its failed key presses for a failed file API.

@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
+diagnostics = []
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 
@@ -12,7 +13,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-tauri-plugin-dialog = "2"
+tauri-plugin-dialog = { version = "2", default-features = false, features = ["xdg-portal"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

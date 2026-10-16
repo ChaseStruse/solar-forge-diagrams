@@ -26,4 +26,4 @@ cargo build --manifest-path src-tauri/Cargo.toml --locked
 src-tauri/target/debug/solar-forge-diagrams --smoke-test
 ```
 
-The opt-in debug smoke check opens a real native window, captures both camera views, checks idle render invalidation, loads the benchmark boards, and roundtrips a document through the native atomic writer. Results and PNGs go to `/tmp/solar-forge-native-smoke/`; the app exits on success. It does not certify physical input latency, native dialog interactions, release startup, or GPU execution time. Normal launches do not run diagnostics.
+The opt-in smoke check (debug builds, or release builds compiled with `--features diagnostics`) opens a real native window, captures both camera views, checks idle render invalidation, loads the benchmark boards, and roundtrips a document through the native atomic writer. Results and PNGs go to `/tmp/solar-forge-native-smoke/`; the app exits on success. It does not certify physical input latency, native dialog interactions, release startup, or GPU execution time. Normal launches do not run diagnostics.

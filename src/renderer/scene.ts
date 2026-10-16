@@ -1,19 +1,22 @@
 import {
   AmbientLight,
   BoxGeometry,
+  BufferAttribute,
   BufferGeometry,
   DirectionalLight,
+  DynamicDrawUsage,
   GridHelper,
   Group,
   Line,
   LineBasicMaterial,
+  LineSegments,
   Mesh,
   MeshLambertMaterial,
+  type Object3D,
   OrthographicCamera,
   Plane,
   Raycaster,
   Scene,
-  Sprite,
   Vector2,
   Vector3,
   WebGLRenderer,
@@ -31,7 +34,7 @@ interface Tile {
   node: DiagramNode;
   group: Group;
   material: MeshLambertMaterial;
-  label: Sprite;
+  label: Object3D;
 }
 export class DiagramScene {
   private readonly scene = new Scene();
@@ -49,8 +52,9 @@ export class DiagramScene {
   private readonly geometry = new BoxGeometry(1, 1, 1);
   private readonly edgeMaterial = new LineBasicMaterial({ color: '#e8b56b' });
   private readonly tiles = new Map<string, Tile>();
-  private readonly edges = new Map<string, Line>();
-  private readonly edgeLabels = new Map<string, Sprite>();
+  private readonly edges = new Map<string, number>();
+  private edgePositions = new BufferAttribute(new Float32Array(), 3);
+  private readonly edgeLabels = new Map<string, Object3D>();
   private readonly nodeIndex = new Map<string, DiagramNode>();
   private readonly edgeIndex = new Map<string, DiagramEdge>();
   private readonly incident = new Map<string, Set<string>>();
@@ -126,10 +130,6 @@ export class DiagramScene {
   }
   private releaseContent(): void {
     this.content.traverse((object) => {
-      if (object instanceof Sprite) {
-        object.material.map?.dispose();
-        object.material.dispose();
-      }
       if (
         object instanceof Mesh &&
         object.material instanceof MeshLambertMaterial
@@ -159,7 +159,9 @@ export class DiagramScene {
       group.add(mesh);
       const label = this.labels.create(node.label, this.camera.zoom);
       label.position.set(
-        0,
+        node.kind === 'group'
+          ? -node.width / 2 + Math.min(node.width / 2, 150)
+          : 0,
         node.kind === 'group' ? 13 : 37,
         node.kind === 'group' ? -node.depth / 2 + 25 : 0,
       );
@@ -167,11 +169,18 @@ export class DiagramScene {
       this.content.add(group);
       this.tiles.set(node.id, { node, group, material, label });
     }
-    for (const edge of document.edges) {
+    this.edgePositions = new BufferAttribute(
+      new Float32Array(document.edges.length * 18),
+      3,
+    ).setUsage(DynamicDrawUsage);
+    const edgeGeometry = new BufferGeometry();
+    edgeGeometry.setAttribute('position', this.edgePositions);
+    const connections = new LineSegments(edgeGeometry, this.edgeMaterial);
+    connections.frustumCulled = false;
+    this.content.add(connections);
+    for (const [index, edge] of document.edges.entries()) {
       this.edgeIndex.set(edge.id, edge);
-      const line = new Line(new BufferGeometry(), this.edgeMaterial);
-      this.content.add(line);
-      this.edges.set(edge.id, line);
+      this.edges.set(edge.id, index);
       if (edge.label) {
         const label = this.labels.create(edge.label, this.camera.zoom);
         this.content.add(label);
@@ -183,7 +192,7 @@ export class DiagramScene {
         this.incident.set(id, ids);
       }
     }
-    this.labels.finish();
+    this.labels.finish(this.content);
     this.updatePositions();
     this.invalidate();
     this.onSelect(undefined);
@@ -197,8 +206,8 @@ export class DiagramScene {
   }
   private updateEdge(id: string): void {
     const edge = this.edgeIndex.get(id);
-    const line = this.edges.get(id);
-    if (!edge || !line) return;
+    const index = this.edges.get(id);
+    if (!edge || index === undefined) return;
     const source = this.tiles.get(edge.source);
     const target = this.tiles.get(edge.target);
     if (!source || !target) return;
@@ -211,26 +220,24 @@ export class DiagramScene {
     const az = a.z + (horizontal ? 0 : (direction * source.node.depth) / 2);
     const bx = b.x - (horizontal ? (direction * target.node.width) / 2 : 0);
     const bz = b.z - (horizontal ? 0 : (direction * target.node.depth) / 2);
-    line.geometry.dispose();
-    line.geometry = new BufferGeometry().setFromPoints([
-      new Vector3(ax, y, az),
-      new Vector3(
-        horizontal ? (ax + bx) / 2 : ax,
-        y,
-        horizontal ? az : (az + bz) / 2,
-      ),
-      new Vector3(
-        horizontal ? (ax + bx) / 2 : bx,
-        y,
-        horizontal ? bz : (az + bz) / 2,
-      ),
-      new Vector3(bx, y, bz),
-    ]);
+    const mx = horizontal ? (ax + bx) / 2 : ax;
+    const mz = horizontal ? az : (az + bz) / 2;
+    const nx = horizontal ? (ax + bx) / 2 : bx;
+    const nz = horizontal ? bz : (az + bz) / 2;
+    const offset = index * 6;
+    this.edgePositions.setXYZ(offset, ax, y, az);
+    this.edgePositions.setXYZ(offset + 1, mx, y, mz);
+    this.edgePositions.setXYZ(offset + 2, mx, y, mz);
+    this.edgePositions.setXYZ(offset + 3, nx, y, nz);
+    this.edgePositions.setXYZ(offset + 4, nx, y, nz);
+    this.edgePositions.setXYZ(offset + 5, bx, y, bz);
+    this.edgePositions.addUpdateRange(index * 18, 18);
+    this.edgePositions.needsUpdate = true;
     this.edgeLabels.get(id)?.position.set((ax + bx) / 2, y + 20, (az + bz) / 2);
   }
   private scaleLabels(): void {
     const scale = 0.5 / this.camera.zoom;
-    const apply = (label: Sprite): void => {
+    const apply = (label: Object3D): void => {
       const width: unknown = label.userData.labelWidth;
       const height: unknown = label.userData.labelHeight;
       if (typeof width === 'number' && typeof height === 'number')
@@ -315,7 +322,8 @@ export class DiagramScene {
   private down = (event: PointerEvent): void => {
     const point = this.locate(event);
     if (!point) return;
-    this.renderer.domElement.setPointerCapture(event.pointerId);
+    if (event.isTrusted)
+      this.renderer.domElement.setPointerCapture(event.pointerId);
     if (event.button === 1 || event.button === 2 || event.altKey) {
       this.pan = { x: point.x, z: point.z };
       return;
@@ -442,11 +450,43 @@ export class DiagramScene {
   }
   private render(): void {
     const start = performance.now();
+    this.scene.updateMatrixWorld();
+    this.labels.sync(this.camera);
     this.renderer.render(this.scene, this.camera);
     this.metrics.textures = this.renderer.info.memory.textures;
     this.metrics.drawCalls = this.renderer.info.render.calls;
     this.metrics.frames++;
     this.metrics.lastRenderMs = performance.now() - start;
+  }
+  public gpuDetails(): { renderer: string; vendor: string } {
+    const gl = this.renderer.getContext();
+    const extension: {
+      UNMASKED_RENDERER_WEBGL: number;
+      UNMASKED_VENDOR_WEBGL: number;
+    } | null = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer: unknown = gl.getParameter(
+      extension?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER,
+    );
+    const vendor: unknown = gl.getParameter(
+      extension?.UNMASKED_VENDOR_WEBGL ?? gl.VENDOR,
+    );
+    return {
+      renderer: typeof renderer === 'string' ? renderer : 'unknown',
+      vendor: typeof vendor === 'string' ? vendor : 'unknown',
+    };
+  }
+  /** Client-space anchor for contextual UI and portable interaction checks. */
+  public nodeScreenPosition(id: string): { x: number; y: number } | undefined {
+    const tile = this.tiles.get(id);
+    if (!tile) return undefined;
+    const point = tile.group.position.clone();
+    point.y += tile.node.kind === 'group' ? 4 : 12;
+    point.project(this.camera);
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return {
+      x: rect.left + ((point.x + 1) * this.width) / 2,
+      y: rect.top + ((1 - point.y) * this.height) / 2,
+    };
   }
   public png(): Promise<Blob> {
     this.render();

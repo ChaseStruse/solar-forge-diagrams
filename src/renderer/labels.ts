@@ -1,19 +1,43 @@
-import { CanvasTexture, LinearFilter, Sprite, SpriteMaterial } from 'three';
+import type { Camera, Group } from 'three';
+import {
+  CanvasTexture,
+  DynamicDrawUsage,
+  InstancedBufferAttribute,
+  InstancedMesh,
+  LinearFilter,
+  Matrix4,
+  MeshBasicMaterial,
+  Object3D,
+  PlaneGeometry,
+  Vector3,
+} from 'three';
 
+interface Entry {
+  object: Object3D;
+  x: number;
+  y: number;
+  width: number;
+}
 interface Page {
   canvas: HTMLCanvasElement;
   context: CanvasRenderingContext2D;
   texture: CanvasTexture;
+  entries: Entry[];
   x: number;
   y: number;
   rowHeight: number;
+  batch?: InstancedMesh;
 }
 const SIZE = 1024;
 const HEIGHT = 44;
-/** Pack text into shared GPU images; texture clones share Three.js Source storage. */
+
+/** Shared text atlases with one instanced draw per page, including PNG exports. */
 export class LabelAtlas {
   private readonly pages: Page[] = [];
-  public create(text: string, zoom: number): Sprite {
+  private readonly matrix = new Matrix4();
+  private readonly position = new Vector3();
+
+  public create(text: string, zoom: number): Object3D {
     let page = this.pages[this.pages.length - 1] ?? this.page();
     const width = Math.min(
       480,
@@ -28,19 +52,14 @@ export class LabelAtlas {
     const { x, y, context } = page;
     context.strokeText(text, x + width / 2, y + HEIGHT / 2, width - 16);
     context.fillText(text, x + width / 2, y + HEIGHT / 2, width - 16);
-    const texture = page.texture.clone();
-    texture.offset.set(x / SIZE, 1 - (y + HEIGHT) / SIZE);
-    texture.repeat.set(width / SIZE, HEIGHT / SIZE);
-    const sprite = new Sprite(
-      new SpriteMaterial({ map: texture, depthTest: false }),
-    );
-    sprite.userData.labelWidth = width;
-    sprite.userData.labelHeight = HEIGHT;
-    sprite.scale.set((width * 0.5) / zoom, (HEIGHT * 0.5) / zoom, 1);
-    sprite.renderOrder = 10;
+    const object = new Object3D();
+    object.userData.labelWidth = width;
+    object.userData.labelHeight = HEIGHT;
+    object.scale.set((width * 0.5) / zoom, (HEIGHT * 0.5) / zoom, 1);
+    page.entries.push({ object, x, y, width });
     page.x += width + 4;
     page.rowHeight = Math.max(page.rowHeight, HEIGHT + 4);
-    return sprite;
+    return object;
   }
   private page(): Page {
     const canvas = document.createElement('canvas');
@@ -58,15 +77,85 @@ export class LabelAtlas {
     const texture = new CanvasTexture(canvas);
     texture.generateMipmaps = false;
     texture.minFilter = LinearFilter;
-    const page = { canvas, context, texture, x: 0, y: 0, rowHeight: 0 };
+    const page: Page = {
+      canvas,
+      context,
+      texture,
+      entries: [],
+      x: 0,
+      y: 0,
+      rowHeight: 0,
+    };
     this.pages.push(page);
     return page;
   }
-  public finish(): void {
-    for (const page of this.pages) page.texture.needsUpdate = true;
+  public finish(root: Group): void {
+    for (const page of this.pages) {
+      page.texture.needsUpdate = true;
+      const geometry = new PlaneGeometry(1, 1);
+      const regions = new Float32Array(page.entries.length * 4);
+      for (const [index, entry] of page.entries.entries())
+        regions.set(
+          [
+            entry.x / SIZE,
+            1 - (entry.y + HEIGHT) / SIZE,
+            entry.width / SIZE,
+            HEIGHT / SIZE,
+          ],
+          index * 4,
+        );
+      geometry.setAttribute(
+        'atlasRect',
+        new InstancedBufferAttribute(regions, 4),
+      );
+      const material = new MeshBasicMaterial({
+        map: page.texture,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+      });
+      material.onBeforeCompile = (shader) => {
+        shader.vertexShader = shader.vertexShader
+          .replace(
+            '#include <common>',
+            '#include <common>\nattribute vec4 atlasRect;',
+          )
+          .replace(
+            '#include <uv_vertex>',
+            '#include <uv_vertex>\nvMapUv = atlasRect.xy + vMapUv * atlasRect.zw;',
+          );
+      };
+      material.customProgramCacheKey = () => 'solar-forge-atlas-v1';
+      const batch = new InstancedMesh(geometry, material, page.entries.length);
+      batch.instanceMatrix.setUsage(DynamicDrawUsage);
+      batch.frustumCulled = false;
+      batch.renderOrder = 10;
+      page.batch = batch;
+      root.add(batch);
+    }
+  }
+  public sync(camera: Camera): void {
+    for (const page of this.pages) {
+      const batch = page.batch;
+      if (!batch) continue;
+      for (const [index, entry] of page.entries.entries()) {
+        this.position.setFromMatrixPosition(entry.object.matrixWorld);
+        this.matrix.compose(
+          this.position,
+          camera.quaternion,
+          entry.object.scale,
+        );
+        batch.setMatrixAt(index, this.matrix);
+      }
+      batch.instanceMatrix.needsUpdate = true;
+    }
   }
   public dispose(): void {
     for (const page of this.pages) {
+      if (page.batch) {
+        page.batch.geometry.dispose();
+        if (!Array.isArray(page.batch.material)) page.batch.material.dispose();
+      }
       page.texture.dispose();
       page.canvas.width = 0;
       page.canvas.height = 0;
