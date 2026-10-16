@@ -33,3 +33,13 @@ export async function exportPng(blob: Blob): Promise<boolean> {
     bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
   });
 }
+/** Copy a PNG to the clipboard: natively via the desktop tool, else the web API. */
+export async function copyPng(blob: Blob): Promise<void> {
+  if (isTauri()) {
+    await invoke('copy_png', {
+      bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
+    });
+    return;
+  }
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+}

@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
 import type { DiagramDocument, DiagramNode } from '../src/domain/document';
-import { journeyBranches, journeyStarts } from '../src/domain/journey';
+import {
+  inactiveEdges,
+  journeyBranches,
+  journeyStarts,
+} from '../src/domain/journey';
 
 const node = (id: string, serviceId?: string): DiagramNode => ({
   id,
@@ -89,4 +93,24 @@ test('forks walk every branch, decisions ask, and a fixed branch is followed alo
   expect(journeyBranches(graph, 'ecr').mode).toBe('ask');
   // A single way out never needs a decision.
   expect(journeyBranches(graph, 'eks')).toEqual({ mode: 'all', edges: [] });
+});
+
+test('an active route switches off the other branches of its fork only', () => {
+  const graph = doc(
+    [node('ecr'), node('ecs'), node('eks'), node('fargate')],
+    [
+      ['ecr', 'ecs'],
+      ['ecr', 'eks'],
+      ['ecs', 'fargate'],
+      ['eks', 'fargate'],
+    ],
+  );
+  expect([...inactiveEdges(graph)]).toEqual([]);
+  const ecr = graph.nodes[0];
+  if (!ecr) throw Error('Missing node');
+  ecr.journey = { mode: 'fixed', edge: 'e0' };
+  // EKS is only reached through the switched-off branch, so its exit goes quiet.
+  expect([...inactiveEdges(graph)].sort()).toEqual(['e1', 'e3']);
+  ecr.journey = { mode: 'fixed', edge: 'gone' };
+  expect([...inactiveEdges(graph)]).toEqual([]);
 });

@@ -46,3 +46,33 @@ export function journeyBranches(
       : { mode: 'ask', edges };
   return { mode: setting.mode, edges };
 }
+/**
+ * Connections switched off by a chosen active route: the other branches of
+ * that fork, and everything downstream that only they lead to.
+ */
+export function inactiveEdges(doc: DiagramDocument): Set<string> {
+  const inactive = new Set<string>();
+  for (const node of doc.nodes) {
+    if (node.journey?.mode !== 'fixed') continue;
+    const { mode, edges } = journeyBranches(doc, node.id);
+    if (mode !== 'fixed') continue;
+    for (const edge of doc.edges)
+      if (edge.source === node.id && !edges.includes(edge.id))
+        inactive.add(edge.id);
+  }
+  // A node reached only through inactive connections passes that on.
+  for (let changed = inactive.size > 0; changed; ) {
+    changed = false;
+    for (const node of doc.nodes) {
+      const incoming = doc.edges.filter((e) => e.target === node.id);
+      if (!incoming.length || !incoming.every((e) => inactive.has(e.id)))
+        continue;
+      for (const edge of doc.edges)
+        if (edge.source === node.id && !inactive.has(edge.id)) {
+          inactive.add(edge.id);
+          changed = true;
+        }
+    }
+  }
+  return inactive;
+}

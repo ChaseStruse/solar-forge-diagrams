@@ -115,6 +115,22 @@ export class BoardView {
     this.mode = previousMode;
     this.update();
   }
+  /** Everything needed to put the camera back exactly where it was. */
+  public snapshot(): () => void {
+    const target = this.target.clone();
+    const { distance, rightInset, mode } = this;
+    const spatialZoom = this.spatial.zoom;
+    const planZoom = this.plan.zoom;
+    return () => {
+      this.target.copy(target);
+      this.distance = distance;
+      this.rightInset = rightInset;
+      this.mode = mode;
+      this.spatial.zoom = spatialZoom;
+      this.plan.zoom = planZoom;
+      this.update();
+    };
+  }
   public zoomBy(factor: number): void {
     this.camera.zoom = Math.min(4, Math.max(0.1, this.camera.zoom * factor));
     this.update();

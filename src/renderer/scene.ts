@@ -38,6 +38,7 @@ import type {
   Port,
 } from '../domain/document';
 import { worldPosition } from '../domain/document';
+import { inactiveEdges } from '../domain/journey';
 import {
   type Fans,
   fansOf,
@@ -189,9 +190,15 @@ export class DiagramScene {
   private flowing = true;
   private readonly animators = new Set<(time: number) => boolean>();
   private edgeGeometry: LineSegmentsGeometry | undefined;
+  /** Flow dashes keep their own copy so inactive routes can go still. */
+  private flowGeometry: LineSegmentsGeometry | undefined;
+  private flowPositions: Float32Array<ArrayBufferLike> = new Float32Array();
+  private flowBuffer: InterleavedBuffer | undefined;
+  private inactive = new Set<string>();
   private edgeBuffer: InterleavedBuffer | undefined;
   private readonly tiles = new Map<string, Tile>();
   private readonly scratchColor = new Color();
+  private readonly dimColor = new Color();
   private readonly edges = new Map<string, number>();
   private edgePositions = new BufferAttribute(new Float32Array(), 3);
   private readonly edgeLabels = new Map<string, Object3D>();
@@ -460,6 +467,9 @@ export class DiagramScene {
     this.details = undefined;
     this.edgeGeometry?.dispose();
     this.edgeGeometry = undefined;
+    this.flowGeometry?.dispose();
+    this.flowGeometry = undefined;
+    this.flowBuffer = undefined;
     this.edgeBuffer = undefined;
     this.labels.dispose();
     this.content.clear();
@@ -588,7 +598,18 @@ export class DiagramScene {
     halo.frustumCulled = false;
     const connections = new LineSegments2(this.edgeGeometry, this.edgeMaterial);
     connections.frustumCulled = false;
-    this.flowLines = new LineSegments2(this.edgeGeometry, this.flowMaterial);
+    this.inactive = inactiveEdges(document);
+    this.flowPositions = new Float32Array(document.edges.length * 42);
+    this.flowGeometry = new LineSegmentsGeometry().setPositions(
+      this.flowPositions,
+    );
+    const flow = this.flowGeometry.getAttribute('instanceStart');
+    if (flow instanceof InterleavedBufferAttribute) {
+      this.flowBuffer = flow.data;
+      this.flowBuffer.setUsage(DynamicDrawUsage);
+      this.flowPositions = flow.data.array as Float32Array;
+    }
+    this.flowLines = new LineSegments2(this.flowGeometry, this.flowMaterial);
     this.flowLines.frustumCulled = false;
     this.flowLines.visible = this.flowing;
     this.flowLines.renderOrder = 2;
@@ -674,6 +695,17 @@ export class DiagramScene {
     if (this.edgeBuffer) {
       this.edgeBuffer.addUpdateRange(index * 42, 42);
       this.edgeBuffer.needsUpdate = true;
+    }
+    // Inactive routes collapse to a point in the flow copy: no marching dashes.
+    const route = this.edgePositions.array;
+    const base = index * 42;
+    const still = this.inactive.has(id);
+    for (let i = 0; i < 42; i++)
+      this.flowPositions[base + i] =
+        route[still ? base + (i % 3) : base + i] ?? 0;
+    if (this.flowBuffer) {
+      this.flowBuffer.addUpdateRange(base, 42);
+      this.flowBuffer.needsUpdate = true;
     }
     this.distancesDirty = true;
     const label = this.edgeLabels.get(id);
@@ -1620,6 +1652,13 @@ export class DiagramScene {
           ? this.palette.edgeHover
           : this.palette.edge;
     this.scratchColor.set(color);
+    // A branch off the active route fades toward the sky.
+    if (
+      this.inactive.has(id) &&
+      id !== this.selectedEdge &&
+      id !== this.hoveredEdge
+    )
+      this.scratchColor.lerp(this.dimColor.set(this.palette.sky[1]), 0.68);
     for (let i = 0; i < 14; i++)
       this.edgeColors.set(
         [this.scratchColor.r, this.scratchColor.g, this.scratchColor.b],
@@ -1829,6 +1868,104 @@ export class DiagramScene {
       x: rect.left + ((point.x + 1) * this.width) / 2,
       y: rect.top + ((1 - point.y) * this.height) / 2,
     };
+  }
+  /**
+   * A crisp image of the whole diagram, cropped to its content, regardless of
+   * the current pan, zoom or panels. The view is restored afterwards.
+   */
+  public captureDiagram(): Promise<Blob> {
+    if (!this.tiles.size)
+      return Promise.reject(Error('Nothing to capture yet.'));
+    const restoreView = this.view.snapshot();
+    const fitted = this.fitted;
+    const ratio = this.renderer.getPixelRatio();
+    const hovered = this.hoveredEdge;
+    this.hoveredEdge = undefined;
+    if (hovered) this.paintEdge(hovered);
+    this.ports.visible = false;
+    this.view.setPanelVisible(false);
+    this.fit();
+    this.renderer.setPixelRatio(Math.min(3, Math.max(2, devicePixelRatio)));
+    this.render();
+    const crop = this.contentBounds(28);
+    const scale = this.renderer.getPixelRatio();
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(crop.width * scale));
+    canvas.height = Math.max(1, Math.round(crop.height * scale));
+    // Copy in the same task as the render, while the drawing buffer is valid.
+    canvas
+      .getContext('2d')
+      ?.drawImage(
+        this.renderer.domElement,
+        crop.left * scale,
+        crop.top * scale,
+        canvas.width,
+        canvas.height,
+        0,
+        0,
+        canvas.width,
+        canvas.height,
+      );
+    this.renderer.setPixelRatio(ratio);
+    this.renderer.setSize(this.width, this.height);
+    restoreView();
+    this.fitted = fitted;
+    this.ports.visible = true;
+    if (hovered) {
+      this.hoveredEdge = hovered;
+      this.paintEdge(hovered);
+    }
+    this.onZoom(this.view.percent);
+    this.invalidate();
+    return new Promise((resolve, reject) =>
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(Error('PNG encoding failed'))),
+        'image/png',
+      ),
+    );
+  }
+  /** Screen box (CSS px) around every tile, caption and connection. */
+  private contentBounds(padding: number): {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } {
+    let left = Infinity,
+      right = -Infinity,
+      top = Infinity,
+      bottom = -Infinity;
+    const point = new Vector3();
+    const add = (x: number, y: number, z: number) => {
+      point.set(x, y, z).project(this.camera);
+      const px = ((point.x + 1) * this.width) / 2;
+      const py = ((1 - point.y) * this.height) / 2;
+      left = Math.min(left, px);
+      right = Math.max(right, px);
+      top = Math.min(top, py);
+      bottom = Math.max(bottom, py);
+    };
+    for (const tile of this.tiles.values()) {
+      const { x, y, z } = tile.group.position;
+      const w = tile.node.width / 2,
+        d = tile.node.depth / 2;
+      // Captions hang below service tiles; leave room for them.
+      const caption = tile.node.kind === 'service' && !tile.node.shape ? 70 : 0;
+      for (const sx of [-w, w])
+        for (const sz of [-d, d + caption])
+          for (const sy of [-12, 40]) add(x + sx, y + sy, z + sz);
+    }
+    for (let i = 0; i < this.edgePositions.count; i++)
+      add(
+        this.edgePositions.getX(i),
+        this.edgePositions.getY(i),
+        this.edgePositions.getZ(i),
+      );
+    left = Math.max(0, Math.floor(left - padding));
+    top = Math.max(0, Math.floor(top - padding));
+    right = Math.min(this.width, Math.ceil(right + padding));
+    bottom = Math.min(this.height, Math.ceil(bottom + padding));
+    return { left, top, width: right - left, height: bottom - top };
   }
   public png(): Promise<Blob> {
     this.render();

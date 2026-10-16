@@ -31,6 +31,7 @@ import {
   ungroupNodes,
 } from './editor/operations';
 import {
+  copyPng,
   exportPng,
   nativeAvailable,
   openDocumentFile,
@@ -46,18 +47,18 @@ root.innerHTML = `
   <main class="workspace" aria-label="Diagram workspace"><div id="canvas"></div></main>
   <header class="topbar">
     <div class="board-heading"><button id="menu" class="icon-button" aria-label="File menu" aria-expanded="false" title="File menu">${icon('menu')}</button><span class="forge-mark" aria-hidden="true">✦</span><span class="brand">Solar Forge</span><span class="heading-divider"></span><button id="title" class="document-title" title="Rename diagram"></button><span id="save-state" class="save-state">Unchanged</span></div>
-    <div class="top-actions"><button id="components" class="quiet-button" title="AWS components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="theme" class="icon-button" aria-label="Theme" aria-expanded="false" title="Theme">${icon('palette')}</button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
+    <div class="top-actions"><button id="components" class="quiet-button" title="AWS components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="copy-image" class="quiet-button" title="Copy diagram image to clipboard (Ctrl+Shift+C)">${icon('camera')}<span>Copy image</span></button><button id="theme" class="icon-button" aria-label="Theme" aria-expanded="false" title="Theme">${icon('palette')}</button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
   </header>
   <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="export">Export PNG ${icon('arrow')}</button><button id="export-svg">Export SVG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">RECENT DIAGRAMS</p><div id="recent-files"></div><div class="menu-divider"></div><p class="popover-caption">TEMPLATES</p><button id="example-starter">Two-service starter</button><button id="example-serverless">Serverless architecture</button><div id="templates"></div></section>
   <section id="theme-menu" class="popover theme-menu" aria-label="Themes" hidden><p class="popover-caption">THEME</p><div id="theme-list"></div></section>
   <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add AWS service" title="Add AWS service (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-text" class="tool" aria-label="Text" aria-pressed="false" title="Text: click the board (T)">${icon('text')}<kbd>T</kbd></button><button id="tool-note" class="tool" aria-label="Sticky note" aria-pressed="false" title="Sticky note: click the board (N)">${icon('note')}<kbd>N</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
   <section id="component-palette" class="popover component-palette" aria-label="AWS components" hidden><div class="popover-heading"><h2>AWS components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a component to add it to your board.</p></section>
-  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label id="node-branch-row">Journey at this fork<select id="node-branch"></select></label><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
+  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label id="node-branch-row">Journey at this fork<select id="node-branch"></select></label><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><div class="property-actions"><button id="edge-active">Make active route</button><button id="edge-all-routes">Show all routes</button></div><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
   <nav class="canvas-controls" aria-label="Canvas controls"><div class="zoom-dock floating-dock" aria-label="Zoom controls"><button id="zoom-out" class="small-icon" aria-label="Zoom out">${icon('minus')}</button><span id="zoom-level">100%</span><button id="zoom-in" class="small-icon" aria-label="Zoom in">${icon('plus')}</button><span class="dock-divider"></span><button id="fit">Fit</button><span class="dock-divider"></span><button id="help" class="small-icon" aria-label="Keyboard help" aria-expanded="false">${icon('help')}</button></div>
   <div class="history-dock floating-dock" aria-label="Edit history"><button id="undo" class="small-icon" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button><button id="redo" class="small-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>${icon('redo')}</button></div>
   <div class="view-dock floating-dock" aria-label="View controls"><button id="journey" class="journey-button" aria-pressed="false" title="Walk a person through the data flow (P)">${icon('user')}<span>Journey</span></button><button id="flow" aria-pressed="true" title="Animate data flow along connections">${icon('flow')}<span>Flow</span></button><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
   <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add · Enter drops it <kbd>C</kbd> Connect</p><p><kbd>T</kbd> Text <kbd>N</kbd> Note <kbd>P</kbd> Journey</p><p>Double-click to rename · <kbd>Ctrl K</kbd> Commands</p><p><kbd>Esc</kbd> Deselect · stop</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><label class="quality-label">Rendering quality<select id="quality"><option value="1">Efficient · 1×</option><option value="1.5" selected>Balanced · 1.5×</option><option value="2">Sharp · 2×</option></select></label><p>Drag empty canvas to select. Shift-drag adds.<br>Hold Ctrl while dragging to skip guides.<br>Scroll to zoom. Right-drag to pan.</p></section>
-  <section id="context-menu" class="popover context-menu" aria-label="Selection actions" hidden><button data-action="duplicate">Duplicate</button><button data-action="tool-group">Group</button><button data-action="ungroup">Ungroup</button><div class="align-row" data-multi><button data-align="left" title="Align left edges">⇤</button><button data-align="center" title="Align centres horizontally">↔</button><button data-align="right" title="Align right edges">⇥</button><button data-align="top" title="Align top edges">⤒</button><button data-align="middle" title="Align middles">↕</button><button data-align="bottom" title="Align bottom edges">⤓</button></div><div class="align-row" data-multi><button data-align="distribute-x" title="Distribute horizontally">⋯ Space evenly ↔</button><button data-align="distribute-z" title="Distribute vertically">⋮ ↕</button></div><button data-action="delete">Delete</button><button data-action="fit">Fit view</button></section>
+  <section id="context-menu" class="popover context-menu" aria-label="Selection actions" hidden><button data-action="duplicate">Duplicate</button><button data-action="tool-group">Group</button><button data-action="ungroup">Ungroup</button><div class="align-row" data-multi><button data-align="left" title="Align left edges">⇤</button><button data-align="center" title="Align centres horizontally">↔</button><button data-align="right" title="Align right edges">⇥</button><button data-align="top" title="Align top edges">⤒</button><button data-align="middle" title="Align middles">↕</button><button data-align="bottom" title="Align bottom edges">⤓</button></div><div class="align-row" data-multi><button data-align="distribute-x" title="Distribute horizontally">⋯ Space evenly ↔</button><button data-align="distribute-z" title="Distribute vertically">⋮ ↕</button></div><button data-action="edge-active">Make active route</button><button data-action="edge-all-routes">Show all routes</button><button data-action="delete">Delete</button><button data-action="fit">Fit view</button></section>
   <div id="status" class="status" role="status">Ready</div><span id="count" class="board-count"></span>`;
 function element(id: string): HTMLElement {
   const result = document.getElementById(id);
@@ -365,7 +366,7 @@ function inspect(): void {
         ['ask', 'Asks me which way'],
         ...outgoing.map(
           (edge) =>
-            [`fixed:${edge.id}`, `Always ${branchName(edge.id)}`] as [
+            [`fixed:${edge.id}`, `Active route ${branchName(edge.id)}`] as [
               string,
               string,
             ],
@@ -415,6 +416,9 @@ function inspect(): void {
       field(`meta-${key}`).value = node.metadata?.[key] ?? '';
   }
   if (edge) {
+    const routes = routeActions();
+    element('edge-active').hidden = !routes.active;
+    element('edge-all-routes').hidden = !routes.all;
     inputElement('edge-label').value = edge.label;
     const options = current.nodes.map(
       (n) => [n.id, n.label] as [string, string],
@@ -567,6 +571,18 @@ for (const [id, create] of [
     });
 }
 element('quick-save').onclick = () => element('save').click();
+async function copyImage(): Promise<void> {
+  try {
+    notify('Capturing diagram…');
+    await copyPng(await scene.captureDiagram());
+    notify('Diagram image copied · paste it anywhere');
+  } catch (error) {
+    notify(
+      `Could not copy image: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+element('copy-image').onclick = () => void copyImage();
 element('quick-export').onclick = () => element('export').click();
 element('menu').onclick = () => {
   const menu = element('file-menu');
@@ -1346,6 +1362,41 @@ for (const key of [
     scene.selectEdge(id);
   };
 element('delete-edge').onclick = deleteSelection;
+/** Which route actions apply to the selected connection's fork. */
+function routeActions(): { active: boolean; all: boolean } {
+  const edge = current.edges.find((e) => e.id === selectedEdge);
+  if (!edge) return { active: false, all: false };
+  const fork =
+    current.edges.filter((e) => e.source === edge.source).length >= 2;
+  const node = current.nodes.find((n) => n.id === edge.source);
+  const fixed = node?.journey?.mode === 'fixed' ? node.journey.edge : undefined;
+  return { active: fork && fixed !== edge.id, all: fork && !!fixed };
+}
+/** Choose the connection a fork follows; the other branches dim and go still. */
+function setRoute(active: boolean): void {
+  const edge = current.edges.find((e) => e.id === selectedEdge);
+  const node = edge && current.nodes.find((n) => n.id === edge.source);
+  if (!edge || !node) return;
+  const value = { ...node };
+  if (active) value.journey = { mode: 'fixed', edge: edge.id };
+  else delete value.journey;
+  commit(
+    {
+      type: 'graph',
+      label: active ? 'Set active route' : 'Show all routes',
+      nodes: [{ id: node.id, value }],
+    },
+    [],
+  );
+  scene.selectEdge(edge.id);
+  notify(
+    active
+      ? `Active route: ${node.label} ${branchName(edge.id)}`
+      : `All routes from ${node.label} are active`,
+  );
+}
+element('edge-active').onclick = () => setRoute(true);
+element('edge-all-routes').onclick = () => setRoute(false);
 scene.onContextMenu = (x, y) => {
   const menu = element('context-menu');
   for (const row of menu.querySelectorAll<HTMLElement>('[data-multi]'))
@@ -1354,11 +1405,18 @@ scene.onContextMenu = (x, y) => {
     'button[data-action]',
   )) {
     const action = button.dataset.action;
+    const routes = routeActions();
     button.hidden = selectedEdge
-      ? action !== 'delete'
-      : action === 'delete' || action === 'duplicate'
-        ? !selectedIds.size
-        : false;
+      ? action === 'edge-active'
+        ? !routes.active
+        : action === 'edge-all-routes'
+          ? !routes.all
+          : action !== 'delete'
+      : action === 'edge-active' || action === 'edge-all-routes'
+        ? true
+        : action === 'delete' || action === 'duplicate'
+          ? !selectedIds.size
+          : false;
   }
   menu.hidden = false;
   menu.style.left = `${Math.min(x, innerWidth - 190)}px`;
@@ -1492,6 +1550,10 @@ window.addEventListener('keydown', (event) => {
         run: () => element(id).click(),
       })),
       { label: 'Play journey (P)', run: toggleJourney },
+      {
+        label: 'Copy diagram image (Ctrl+Shift+C)',
+        run: () => void copyImage(),
+      },
       ...alignments.map(([alignment, label]) => ({
         label,
         run: () => align(alignment),
@@ -1519,6 +1581,16 @@ window.addEventListener('keydown', (event) => {
   ) {
     event.preventDefault();
     travelHistory(event.shiftKey || event.key.toLowerCase() === 'y');
+    return;
+  }
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    event.shiftKey &&
+    event.key.toLowerCase() === 'c' &&
+    !isTextTarget(event.target)
+  ) {
+    event.preventDefault();
+    void copyImage();
     return;
   }
   if (

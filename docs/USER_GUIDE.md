@@ -16,6 +16,10 @@ Flow (view dock) animates data moving along every connection; turn it off for a 
 
 Forks and decisions: select a tile with two or more outgoing arrows and choose "Journey at this fork" in the inspector. "Takes every branch" splits the traveler, "Asks me which way" pauses it there and shows a chooser (click a branch or press 1–9), and "Always → …" follows one branch only. Flowchart Decision shapes ask by default. Name the arrows (for example Yes/No) and those names appear in the chooser. Because you choose each time, a branch may loop back for retries. Connections that share a side of a tile fork from, or merge into, that tile.
 
+Active routes: right-click an arrow that leaves a fork and choose Make active route (or use the buttons in the connection inspector). The other branches of that fork, and anything only they lead to, dim and stop flowing; the journey follows the active route. Show all routes switches the fork back.
+
+Copy image (top bar, or Ctrl+Shift+C) puts a sharp picture of the whole diagram on the clipboard, cropped to its content regardless of pan, zoom or open panels, ready to paste into chat, docs or slides. The native app uses `wl-copy` on Wayland (part of Omarchy) or `xclip` on X11.
+
 Text (`T`) and Sticky note (`N`) place an annotation where you click; double-clicking empty board also starts a text. Type, then Ctrl+Enter or click away to finish; Esc cancels a new annotation. Text wraps inside its box; resize the box or change Text size in the inspector. Notes take any colour.
 
 The palette button in the top bar switches theme: Cyberpunk (default), Solar Forge, Nord or Daylight. The choice, Flow and render quality are remembered on this machine.

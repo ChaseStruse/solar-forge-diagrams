@@ -322,6 +322,42 @@ async fn export_png(
     .map_err(|e| e.to_string())?
 }
 
+/// Put a PNG on the desktop clipboard with the session's clipboard tool.
+#[tauri::command]
+async fn copy_png(bytes: Vec<u8>) -> Result<(), String> {
+    if bytes.len() > 50_000_000 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err("Invalid PNG image".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
+        let (tool, args): (&str, &[&str]) = if wayland {
+            ("wl-copy", &["--type", "image/png"])
+        } else {
+            ("xclip", &["-selection", "clipboard", "-t", "image/png"])
+        };
+        // The tool forks a helper that keeps serving the clipboard and holds
+        // inherited pipes, so wait for the parent only and capture no output.
+        let mut child = std::process::Command::new(tool)
+            .args(args)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("Clipboard tool {tool} is unavailable: {e}"))?;
+        let mut input = child.stdin.take().ok_or("Clipboard input unavailable")?;
+        input.write_all(&bytes).map_err(|e| e.to_string())?;
+        drop(input);
+        let status = child.wait().map_err(|e| e.to_string())?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("{tool} could not copy the image"))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn export_svg(
     app: tauri::AppHandle,
@@ -445,6 +481,7 @@ fn main() {
             open_document,
             save_document,
             export_png,
+            copy_png,
             export_svg,
             read_recovery,
             write_recovery,

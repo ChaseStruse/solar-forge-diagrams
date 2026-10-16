@@ -7,7 +7,9 @@ arch=('x86_64')
 license=('LicenseRef-SolarForge' 'LicenseRef-AWS-Architecture-Icons' 'MIT' 'Apache-2.0')
 depends=('webkit2gtk-4.1' 'gtk3' 'xdg-desktop-portal')
 makedepends=('rust' 'bun' 'pkgconf' 'python')
-optdepends=('xdg-desktop-portal-gtk: file chooser backend when not provided by your desktop')
+optdepends=('xdg-desktop-portal-gtk: file chooser backend when not provided by your desktop'
+            'wl-clipboard: copy diagram images to the clipboard on Wayland'
+            'xclip: copy diagram images to the clipboard on X11')
 source=("$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP') # Run updpkgsums after generating the reviewed local archive.
 
