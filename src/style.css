@@ -1035,3 +1035,33 @@ input[type="color"] {
   background: color-mix(in srgb, var(--hot) 14%, transparent);
   box-shadow: 0 0 14px color-mix(in srgb, var(--hot) 35%, transparent);
 }
+.decision-chooser {
+  position: fixed;
+  z-index: 9;
+  width: 240px;
+  border-color: var(--hot);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--hot) 40%, transparent),
+    0 0 28px color-mix(in srgb, var(--hot) 30%, transparent),
+    0 16px 50px #0009;
+}
+.decision-chooser h2 {
+  font-size: 14px;
+  margin: 0 8px 10px;
+}
+.decision-chooser button {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 9px 8px;
+  font-size: 12px;
+  text-align: left;
+}
+.decision-chooser kbd {
+  min-width: 20px;
+  padding: 2px 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--accent-text);
+  text-align: center;
+}

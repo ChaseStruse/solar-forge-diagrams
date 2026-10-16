@@ -252,6 +252,15 @@ export class DiagramScene {
   public onSelectEdge: (id: string | undefined) => void = () => {};
   public onJourneyHop: (edgeId: string) => void = () => {};
   public onJourneyEnd: () => void = () => {};
+  public onJourneyBranches: (nodeId: string) => {
+    mode: 'all' | 'ask' | 'fixed';
+    edges: string[];
+  } = () => ({ mode: 'all', edges: [] });
+  public onJourneyChoose: (
+    nodeId: string,
+    edges: readonly string[],
+  ) => Promise<string | undefined> = async () => undefined;
+  public onJourneyCancelChoice: () => void = () => {};
   private journey: JourneyPlayer | undefined;
   /** Double-click on a node, a connection, or empty board. */
   public onEditRequest: (target: EditTarget) => void = () => {};
@@ -1662,10 +1671,9 @@ export class DiagramScene {
             radius: Math.max(tile.node.width, tile.node.depth) * 0.62,
           };
         },
-        outgoing: (id) =>
-          [...this.edgeIndex.values()]
-            .filter((edge) => edge.source === id)
-            .map((edge) => edge.id),
+        branches: (id) => this.onJourneyBranches(id),
+        choose: (id, edges) => this.onJourneyChoose(id, edges),
+        cancelChoice: () => this.onJourneyCancelChoice(),
         target: (id) => this.edgeIndex.get(id)?.target,
         onHop: (id) => this.onJourneyHop(id),
         onFinish: () => this.onJourneyEnd(),

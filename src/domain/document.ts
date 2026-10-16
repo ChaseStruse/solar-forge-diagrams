@@ -17,6 +17,11 @@ export interface DiagramNode {
   boundary?: 'account' | 'region' | 'vpc' | 'zone' | 'subnet';
   /** World-unit font size for text and notes. */
   fontSize?: number;
+  /**
+   * What a journey does where this node has several outgoing connections:
+   * walk them all, ask which way, or always take one connection.
+   */
+  journey?: { mode: 'all' | 'ask' } | { mode: 'fixed'; edge: string };
   metadata?: {
     region?: string;
     environment?: string;
@@ -124,6 +129,14 @@ export function parseDocument(json: string): DiagramDocument {
       const size = finite(n.fontSize);
       if (size < 4 || size > 400) throw Error('Invalid font size');
       node.fontSize = size;
+    }
+    if (n.journey !== undefined) {
+      const journey = record(n.journey);
+      if (journey.mode === 'all' || journey.mode === 'ask')
+        node.journey = { mode: journey.mode };
+      else if (journey.mode === 'fixed')
+        node.journey = { mode: 'fixed', edge: text(journey.edge, 'branch') };
+      else throw Error('Invalid journey branch mode');
     }
     if (n.metadata !== undefined) {
       const metadata = record(n.metadata);

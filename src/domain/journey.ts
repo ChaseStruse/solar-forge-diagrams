@@ -23,3 +23,26 @@ export function journeyStarts(
   const first = doc.edges[0]?.source;
   return first ? [first] : [];
 }
+
+export type BranchMode = 'all' | 'ask' | 'fixed';
+/**
+ * Which connections a journey follows out of a node. Decision shapes ask by
+ * default; everything else walks every branch. A fixed branch that no longer
+ * exists falls back to asking.
+ */
+export function journeyBranches(
+  doc: DiagramDocument,
+  nodeId: string,
+): { mode: BranchMode; edges: string[] } {
+  const edges = doc.edges.filter((e) => e.source === nodeId).map((e) => e.id);
+  const node = doc.nodes.find((n) => n.id === nodeId);
+  if (!node || edges.length < 2) return { mode: 'all', edges };
+  const setting = node.journey ?? {
+    mode: node.shape === 'decision' ? 'ask' : 'all',
+  };
+  if (setting.mode === 'fixed')
+    return edges.includes(setting.edge)
+      ? { mode: 'fixed', edges: [setting.edge] }
+      : { mode: 'ask', edges };
+  return { mode: setting.mode, edges };
+}

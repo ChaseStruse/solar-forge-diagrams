@@ -20,7 +20,11 @@ export interface JourneyHost {
   route(edgeId: string): Vector3[] | undefined;
   /** Top centre and footprint radius of a node. */
   node(id: string): { point: Vector3; radius: number } | undefined;
-  outgoing(nodeId: string): readonly string[];
+  /** Connections to follow out of a node, and whether to ask first. */
+  branches(nodeId: string): { mode: 'all' | 'ask' | 'fixed'; edges: string[] };
+  /** Ask which way to go; resolves undefined when dismissed. */
+  choose(nodeId: string, edges: readonly string[]): Promise<string | undefined>;
+  cancelChoice(): void;
   target(edgeId: string): string | undefined;
   onHop(edgeId: string): void;
   onFinish(): void;
@@ -53,6 +57,10 @@ export class JourneyPlayer {
   private dwells: { node: string; until: number }[] = [];
   private pulses: { mesh: Mesh; born: number; radius: number }[] = [];
   private walked = new Set<string>();
+  /** Decisions waiting for an answer; asked one at a time. */
+  private decisions: { node: string; edges: string[]; pulseAt: number }[] = [];
+  private asking = false;
+  private generation = 0;
   private starts: readonly string[] = [];
   private stopAnimation: (() => void) | undefined;
   private last = 0;
@@ -77,6 +85,10 @@ export class JourneyPlayer {
   }
   public stop(notify = true): void {
     const wasPlaying = this.playing;
+    this.generation++;
+    if (this.asking) this.host.cancelChoice();
+    this.asking = false;
+    this.decisions = [];
     this.stopAnimation?.();
     this.stopAnimation = undefined;
     for (const traveler of this.travelers) this.removeTraveler(traveler);
@@ -120,11 +132,37 @@ export class JourneyPlayer {
     for (const dwell of [...this.dwells]) {
       if (time < dwell.until) continue;
       this.dwells.splice(this.dwells.indexOf(dwell), 1);
-      for (const edge of this.host.outgoing(dwell.node)) {
+      const { mode, edges } = this.host.branches(dwell.node);
+      if (mode === 'ask') {
+        this.decisions.push({ node: dwell.node, edges, pulseAt: time + 900 });
+        continue;
+      }
+      for (const edge of edges) {
         if (this.walked.has(edge)) continue;
         this.walked.add(edge);
         this.depart(edge);
       }
+    }
+    // Keep a waiting decision visibly alive, and ask about the next one.
+    for (const decision of this.decisions)
+      if (time >= decision.pulseAt) {
+        this.pulse(decision.node, time);
+        decision.pulseAt = time + 900;
+      }
+    const next = this.decisions[0];
+    if (next && !this.asking) {
+      this.asking = true;
+      const generation = this.generation;
+      void this.host.choose(next.node, next.edges).then((edge) => {
+        if (generation !== this.generation) return;
+        this.asking = false;
+        this.decisions.shift();
+        // A chosen branch may be walked again: the person decides each time.
+        if (edge) {
+          this.walked.add(edge);
+          this.depart(edge);
+        }
+      });
     }
     for (const pulse of [...this.pulses]) {
       const age = (time - pulse.born) / PULSE;
@@ -138,7 +176,11 @@ export class JourneyPlayer {
       const material = pulse.mesh.material;
       if (material instanceof MeshBasicMaterial) material.opacity = 1 - age;
     }
-    if (!this.travelers.length && !this.dwells.length) {
+    if (
+      !this.travelers.length &&
+      !this.dwells.length &&
+      !this.decisions.length
+    ) {
       // Lap finished: rest a moment, then walk again.
       if (!this.restAt) this.restAt = time + REST;
       else if (time >= this.restAt) this.lap(time);

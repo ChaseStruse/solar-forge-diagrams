@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { DiagramDocument, DiagramNode } from '../src/domain/document';
-import { journeyStarts } from '../src/domain/journey';
+import { journeyBranches, journeyStarts } from '../src/domain/journey';
 
 const node = (id: string, serviceId?: string): DiagramNode => ({
   id,
@@ -60,4 +60,33 @@ test('a pure cycle still has somewhere to start, and an empty board has none', (
     ),
   ).toEqual(['a']);
   expect(journeyStarts(doc([node('a')], []))).toEqual([]);
+});
+
+test('forks walk every branch, decisions ask, and a fixed branch is followed alone', () => {
+  const graph = doc(
+    [node('ecr'), node('eks'), node('ecs')],
+    [
+      ['ecr', 'eks'],
+      ['ecr', 'ecs'],
+    ],
+  );
+  expect(journeyBranches(graph, 'ecr')).toEqual({
+    mode: 'all',
+    edges: ['e0', 'e1'],
+  });
+  const decision = graph.nodes[0];
+  if (!decision) throw Error('Missing node');
+  decision.shape = 'decision';
+  expect(journeyBranches(graph, 'ecr').mode).toBe('ask');
+  decision.journey = { mode: 'fixed', edge: 'e1' };
+  expect(journeyBranches(graph, 'ecr')).toEqual({
+    mode: 'fixed',
+    edges: ['e1'],
+  });
+  // The fixed branch was deleted: fall back to asking.
+  graph.edges.pop();
+  graph.edges.push({ id: 'e2', source: 'ecr', target: 'ecs', label: '' });
+  expect(journeyBranches(graph, 'ecr').mode).toBe('ask');
+  // A single way out never needs a decision.
+  expect(journeyBranches(graph, 'eks')).toEqual({ mode: 'all', edges: [] });
 });

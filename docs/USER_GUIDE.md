@@ -14,6 +14,8 @@ Choose Connect (`C`), then a source and target on the canvas (sides are chosen a
 
 Flow (view dock) animates data moving along every connection; turn it off for a static board. Journey (`P`) walks a person through the architecture: it starts at the selected tile, or at every User/Internet actor, or at every tile with no incoming arrow, follows each arrow once per lap, splits at forks, ripples each service it reaches and names the current hop in the status bar. P or Esc stops it.
 
+Forks and decisions: select a tile with two or more outgoing arrows and choose "Journey at this fork" in the inspector. "Takes every branch" splits the traveler, "Asks me which way" pauses it there and shows a chooser (click a branch or press 1–9), and "Always → …" follows one branch only. Flowchart Decision shapes ask by default. Name the arrows (for example Yes/No) and those names appear in the chooser. Because you choose each time, a branch may loop back for retries. Connections that share a side of a tile fork from, or merge into, that tile.
+
 Text (`T`) and Sticky note (`N`) place an annotation where you click; double-clicking empty board also starts a text. Type, then Ctrl+Enter or click away to finish; Esc cancels a new annotation. Text wraps inside its box; resize the box or change Text size in the inspector. Notes take any colour.
 
 The palette button in the top bar switches theme: Cyberpunk (default), Solar Forge, Nord or Daylight. The choice, Flow and render quality are remembered on this machine.

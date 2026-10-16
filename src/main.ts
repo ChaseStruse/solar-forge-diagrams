@@ -18,7 +18,7 @@ import {
 } from './domain/document';
 import type { Edit } from './domain/history';
 import { DocumentHistory } from './domain/history';
-import { journeyStarts } from './domain/journey';
+import { journeyBranches, journeyStarts } from './domain/journey';
 import { fontSize } from './domain/text';
 import {
   type Alignment,
@@ -52,7 +52,7 @@ root.innerHTML = `
   <section id="theme-menu" class="popover theme-menu" aria-label="Themes" hidden><p class="popover-caption">THEME</p><div id="theme-list"></div></section>
   <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add AWS service" title="Add AWS service (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-text" class="tool" aria-label="Text" aria-pressed="false" title="Text: click the board (T)">${icon('text')}<kbd>T</kbd></button><button id="tool-note" class="tool" aria-label="Sticky note" aria-pressed="false" title="Sticky note: click the board (N)">${icon('note')}<kbd>N</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
   <section id="component-palette" class="popover component-palette" aria-label="AWS components" hidden><div class="popover-heading"><h2>AWS components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a component to add it to your board.</p></section>
-  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
+  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label id="node-branch-row">Journey at this fork<select id="node-branch"></select></label><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
   <nav class="canvas-controls" aria-label="Canvas controls"><div class="zoom-dock floating-dock" aria-label="Zoom controls"><button id="zoom-out" class="small-icon" aria-label="Zoom out">${icon('minus')}</button><span id="zoom-level">100%</span><button id="zoom-in" class="small-icon" aria-label="Zoom in">${icon('plus')}</button><span class="dock-divider"></span><button id="fit">Fit</button><span class="dock-divider"></span><button id="help" class="small-icon" aria-label="Keyboard help" aria-expanded="false">${icon('help')}</button></div>
   <div class="history-dock floating-dock" aria-label="Edit history"><button id="undo" class="small-icon" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button><button id="redo" class="small-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>${icon('redo')}</button></div>
   <div class="view-dock floating-dock" aria-label="View controls"><button id="journey" class="journey-button" aria-pressed="false" title="Walk a person through the data flow (P)">${icon('user')}<span>Journey</span></button><button id="flow" aria-pressed="true" title="Animate data flow along connections">${icon('flow')}<span>Flow</span></button><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
@@ -352,6 +352,30 @@ function inspect(): void {
     annotation ? 'node-text' : 'node-label',
   );
   element('node-font-row').hidden = !annotation;
+  const outgoing = node
+    ? current.edges.filter((edge) => edge.source === node.id)
+    : [];
+  element('node-branch-row').hidden = outgoing.length < 2;
+  if (node && outgoing.length >= 2) {
+    const setting = node.journey;
+    fillOptions(
+      'node-branch',
+      [
+        ['all', 'Takes every branch'],
+        ['ask', 'Asks me which way'],
+        ...outgoing.map(
+          (edge) =>
+            [`fixed:${edge.id}`, `Always ${branchName(edge.id)}`] as [
+              string,
+              string,
+            ],
+        ),
+      ],
+      setting?.mode === 'fixed'
+        ? `fixed:${setting.edge}`
+        : (setting?.mode ?? journeyBranches(current, node.id).mode),
+    );
+  }
   if (node) {
     field('node-text').value = node.label;
     inputElement('node-font').value = String(fontSize(node));
@@ -632,6 +656,21 @@ field('node-font').onchange = () => {
     type: 'graph',
     label: 'Text size',
     nodes: [{ id: node.id, value: { ...node, fontSize: size } }],
+  });
+};
+field('node-branch').onchange = () => {
+  const node = current.nodes.find((n) => n.id === selected);
+  const value = field('node-branch').value;
+  if (!node) return;
+  const journey: NonNullable<DiagramNode['journey']> = value.startsWith(
+    'fixed:',
+  )
+    ? { mode: 'fixed', edge: value.slice(6) }
+    : { mode: value === 'ask' ? 'ask' : 'all' };
+  commit({
+    type: 'graph',
+    label: 'Journey branch',
+    nodes: [{ id: node.id, value: { ...node, journey } }],
   });
 };
 field('node-color').onchange = () => {
@@ -1114,6 +1153,77 @@ scene.onJourneyHop = (id) => {
 scene.onJourneyEnd = () => {
   element('journey').setAttribute('aria-pressed', 'false');
 };
+scene.onJourneyBranches = (id) => journeyBranches(current, id);
+/** Name a branch by its connection label, else by where it leads. */
+function branchName(edgeId: string): string {
+  const edge = current.edges.find((e) => e.id === edgeId);
+  if (!edge) return 'Connection';
+  const target = current.nodes.find((n) => n.id === edge.target)?.label ?? '';
+  return edge.label ? `${edge.label} → ${target}` : `→ ${target}`;
+}
+let chooser: { close: (edge?: string) => void } | undefined;
+scene.onJourneyChoose = (nodeId, edges) =>
+  new Promise((resolve) => {
+    const node = current.nodes.find((n) => n.id === nodeId);
+    const rect = scene.nodeScreenRect(nodeId);
+    const panel = document.createElement('section');
+    panel.className = 'popover decision-chooser';
+    panel.setAttribute('aria-label', 'Choose a branch');
+    const caption = document.createElement('p');
+    caption.className = 'popover-caption';
+    caption.textContent = 'DECISION';
+    const title = document.createElement('h2');
+    title.textContent = node?.label || 'Which way?';
+    panel.append(caption, title);
+    const close = (edge?: string) => {
+      panel.remove();
+      chooser = undefined;
+      resolve(edge);
+    };
+    edges.forEach((edge, index) => {
+      const button = document.createElement('button');
+      const key = document.createElement('kbd');
+      key.textContent = String(index + 1);
+      const name = document.createElement('span');
+      name.textContent = branchName(edge);
+      button.append(key, name);
+      button.onclick = () => close(edge);
+      panel.append(button);
+    });
+    document.body.append(panel);
+    const width = panel.offsetWidth;
+    const height = panel.offsetHeight;
+    const left = rect
+      ? rect.left + rect.width + 16
+      : innerWidth / 2 - width / 2;
+    const top = rect
+      ? rect.top + rect.height / 2 - height / 2
+      : innerHeight / 3;
+    panel.style.left = `${Math.max(12, Math.min(left, innerWidth - width - 12))}px`;
+    panel.style.top = `${Math.max(64, Math.min(top, innerHeight - height - 80))}px`;
+    chooser = { close };
+    notify(
+      `Decision at ${node?.label ?? 'a fork'} · choose a branch (1–${edges.length})`,
+    );
+  });
+scene.onJourneyCancelChoice = () => chooser?.close();
+// Number keys answer an open decision before any other shortcut.
+window.addEventListener(
+  'keydown',
+  (event) => {
+    if (!chooser || event.ctrlKey || event.metaKey || event.altKey) return;
+    const index = Number(event.key) - 1;
+    const buttons = document.querySelectorAll<HTMLButtonElement>(
+      '.decision-chooser button',
+    );
+    if (Number.isInteger(index) && buttons[index]) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      buttons[index].click();
+    }
+  },
+  { capture: true },
+);
 element('snap').onclick = () => {
   scene.snapping = !scene.snapping;
   element('snap').setAttribute('aria-pressed', String(scene.snapping));
