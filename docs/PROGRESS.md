@@ -14,6 +14,7 @@ First M1 slice: add command/history types and meaningful transaction tests, then
 | `41ee697` | M0 scaffold / first vertical slice | Bun, strict TS, Vite, Three.js, Tauri; portable validated documents; initial fixtures, UI, native file commands |
 | `50bfcb4` | M0 native verification / label efficiency | Bundled native assets, readable labels, shared atlases, native smoke runner, atomic writer tests |
 | `57cc746` | M0 performance / Wayland integration | Instanced label draws, batched connector buffer, XDG portal dialogs with parent handles, nested fixtures, snapped-drag check, size-budget enforcement |
+| `62b91fb` | M0 readability correction | Shallow camera angle, subtle depth, larger text and separated connection labels |
 | Documentation checkpoint following `57cc746` | Handoff | Exact milestone mapping in the plan, final native measurements, remaining work and launch instructions |
 
 The documentation checkpoint refers to prior implementation hashes to avoid self-referential commit IDs. All changes are local commits; nothing was pushed.

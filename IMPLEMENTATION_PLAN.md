@@ -197,7 +197,7 @@ Work sequentially through decision gates. Each milestone must leave a runnable a
 
 | Milestone | Implementation commits | Handoff state |
 | --- | --- | --- |
-| M0 | `41ee697`, `50bfcb4`, `57cc746` | Native functional gate passed: bundled WebGL scene, camera modes, snapped drag, native Save/Open/PNG, fixtures and initial measurements. Broader release performance/scaling acceptance remains tracked in progress notes. |
+| M0 | `41ee697`, `50bfcb4`, `57cc746`; readability correction `62b91fb` | Native functional gate passed: bundled WebGL scene, camera modes, snapped drag, native Save/Open/PNG, fixtures and initial measurements. Broader release performance/scaling acceptance remains tracked in progress notes. |
 | M1 | Schema/validation foundation in `41ee697`; full milestone pending | **Resume here:** typed commands/history first, then autosave/recovery, durable file handles, close protection, and migration policy. |
 | M2–M5 | No completion commits yet | Planned; initial palette/inspector/export prototypes do not establish milestone completion. |
 | M6 | None | Optional and deferred until M5. |
