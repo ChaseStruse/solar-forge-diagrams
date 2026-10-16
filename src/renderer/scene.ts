@@ -67,7 +67,7 @@ export class DiagramScene {
   }
   private readonly renderer = new WebGLRenderer({
     antialias: true,
-    alpha: true,
+    alpha: false,
   });
   private readonly content = new Group();
   private readonly geometry = new BoxGeometry(1, 1, 1);

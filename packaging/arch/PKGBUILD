@@ -1,7 +1,7 @@
 # Build from the reviewed local source archive; no application runtime server.
 pkgname=solar-forge-diagrams
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc='Native offline flowcharts and AWS architecture diagrams'
 arch=('x86_64')
 license=('LicenseRef-SolarForge' 'LicenseRef-AWS-Architecture-Icons' 'MIT' 'Apache-2.0')
@@ -22,7 +22,7 @@ build() {
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
-  install -Dm755 src-tauri/target/release/solar-forge-diagrams "$pkgdir/usr/bin/solar-forge-diagrams"
+  install -Dm755 "${CARGO_TARGET_DIR:-src-tauri/target}/release/solar-forge-diagrams" "$pkgdir/usr/bin/solar-forge-diagrams"
   install -Dm644 packaging/linux/com.solarforge.diagrams.desktop "$pkgdir/usr/share/applications/com.solarforge.diagrams.desktop"
   install -Dm644 assets/solar-forge.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/com.solarforge.diagrams.svg"
   install -Dm644 packaging/linux/com.solarforge.diagrams.xml "$pkgdir/usr/share/mime/packages/com.solarforge.diagrams.xml"
@@ -30,5 +30,6 @@ package() {
   install -Dm644 SOURCE_LICENSE.md "$pkgdir/usr/share/licenses/$pkgname/SOURCE_LICENSE.md"
   install -Dm644 THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
   cp -r artifacts/licenses "$pkgdir/usr/share/licenses/$pkgname/dependencies"
+  install -Dm644 docs/USER_GUIDE.md "$pkgdir/usr/share/doc/$pkgname/USER_GUIDE.md"
   install -Dm644 docs/DOCUMENTS.md "$pkgdir/usr/share/doc/$pkgname/DOCUMENTS.md"
 }

@@ -1,0 +1,27 @@
+{
+  "pid": 133266,
+  "processToOpenedBoardSeconds": 0.8525699279998662,
+  "sampleSeconds": 30.006417960999897,
+  "normalizedIdleCpuPercent": 0.8998075023514166,
+  "processTreeRssMiB": 603.11328125,
+  "processTreePssMiB": 350.146484375,
+  "gpuDeviceNodes": ["/dev/dri/renderD129"],
+  "processes": [
+    {
+      "pid": 133266,
+      "name": "solar-forge-dia",
+      "rssMiB": 188.17578125
+    },
+    {
+      "pid": 133297,
+      "name": "WebKitNetworkPr",
+      "rssMiB": 98.62890625
+    },
+    {
+      "pid": 133307,
+      "name": "WebKitWebProces",
+      "rssMiB": 316.30859375
+    }
+  ],
+  "note": "Packaged app with 500 nodes/750 edges including Layers DOM. RSS sums shared mappings; PSS apportions them; GPU allocations excluded. Startup includes accessibility polling overhead."
+}

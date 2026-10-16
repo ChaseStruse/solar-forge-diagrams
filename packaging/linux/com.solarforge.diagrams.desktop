@@ -5,6 +5,6 @@ Comment=Offline flowcharts and AWS architecture diagrams
 Exec=solar-forge-diagrams %f
 Icon=com.solarforge.diagrams
 Terminal=false
-Categories=Graphics;Development;
+Categories=Graphics;
 MimeType=application/x-solar-forge-diagram;
 StartupWMClass=solar-forge-diagrams

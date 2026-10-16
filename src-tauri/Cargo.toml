@@ -24,3 +24,6 @@ lto = "thin"
 codegen-units = 1
 strip = true
 panic = "abort"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "=2.0.2"

@@ -108,42 +108,84 @@ function showLayers(show: boolean): void {
   element('toggle-layers').setAttribute('aria-pressed', String(show));
   scene.setPanelVisible(show);
 }
+let layerSignature = '';
+const layerButtons = new Map<string, HTMLButtonElement>();
 function updateLayers(): void {
   const list = element('layer-tree');
-  list.replaceChildren();
-  for (const node of current.nodes) {
-    const button = document.createElement('button');
-    button.className = `layer-row ${node.kind}${selectedIds.has(node.id) ? ' selected' : ''}`;
-    button.setAttribute('aria-pressed', String(selectedIds.has(node.id)));
-    const symbol = document.createElement('span');
-    symbol.className = 'layer-symbol';
-    symbol.style.color = node.color;
-    symbol.textContent =
-      node.kind === 'group'
-        ? '▱'
-        : (findService(node.serviceId ?? node.label)?.glyph ?? '◇');
-    const label = document.createElement('span');
-    label.textContent = node.label;
-    button.append(symbol, label);
-    button.onclick = (event) => scene.select(node.id, event.shiftKey);
-    list.append(button);
-  }
-  if (current.edges.length) {
-    const heading = document.createElement('p');
-    heading.className = 'section-label connections-heading';
-    heading.textContent = 'CONNECTIONS';
-    list.append(heading);
-  }
-  for (const edge of current.edges) {
-    const row = document.createElement('button');
-    row.className = `layer-row connection-row${selectedEdge === edge.id ? ' selected' : ''}`;
-    row.textContent = `↳ ${edge.label || 'Connection'} · ${current.nodes.find((n) => n.id === edge.source)?.label ?? ''} → ${current.nodes.find((n) => n.id === edge.target)?.label ?? ''}`;
-    row.onclick = () => {
-      scene.selectMany([]);
-      selectedEdge = edge.id;
-      inspect();
+  const signature = JSON.stringify([
+    current.nodes.map((n) => [
+      n.id,
+      n.label,
+      n.color,
+      n.parentId,
+      n.serviceId,
+      n.kind,
+    ]),
+    current.edges.map((e) => [e.id, e.label, e.source, e.target]),
+  ]);
+  if (signature !== layerSignature) {
+    layerSignature = signature;
+    list.replaceChildren();
+    layerButtons.clear();
+    const names = new Map(current.nodes.map((node) => [node.id, node.label]));
+    const children = new Map<string | undefined, DiagramNode[]>();
+    for (const node of current.nodes) {
+      const entries = children.get(node.parentId) ?? [];
+      entries.push(node);
+      children.set(node.parentId, entries);
+    }
+    const ordered: { node: DiagramNode; depth: number }[] = [];
+    const visit = (parent: string | undefined, depth: number) => {
+      for (const node of children.get(parent) ?? []) {
+        ordered.push({ node, depth });
+        visit(node.id, depth + 1);
+      }
     };
-    list.append(row);
+    visit(undefined, 0);
+    for (const { node, depth } of ordered) {
+      const button = document.createElement('button');
+      button.className = `layer-row ${node.kind}${selectedIds.has(node.id) ? ' selected' : ''}`;
+      button.setAttribute('aria-pressed', String(selectedIds.has(node.id)));
+      const symbol = document.createElement('span');
+      symbol.className = 'layer-symbol';
+      symbol.style.color = node.color;
+      symbol.textContent =
+        node.kind === 'group'
+          ? '▱'
+          : (findService(node.serviceId ?? node.label)?.glyph ?? '◇');
+      const label = document.createElement('span');
+      label.textContent = node.label;
+      button.append(symbol, label);
+      button.style.paddingLeft = `${8 + depth * 12}px`;
+      layerButtons.set(`node:${node.id}`, button);
+      button.onclick = (event) => scene.select(node.id, event.shiftKey);
+      list.append(button);
+    }
+    if (current.edges.length) {
+      const heading = document.createElement('p');
+      heading.className = 'section-label connections-heading';
+      heading.textContent = 'CONNECTIONS';
+      list.append(heading);
+    }
+    for (const edge of current.edges) {
+      const row = document.createElement('button');
+      row.className = `layer-row connection-row${selectedEdge === edge.id ? ' selected' : ''}`;
+      row.textContent = `↳ ${edge.label || 'Connection'} · ${names.get(edge.source) ?? ''} → ${names.get(edge.target) ?? ''}`;
+      row.onclick = () => {
+        scene.selectMany([]);
+        selectedEdge = edge.id;
+        inspect();
+      };
+      list.append(row);
+      layerButtons.set(`edge:${edge.id}`, row);
+    }
+  }
+  for (const [key, button] of layerButtons) {
+    const active = key.startsWith('node:')
+      ? selectedIds.has(key.slice(5))
+      : selectedEdge === key.slice(5);
+    button.classList.toggle('selected', active);
+    button.setAttribute('aria-pressed', String(active));
   }
 }
 async function refreshRecents(): Promise<void> {

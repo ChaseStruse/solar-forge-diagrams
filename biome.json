@@ -7,7 +7,8 @@
       "benchmarks/**",
       "*.json",
       "index.html",
-      "scripts/**"
+      "scripts/**",
+      "!!artifacts"
     ]
   },
   "formatter": {

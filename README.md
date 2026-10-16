@@ -30,7 +30,7 @@ The opt-in smoke check (debug builds, or release builds compiled with `--feature
 
 ## Current checkpoint
 
-M0 native feasibility and the M1 durable-document workflows are implemented. The editor supports undo/redo, Save/Save As with native session handles, debounced recovery snapshots, restart recovery, and save/discard/cancel close protection. M2 editing workflows are in progress; see `docs/PROGRESS.md` for current validation and remaining milestones. Document and recovery behavior is described in [docs/DOCUMENTS.md](docs/DOCUMENTS.md).
+M0/M1 native feasibility and durable-document workflows pass functional checks. Manual editing, grouping, flowcharts, AWS catalog/templates, metadata, command search, PNG/SVG exports and packaging are implemented. Native workflow checks pass; **release performance acceptance remains open**, including scheduled input latency and process memory. See [progress](docs/PROGRESS.md), [document/recovery behavior](docs/DOCUMENTS.md), and [build/package instructions](docs/BUILDING.md).
 
 The Linux file chooser uses XDG desktop portals. Omarchy must have its normal portal service and file-chooser backend available; the app does not edit desktop configuration.
 

@@ -424,6 +424,15 @@ fn main() {
             file.try_lock()
                 .map_err(|_| "Solar Forge Diagrams is already running")?;
             app.manage(RecoveryLock { _file: file });
+            #[cfg(target_os = "linux")]
+            if let Some(window) = app.get_webview_window("main") {
+                window.with_webview(|webview| {
+                    use webkit2gtk::{WebContextExt, WebViewExt};
+                    if let Some(context) = webview.inner().context() {
+                        context.set_cache_model(webkit2gtk::CacheModel::DocumentViewer);
+                    }
+                })?;
+            }
             queue_arguments(
                 app.handle(),
                 std::env::args().collect(),
