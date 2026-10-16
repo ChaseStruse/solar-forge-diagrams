@@ -45,7 +45,7 @@ root.innerHTML = `
   <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="export">Export PNG ${icon('arrow')}</button><button id="export-svg">Export SVG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">RECENT DIAGRAMS</p><div id="recent-files"></div><div class="menu-divider"></div><p class="popover-caption">TEMPLATES</p><button id="example-starter">Two-service starter</button><button id="example-serverless">Serverless architecture</button><div id="templates"></div></section>
   <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add AWS service" title="Add AWS service (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
   <section id="component-palette" class="popover component-palette" aria-label="AWS components" hidden><div class="popover-heading"><h2>AWS components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a component to add it to your board.</p></section>
-  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label">Label</label><input id="node-label" maxlength="1000"><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
+  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label">Label</label><input id="node-label" maxlength="1000"><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
   <nav class="canvas-controls" aria-label="Canvas controls"><div class="zoom-dock floating-dock" aria-label="Zoom controls"><button id="zoom-out" class="small-icon" aria-label="Zoom out">${icon('minus')}</button><span id="zoom-level">100%</span><button id="zoom-in" class="small-icon" aria-label="Zoom in">${icon('plus')}</button><span class="dock-divider"></span><button id="fit">Fit</button><span class="dock-divider"></span><button id="help" class="small-icon" aria-label="Keyboard help" aria-expanded="false">${icon('help')}</button></div>
   <div class="history-dock floating-dock" aria-label="Edit history"><button id="undo" class="small-icon" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button><button id="redo" class="small-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>${icon('redo')}</button></div>
   <div class="view-dock floating-dock" aria-label="View controls"><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
@@ -171,11 +171,7 @@ function updateLayers(): void {
       const row = document.createElement('button');
       row.className = `layer-row connection-row${selectedEdge === edge.id ? ' selected' : ''}`;
       row.textContent = `↳ ${edge.label || 'Connection'} · ${names.get(edge.source) ?? ''} → ${names.get(edge.target) ?? ''}`;
-      row.onclick = () => {
-        scene.selectMany([]);
-        selectedEdge = edge.id;
-        inspect();
-      };
+      row.onclick = () => scene.selectEdge(edge.id);
       list.append(row);
       layerButtons.set(`edge:${edge.id}`, row);
     }
@@ -313,8 +309,8 @@ function inspect(): void {
     );
     fillOptions('edge-source', options, edge.source);
     fillOptions('edge-target', options, edge.target);
-    field('edge-sourcePort').value = edge.sourcePort ?? 'east';
-    field('edge-targetPort').value = edge.targetPort ?? 'west';
+    field('edge-sourcePort').value = edge.sourcePort ?? '';
+    field('edge-targetPort').value = edge.targetPort ?? '';
     field('edge-routing').value = edge.routing ?? 'horizontal';
     inputElement('edge-bend').value = String(edge.bend ?? 0);
   }
@@ -334,6 +330,12 @@ scene.onSelect = (node) => {
   selected = node?.id;
   selectedIds = new Set(scene.selection);
   selectedEdge = undefined;
+  inspect();
+};
+scene.onSelectEdge = (id) => {
+  selected = undefined;
+  selectedIds = new Set();
+  selectedEdge = id;
   inspect();
 };
 scene.onMove = (id, from, to) => {
@@ -541,8 +543,6 @@ function deleteSelection(): void {
       },
       [],
     );
-    selectedEdge = undefined;
-    inspect();
     return;
   }
   if (!selectedIds.size) return;
@@ -555,12 +555,15 @@ function travelHistory(redo: boolean): void {
   const edit = redo ? history.redo() : history.undo();
   if (!edit) return;
   const selection = [...selectedIds];
+  const edge = selectedEdge;
   if (edit.type === 'move') scene.refreshPosition(edit.id);
   else {
     scene.load(current);
     scene.selectMany(
       selection.filter((id) => current.nodes.some((node) => node.id === id)),
     );
+    if (edge && current.edges.some((e) => e.id === edge))
+      scene.selectEdge(edge);
   }
   updateHeader();
   inspect();
@@ -686,12 +689,15 @@ function commit(edit: Edit, ids: readonly string[] = [...selectedIds]): void {
   inspect();
   notify(edit.type === 'graph' ? edit.label : `Updated ${edit.type}`);
 }
-scene.onResize = (id, from, to) => {
-  const node = current.nodes.find((n) => n.id === id);
-  if (!node) return;
-  const value = { ...node, ...to };
-  Object.assign(node, from);
-  commit({ type: 'graph', label: 'Resize component', nodes: [{ id, value }] });
+scene.onResize = (changes) => {
+  const nodes = changes.flatMap(({ id, from, to }) => {
+    const node = current.nodes.find((n) => n.id === id);
+    if (!node) return [];
+    const value = { ...node, ...to };
+    Object.assign(node, from);
+    return [{ id, value }];
+  });
+  commit({ type: 'graph', label: 'Resize component', nodes });
 };
 scene.onMoves = (moves) => {
   const nodes = moves.flatMap((move) => {
@@ -709,12 +715,13 @@ scene.onConnect = (source, sourcePort, target, targetPort) => {
     return;
   }
   const id = crypto.randomUUID();
+  const value: DiagramEdge = { id, source, target, label: '' };
+  if (sourcePort) value.sourcePort = sourcePort;
+  if (targetPort) value.targetPort = targetPort;
   commit({
     type: 'graph',
     label: 'Connect components',
-    edges: [
-      { id, value: { id, source, target, sourcePort, targetPort, label: '' } },
-    ],
+    edges: [{ id, value }],
   });
   selectTool('select');
 };
@@ -842,9 +849,10 @@ for (const key of [
         return;
       }
       value.bend = bend;
-    } else if (key === 'sourcePort' || key === 'targetPort')
-      value[key] = input as Port;
-    else if (key === 'routing')
+    } else if (key === 'sourcePort' || key === 'targetPort') {
+      if (input) value[key] = input as Port;
+      else delete value[key];
+    } else if (key === 'routing')
       value.routing = input as NonNullable<DiagramEdge['routing']>;
     else value[key] = input.slice(0, 1000);
     const id = edge.id;
@@ -852,12 +860,19 @@ for (const key of [
       { type: 'graph', label: 'Edit connection', edges: [{ id, value }] },
       [],
     );
-    selectedEdge = id;
-    inspect();
+    scene.selectEdge(id);
   };
 element('delete-edge').onclick = deleteSelection;
 scene.onContextMenu = (x, y) => {
   const menu = element('context-menu');
+  for (const button of menu.querySelectorAll<HTMLButtonElement>('button')) {
+    const action = button.dataset.action;
+    button.hidden = selectedEdge
+      ? action !== 'delete'
+      : action === 'delete' || action === 'duplicate'
+        ? !selectedIds.size
+        : false;
+  }
   menu.hidden = false;
   menu.style.left = `${Math.min(x, innerWidth - 190)}px`;
   menu.style.top = `${Math.min(y, innerHeight - 250)}px`;
@@ -1045,6 +1060,8 @@ window.addEventListener('beforeunload', (event) => {
   if (dirty) event.preventDefault();
 });
 window.addEventListener('pagehide', () => scene.dispose(), { once: true });
+if (import.meta.env.DEV)
+  Object.assign(window, { solarForge: { scene, document: () => current } });
 function adaptViewport(): void {
   if (innerWidth < 800 && layersVisible) showLayers(false);
 }
