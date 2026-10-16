@@ -201,10 +201,10 @@ export function insertionSlot(
 ): { x: number; z: number } {
   const index = new Map(doc.nodes.map((n) => [n.id, n]));
   const occupied = doc.nodes
-    .filter((n) => n.kind === 'service')
+    .filter((n) => n.kind !== 'group')
     .map((node) => ({ node, p: worldPosition(node, index) }));
   const stepX = Math.max(220, width + 60),
-    stepZ = Math.max(170, depth + 70);
+    stepZ = Math.max(200, depth + 100);
   for (let ring = 0; ring < 150; ring++)
     for (let z = -ring; z <= ring; z++)
       for (let x = -ring; x <= ring; x++) {
@@ -217,7 +217,8 @@ export function insertionSlot(
           occupied.every(
             ({ node, p }) =>
               Math.abs(point.x - p.x) > (width + node.width) / 2 + 25 ||
-              Math.abs(point.z - p.z) > (depth + node.depth) / 2 + 50,
+              // Room below each tile for its caption.
+              Math.abs(point.z - p.z) > (depth + node.depth) / 2 + 90,
           )
         )
           return point;

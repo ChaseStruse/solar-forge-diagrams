@@ -18,6 +18,7 @@ import {
 } from './domain/document';
 import type { Edit } from './domain/history';
 import { DocumentHistory } from './domain/history';
+import { journeyStarts } from './domain/journey';
 import { fontSize } from './domain/text';
 import {
   type Alignment,
@@ -54,7 +55,7 @@ root.innerHTML = `
   <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
   <nav class="canvas-controls" aria-label="Canvas controls"><div class="zoom-dock floating-dock" aria-label="Zoom controls"><button id="zoom-out" class="small-icon" aria-label="Zoom out">${icon('minus')}</button><span id="zoom-level">100%</span><button id="zoom-in" class="small-icon" aria-label="Zoom in">${icon('plus')}</button><span class="dock-divider"></span><button id="fit">Fit</button><span class="dock-divider"></span><button id="help" class="small-icon" aria-label="Keyboard help" aria-expanded="false">${icon('help')}</button></div>
   <div class="history-dock floating-dock" aria-label="Edit history"><button id="undo" class="small-icon" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button><button id="redo" class="small-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>${icon('redo')}</button></div>
-  <div class="view-dock floating-dock" aria-label="View controls"><button id="flow" aria-pressed="true" title="Animate data flow along connections">${icon('flow')}<span>Flow</span></button><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
+  <div class="view-dock floating-dock" aria-label="View controls"><button id="journey" class="journey-button" aria-pressed="false" title="Walk a person through the data flow (P)">${icon('user')}<span>Journey</span></button><button id="flow" aria-pressed="true" title="Animate data flow along connections">${icon('flow')}<span>Flow</span></button><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
   <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add a service <kbd>Esc</kbd> Deselect</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><label class="quality-label">Rendering quality<select id="quality"><option value="1">Efficient · 1×</option><option value="1.5" selected>Balanced · 1.5×</option><option value="2">Sharp · 2×</option></select></label><p>Drag empty canvas to select. Shift-drag adds.<br>Scroll to zoom. Right-drag to pan.</p></section>
   <section id="context-menu" class="popover context-menu" aria-label="Selection actions" hidden><button data-action="duplicate">Duplicate</button><button data-action="tool-group">Group</button><button data-action="ungroup">Ungroup</button><div class="align-row" data-multi><button data-align="left" title="Align left edges">⇤</button><button data-align="center" title="Align centres horizontally">↔</button><button data-align="right" title="Align right edges">⇥</button><button data-align="top" title="Align top edges">⤒</button><button data-align="middle" title="Align middles">↕</button><button data-align="bottom" title="Align bottom edges">⤓</button></div><div class="align-row" data-multi><button data-align="distribute-x" title="Distribute horizontally">⋯ Space evenly ↔</button><button data-align="distribute-z" title="Distribute vertically">⋮ ↕</button></div><button data-action="delete">Delete</button><button data-action="fit">Fit view</button></section>
   <div id="status" class="status" role="status">Ready</div><span id="count" class="board-count"></span>`;
@@ -1083,6 +1084,36 @@ try {
   if (localStorage.getItem('solar-forge-flow') === '0') setFlow(false);
 } catch {}
 element('flow').onclick = () => setFlow(!scene.flow);
+function toggleJourney(): void {
+  if (scene.journeyPlaying) {
+    scene.stopJourney();
+    return;
+  }
+  const starts = journeyStarts(current, selected);
+  if (!starts.length) {
+    notify('Connect some components first, then press Journey.');
+    return;
+  }
+  scene.playJourney(starts);
+  element('journey').setAttribute('aria-pressed', 'true');
+  const names = starts
+    .map((id) => current.nodes.find((n) => n.id === id)?.label)
+    .join(', ');
+  notify(`Journey from ${names} · P or Esc to stop`);
+}
+element('journey').onclick = toggleJourney;
+scene.onJourneyHop = (id) => {
+  const edge = current.edges.find((e) => e.id === id);
+  if (!edge) return;
+  const name = (nodeId: string) =>
+    current.nodes.find((n) => n.id === nodeId)?.label ?? '';
+  notify(
+    `${name(edge.source)} → ${name(edge.target)}${edge.label ? ` · ${edge.label}` : ''}`,
+  );
+};
+scene.onJourneyEnd = () => {
+  element('journey').setAttribute('aria-pressed', 'false');
+};
 element('snap').onclick = () => {
   scene.snapping = !scene.snapping;
   element('snap').setAttribute('aria-pressed', String(scene.snapping));
@@ -1350,6 +1381,7 @@ window.addEventListener('keydown', (event) => {
           id,
         run: () => element(id).click(),
       })),
+      { label: 'Play journey (P)', run: toggleJourney },
       ...alignments.map(([alignment, label]) => ({
         label,
         run: () => align(alignment),
@@ -1397,6 +1429,10 @@ window.addEventListener('keydown', (event) => {
   }
   if (event.key === 'Escape') {
     closeEditor?.(false);
+    if (scene.journeyPlaying) {
+      scene.stopJourney();
+      return;
+    }
     scene.cancelInteraction();
     element('context-menu').hidden = true;
     selectTool('select');
@@ -1444,6 +1480,7 @@ window.addEventListener('keydown', (event) => {
   if (event.key.toLowerCase() === 'v') selectTool('select');
   if (event.key.toLowerCase() === 'c') element('tool-connect').click();
   if (event.key.toLowerCase() === 'm') selectTool('pan');
+  if (event.key.toLowerCase() === 'p') toggleJourney();
   if (event.key.toLowerCase() === 't') element('tool-text').click();
   if (event.key.toLowerCase() === 'n') element('tool-note').click();
   if (event.key === 'Enter' && selected) {

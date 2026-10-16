@@ -42,7 +42,7 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
     width = Math.max(200, xs.reduce((a, b) => Math.max(a, b), 0) - minX + 50),
     height = Math.max(160, zs.reduce((a, b) => Math.max(a, b), 0) - minZ + 50);
   const icons = new Map<string, string>();
-  const assets = import.meta.glob<string>('../../assets/aws/*.svg', {
+  const assets = import.meta.glob<string>('../../assets/*/*.svg', {
     query: '?raw',
     import: 'default',
   });
@@ -55,7 +55,7 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
   ];
   await Promise.all(
     needed.map(async (asset) => {
-      const load = assets[`../../assets/aws/${asset}`];
+      const load = assets[`../../assets/${asset}`];
       if (!load) throw Error('Missing bundled export icon');
       const bytes = new TextEncoder().encode(await load());
       let binary = '';

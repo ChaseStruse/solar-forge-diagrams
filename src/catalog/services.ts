@@ -187,9 +187,38 @@ export const services: ComponentDefinition[] = [
     category,
     aliases,
     kind: 'service' as const,
-    asset: `${file.toLowerCase()}.svg`,
+    asset: `aws/${file.toLowerCase()}.svg`,
     icon: new URL(`../../assets/aws/${file.toLowerCase()}.svg`, import.meta.url)
       .href,
+  })),
+  ...(
+    [
+      [
+        'user',
+        'User',
+        'A person using the system',
+        'person customer client human',
+        '#3f8cff',
+      ],
+      [
+        'internet',
+        'Internet',
+        'Clients on the public internet',
+        'web browser clients public',
+        '#5a6b86',
+      ],
+    ] as const
+  ).map(([id, label, description, aliases, color]) => ({
+    id: `actor.${id}`,
+    label,
+    color,
+    glyph: id === 'user' ? '☺' : '◍',
+    description,
+    category: 'Actors',
+    aliases: `actor ${aliases}`,
+    kind: 'service' as const,
+    asset: `actors/${id}.svg`,
+    icon: new URL(`../../assets/actors/${id}.svg`, import.meta.url).href,
   })),
   {
     id: 'note.text',

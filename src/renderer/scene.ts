@@ -48,6 +48,7 @@ import {
 import { defaultTheme, type ScenePalette } from '../themes';
 import { createAnnotation, NOTE_HEIGHT } from './annotations';
 import { createBackdrop } from './backdrop';
+import { JourneyPlayer } from './journey';
 import { LabelAtlas } from './labels';
 import {
   nodesInSelectionRect,
@@ -234,6 +235,9 @@ export class DiagramScene {
   private edgeColors: Float32Array<ArrayBufferLike> = new Float32Array();
   private edgeColorBuffer: InterleavedBuffer | undefined;
   public onSelectEdge: (id: string | undefined) => void = () => {};
+  public onJourneyHop: (edgeId: string) => void = () => {};
+  public onJourneyEnd: () => void = () => {};
+  private journey: JourneyPlayer | undefined;
   /** Double-click on a node, a connection, or empty board. */
   public onEditRequest: (target: EditTarget) => void = () => {};
   public onPlace: (tool: 'text' | 'note', x: number, z: number) => void =
@@ -454,6 +458,7 @@ export class DiagramScene {
     this.pan = undefined;
     this.connectionStart = undefined;
     this.clearPreview();
+    this.stopJourney();
     this.hoveredEdge = undefined;
     this.selectedEdge = undefined;
     this.document = document;
@@ -1596,6 +1601,56 @@ export class DiagramScene {
       this.render();
     });
   }
+  /** Walk a person along the arrows from the given nodes, looping until stopped. */
+  public playJourney(starts: readonly string[]): void {
+    this.journey?.dispose();
+    this.journey = new JourneyPlayer(
+      {
+        add: (object) => this.scene.add(object),
+        remove: (object) => this.scene.remove(object),
+        animate: (step) => this.animate(step),
+        route: (id) => {
+          const edge = this.edgeIndex.get(id);
+          const source = edge && this.tiles.get(edge.source);
+          const target = edge && this.tiles.get(edge.target);
+          if (!edge || !source || !target) return;
+          const y =
+            Math.max(source.group.position.y, target.group.position.y) + 8;
+          return routeEdge(edge, this.nodeIndex).points.map(
+            (p) => new Vector3(p.x, y, p.z),
+          );
+        },
+        node: (id) => {
+          const tile = this.tiles.get(id);
+          if (!tile) return;
+          const point = tile.group.position.clone();
+          point.y += pickHeight(tile.node) / 2 + 1;
+          return {
+            point,
+            radius: Math.max(tile.node.width, tile.node.depth) * 0.62,
+          };
+        },
+        outgoing: (id) =>
+          [...this.edgeIndex.values()]
+            .filter((edge) => edge.source === id)
+            .map((edge) => edge.id),
+        target: (id) => this.edgeIndex.get(id)?.target,
+        onHop: (id) => this.onJourneyHop(id),
+        onFinish: () => this.onJourneyEnd(),
+      },
+      this.palette,
+    );
+    this.journey.start(starts);
+  }
+  public stopJourney(): void {
+    this.journey?.dispose();
+    const playing = this.journey?.playing;
+    this.journey = undefined;
+    if (playing !== undefined) this.onJourneyEnd();
+  }
+  public get journeyPlaying(): boolean {
+    return this.journey?.playing ?? false;
+  }
   /** Toggle the marching data-flow dashes on every connection. */
   public setFlow(on: boolean): void {
     this.flowing = on;
@@ -1764,6 +1819,7 @@ export class DiagramScene {
     this.tileOutline.dispose();
     this.haloMaterial.dispose();
     this.flowMaterial.dispose();
+    this.journey?.dispose();
     this.showGuides([]);
     this.guideMaterial.dispose();
     this.animators.clear();

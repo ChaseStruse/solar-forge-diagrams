@@ -1029,3 +1029,9 @@ input[type="color"] {
   padding: 3px;
   cursor: pointer;
 }
+.view-dock .journey-button[aria-pressed="true"] {
+  border-color: var(--hot);
+  color: var(--hot);
+  background: color-mix(in srgb, var(--hot) 14%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--hot) 35%, transparent);
+}
