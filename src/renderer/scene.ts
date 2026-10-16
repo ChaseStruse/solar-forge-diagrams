@@ -10,15 +10,10 @@ import {
   Group,
   type InterleavedBuffer,
   InterleavedBufferAttribute,
-  Line,
-  LineBasicMaterial,
-  LineSegments,
   Mesh,
-  MeshBasicMaterial,
   MeshLambertMaterial,
   type Object3D,
   Plane,
-  PlaneGeometry,
   Raycaster,
   Scene,
   Vector2,
@@ -37,11 +32,13 @@ import type {
 import { worldPosition } from '../domain/document';
 import { createBackdrop } from './backdrop';
 import { LabelAtlas } from './labels';
+import { TileDetails } from './tile-details';
 import { BoardView, type ViewMode } from './view';
 
 export type { ViewMode } from './view';
 
 interface Tile {
+  index: number;
   node: DiagramNode;
   group: Group;
   material: MeshLambertMaterial;
@@ -65,21 +62,7 @@ export class DiagramScene {
   private readonly content = new Group();
   private readonly geometry = new BoxGeometry(1, 1, 1);
   private readonly tileOutline = new EdgesGeometry(this.geometry);
-  private readonly outlineMaterial = new LineBasicMaterial({
-    color: '#778895',
-    transparent: true,
-    opacity: 0.7,
-  });
-  private readonly insetGeometry = new PlaneGeometry(1, 1);
-  private readonly insetMaterial = new MeshLambertMaterial({
-    color: '#345064',
-  });
-  private readonly shadowMaterial = new MeshBasicMaterial({
-    color: '#02080d',
-    transparent: true,
-    opacity: 0.4,
-    depthWrite: false,
-  });
+  private details: TileDetails | undefined;
   private readonly edgeMaterial = new LineMaterial({
     color: '#ffe1a2',
     linewidth: 1.6,
@@ -118,6 +101,7 @@ export class DiagramScene {
   private pan: { x: number; z: number } | undefined;
   private selected: string | undefined;
   private disposed = false;
+  private fitted = false;
   public onSelect: (node: DiagramNode | undefined) => void = () => {};
   public onMove: (
     id: string,
@@ -180,16 +164,9 @@ export class DiagramScene {
     this.setView('isometric');
   }
   private releaseContent(): void {
-    this.content.traverse((object) => {
-      if (
-        object instanceof Mesh &&
-        object.material instanceof MeshLambertMaterial &&
-        object.material !== this.insetMaterial
-      )
-        object.material.dispose();
-      if (object instanceof Line && object.geometry !== this.tileOutline)
-        object.geometry.dispose();
-    });
+    for (const tile of this.tiles.values()) tile.material.dispose();
+    this.details?.dispose();
+    this.details = undefined;
     this.edgeGeometry?.dispose();
     this.edgeGeometry = undefined;
     this.edgeBuffer = undefined;
@@ -205,7 +182,12 @@ export class DiagramScene {
   public load(document: DiagramDocument): void {
     this.releaseContent();
     this.selected = undefined;
-    for (const node of document.nodes) {
+    this.details = new TileDetails(
+      document.nodes.length,
+      this.tileOutline.getAttribute('position'),
+    );
+    this.content.add(this.details.root);
+    for (const [index, node] of document.nodes.entries()) {
       this.nodeIndex.set(node.id, node);
       const group = new Group();
       const material = new MeshLambertMaterial({
@@ -218,20 +200,7 @@ export class DiagramScene {
       mesh.scale.set(node.width, node.kind === 'group' ? 2 : 24, node.depth);
       mesh.userData.nodeId = node.id;
       group.add(mesh);
-      const outline = new LineSegments(this.tileOutline, this.outlineMaterial);
-      outline.scale.copy(mesh.scale);
-      group.add(outline);
       if (node.kind === 'service') {
-        const inset = new Mesh(this.insetGeometry, this.insetMaterial);
-        inset.rotation.x = -Math.PI / 2;
-        inset.scale.set(node.width * 0.82, node.depth * 0.76, 1);
-        inset.position.y = 12.5;
-        group.add(inset);
-        const shadow = new Mesh(this.insetGeometry, this.shadowMaterial);
-        shadow.rotation.x = -Math.PI / 2;
-        shadow.scale.set(node.width * 1.04, node.depth * 1.05, 1);
-        shadow.position.set(8, -14, 11);
-        group.add(shadow);
         const glyph = this.labels.create(
           serviceGlyph(node.label),
           this.camera.zoom,
@@ -256,7 +225,7 @@ export class DiagramScene {
       );
       group.add(label);
       this.content.add(group);
-      this.tiles.set(node.id, { node, group, material, label });
+      this.tiles.set(node.id, { index, node, group, material, label });
     }
     const positions = new Float32Array(document.edges.length * 30);
     this.edgePositions = new BufferAttribute(positions, 3);
@@ -294,6 +263,7 @@ export class DiagramScene {
     for (const tile of this.tiles.values()) {
       const p = worldPosition(tile.node, this.nodeIndex);
       tile.group.position.set(p.x, p.level * 4, p.z);
+      this.details?.update(tile.index, tile.node, tile.group.position);
     }
     for (const id of this.edges.keys()) this.updateEdge(id);
   }
@@ -369,6 +339,7 @@ export class DiagramScene {
     this.fit();
   }
   public zoomBy(factor: number): void {
+    this.fitted = false;
     this.view.zoomBy(factor);
     this.onZoom(this.view.percent);
     this.invalidate();
@@ -377,7 +348,11 @@ export class DiagramScene {
     this.tool = tool;
     this.renderer.domElement.style.cursor = tool === 'pan' ? 'grab' : 'default';
   }
+  public finishInteraction(): void {
+    this.up();
+  }
   public fit(): void {
+    this.fitted = true;
     let minX = Infinity;
     let maxX = -Infinity;
     let minZ = Infinity;
@@ -399,7 +374,8 @@ export class DiagramScene {
     this.height = Math.max(this.host.clientHeight, 1);
     this.renderer.setSize(this.width, this.height);
     this.view.resize(this.width, this.height);
-    this.invalidate();
+    if (this.fitted) this.fit();
+    else this.invalidate();
   }
 
   private locate(event: PointerEvent | WheelEvent): Vector3 | undefined {
@@ -454,6 +430,7 @@ export class DiagramScene {
     const point = this.locate(event);
     if (!point) return;
     if (this.pan) {
+      this.fitted = false;
       this.target.x += this.pan.x - point.x;
       this.target.z += this.pan.z - point.z;
       this.setView(this.mode);
@@ -466,15 +443,21 @@ export class DiagramScene {
       Math.round((this.drag.startX + point.x - this.drag.x) / 10) * 10;
     tile.node.z =
       Math.round((this.drag.startZ + point.z - this.drag.z) / 10) * 10;
+    this.refreshPosition(tile.node.id);
+  };
+  public refreshPosition(id: string): void {
+    const tile = this.tiles.get(id);
+    if (!tile) return;
     if (tile.node.kind === 'group') this.updatePositions();
     else {
       const position = worldPosition(tile.node, this.nodeIndex);
       tile.group.position.set(position.x, position.level * 4, position.z);
-      for (const id of this.incident.get(tile.node.id) ?? [])
-        this.updateEdge(id);
+      this.details?.update(tile.index, tile.node, tile.group.position);
+      for (const edgeId of this.incident.get(tile.node.id) ?? [])
+        this.updateEdge(edgeId);
     }
     this.invalidate();
-  };
+  }
   private up = (): void => {
     if (this.drag) {
       const node = this.tiles.get(this.drag.id)?.node;
@@ -502,6 +485,7 @@ export class DiagramScene {
     this.pan = undefined;
   };
   private wheel = (event: WheelEvent): void => {
+    this.fitted = false;
     event.preventDefault();
     const before = this.locate(event)?.clone();
     this.camera.zoom = Math.min(
@@ -613,10 +597,6 @@ export class DiagramScene {
     });
     this.geometry.dispose();
     this.tileOutline.dispose();
-    this.outlineMaterial.dispose();
-    this.insetGeometry.dispose();
-    this.insetMaterial.dispose();
-    this.shadowMaterial.dispose();
     this.haloMaterial.dispose();
     this.edgeMaterial.dispose();
     this.backdrop.dispose();

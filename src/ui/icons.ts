@@ -1,4 +1,6 @@
 const paths = {
+  undo: '<path d="M9 4 4 9l5 5M4 9h9a7 7 0 0 1 0 14"/>',
+  redo: '<path d="m15 4 5 5-5 5M20 9h-9a7 7 0 0 0 0 14"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
   pointer: '<path d="m5 3 15 9-7 2-3 7z"/>',
   hand: '<path d="M8 12V5a2 2 0 0 1 4 0v6-7a2 2 0 0 1 4 0v7-4a2 2 0 0 1 4 0v8c0 5-3 7-7 7-3 0-4-2-6-4l-4-5a2 2 0 0 1 3-2l2 2"/>',

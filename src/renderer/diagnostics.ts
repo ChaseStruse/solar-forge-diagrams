@@ -98,8 +98,42 @@ export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
       renderTimes.push(scene.metrics.lastRenderMs);
       eventToFrame.push(performance.now() - before);
     }
+    scene.setView('isometric');
+    await frame();
+    await frame();
+    const rect = canvas.getBoundingClientRect();
+    const cx = rect.left + rect.width * 0.4;
+    const cy = rect.top + rect.height * 0.5;
+    canvas.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        clientX: cx,
+        clientY: cy,
+        pointerId: 2,
+        button: 2,
+      }),
+    );
+    const panTimes: number[] = [];
+    const panRenders: number[] = [];
+    for (let step = 0; step < 50; step++) {
+      const before = performance.now();
+      canvas.dispatchEvent(
+        new PointerEvent('pointermove', {
+          clientX: cx + (step % 2) * 6,
+          clientY: cy + (step % 2) * 4,
+          pointerId: 2,
+        }),
+      );
+      await frame();
+      if (step >= 10) {
+        panTimes.push(performance.now() - before);
+        panRenders.push(scene.metrics.lastRenderMs);
+      }
+    }
+    canvas.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2 }));
     results[`${nodes}nodes`] = {
       loadMs,
+      panEventToFrameP95Ms: percentile(panTimes),
+      panRenderSubmissionP95Ms: percentile(panRenders),
       textures: scene.metrics.textures,
       drawCalls: scene.metrics.drawCalls,
       renderSubmissionP95Ms: percentile(renderTimes),

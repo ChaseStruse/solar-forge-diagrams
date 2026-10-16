@@ -2,9 +2,9 @@
 
 ## Where to resume
 
-**Start M1: typed domain commands and bounded undo/redo history.** M0's functional native feasibility gate passed on Omarchy. M1–M6 remain open; the palette, inspector, and export prototypes do not establish completion of later milestones.
+**Continue M1: native verification of command history, then durable saves, close protection, and autosave/recovery.** The first command/history slice is implemented with domain tests and browser workflows; native verification remains outstanding. M1–M6 remain open.
 
-First M1 slice: add command/history types and meaningful transaction tests, then route the existing drag, rename, and service-insertion actions through them. Preserve incremental scene updates. Follow with native close protection, autosave/recovery, durable file handles, and a documented migration policy. Save currently prompts for a destination every time.
+The current slice routes move, rename, insertion, and cascading deletion through bounded undo/redo. Next, rebuild the desktop app and verify actual keyboard/drag/save behavior before completing M1 persistence work. The Rust toolchain previously installed under `/tmp` is absent in this session; existing native binaries still contain the previous frontend. Save currently prompts for a destination every time.
 
 ## Task-to-commit map
 
@@ -15,6 +15,8 @@ First M1 slice: add command/history types and meaningful transaction tests, then
 | `50bfcb4` | M0 native verification / label efficiency | Bundled native assets, readable labels, shared atlases, native smoke runner, atomic writer tests |
 | `57cc746` | M0 performance / Wayland integration | Instanced label draws, batched connector buffer, XDG portal dialogs with parent handles, nested fixtures, snapped-drag check, size-budget enforcement |
 | `62b91fb` | M0 readability correction | Shallow camera angle, subtle depth, larger text and separated connection labels |
+| `c336dee` | UI reference composition | Floating editor controls, Layers/properties, raised service tiles, spatial camera and projection tests |
+| Current continuation (commit follows this record) | M1 history / usability | Bounded edit transactions, undo/redo controls, responsive control strip and fitted camera, batched tile details; frontend verified, native pending |
 | Documentation checkpoint following `57cc746` | Handoff | Exact milestone mapping in the plan, final native measurements, remaining work and launch instructions |
 
 The documentation checkpoint refers to prior implementation hashes to avoid self-referential commit IDs. All changes are local commits; nothing was pushed.
@@ -50,7 +52,7 @@ The older single-group result is retained separately. Do not compare runs as con
 
 ## Remaining acceptance and limits
 
-- M1: commands/history, autosave, recovery UI, durable file handles, migration policy and native unsaved-close protection. Current close behavior must not be described as data-loss-safe.
+- M1: native acceptance of implemented commands/history; autosave, recovery UI, durable file handles, migration policy and native unsaved-close protection. Current close behavior must not be described as data-loss-safe.
 - M2: multi-select, resize, grouping tools, connection creation/reconnection/routing controls, clipboard, full shortcuts and context menus. Existing ordinary edits still reload portions of the scene; refine this when routing them through commands.
 - M3: official AWS artwork, complete catalog, architecture metadata, templates, and production UI polish. Current tiles use text identifiers and five prototype services.
 - M4: document-driven SVG, recent documents, quality controls and finished export behavior. Optional automatic layout remains unevaluated.
@@ -100,3 +102,20 @@ The live Sketchlab page was finally rendered and visually inspected at 1440×100
 A centered perspective camera replaces the previous rolled/near-flat orthographic spatial view; Plan remains orthographic. Projection tests enforce level rows and fit margins. Native snapped dragging and zero-idle-frame checks pass. Native whole-window capture was inspected at 1440×1000; no upstream source or assets were copied. Runtime JS dependencies remain unchanged. Generic service glyphs remain placeholders for official artwork in M3.
 
 The first redesigned native benchmark at 900×918 passed the standard submission budget (10 ms p95) but used about 2,000 draw calls for tile outlines/insets/shadows. Batch those shared surfaces before completing this correction; stress performance is not yet acceptable. Narrow-window Layers behavior is also being checked. M1 remains the next full milestone.
+
+## 2026-10-16 — history and usability continuation
+
+User feedback makes UI usability a core acceptance requirement throughout implementation. Consolidated zoom/history/view controls into a responsive bottom strip so controls cannot collide at the tested desktop and tiled widths. Layers scroll independently of properties; the service picker has an empty-search message and bounded height. Replaced the misleading “Stored locally” marker with explicit unchanged/unsaved state. Fitted boards refit on resize; manually panned/zoomed cameras retain their view. A narrow-window screenshot caught and corrected offscreen tiles after resizing.
+
+M1 first slice: domain-owned move/rename/insert/delete commands, up to 100 retained actions and an 8 MB serialized-payload estimate (not measured heap usage). Cascading deletion restores children, incident edges, and original ordering. Each drag records once on completion. Undoing moves updates the affected tile/connections without rebuilding the scene; renames and structural edits still reload scene content. Redo invalidates after a new edit; saved revision tokens prevent a completed asynchronous save from clearing later edits. Input fields retain native text undo. Added toolbar buttons and Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y.
+
+Completed the pre-existing uncommitted renderer batching work: service insets and shadows use instancing; outlines share a buffer. These decorations require three draws across the board instead of per-tile draws. Extended diagnostics include pan timings. Native performance acceptance of this change remains open.
+
+Validation:
+
+- `PATH="$PWD/.tools/package/bin:$PATH" bun run verify`: lint, strict TS, 11 tests / 68 assertions, production build and compressed-JS budget pass. Initial JS is approximately 148 kB gzip, below the 350 KiB budget; Vite's raw chunk advisory remains.
+- Headless Chromium through local ChromeDriver: add → rename → delete → undo → redo, return to unchanged state, snapped drag recorded once and undone, zero frames in a 500 ms idle sample. Screenshots inspected at 1440, 900, and 513 px widths, plus Plan PNG through the actual exporter. Browser checks used development assets; they do not certify native WebKitGTK.
+- Batched draw counts: 521 on 500 nodes / 750 edges; 2,065 on 2,000 / 3,000. Software-rendered headless load samples were approximately 373 ms / 1,035 ms; these are not comparable to prior native hardware runs and do not establish performance-budget acceptance. Raw temporary report: `/tmp/solar-browser-render-results.json`.
+- Native rebuild/smoke check not run: the temporary Cargo/Rust toolchain from the previous session no longer exists. No Rust source or native permissions changed. Do not treat the existing executable as containing this continuation.
+
+Next: provision a native build toolchain, run native history/renderer acceptance, then implement durable file handles and unsaved-close protection, followed by recovery. UI polish, official AWS artwork, connection editing and complete M2 workflows remain open; this continuation does not establish a finished usable-editor milestone.

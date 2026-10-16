@@ -633,18 +633,6 @@ canvas {
   }
 }
 
-@media (max-width: 1050px) {
-  .view-dock {
-    bottom: 74px;
-  }
-  .status {
-    bottom: 132px;
-  }
-  .board-count {
-    display: none;
-  }
-}
-
 .menu-divider {
   height: 1px;
   background: #2b394b;
@@ -671,5 +659,98 @@ canvas {
   }
   .view-dock {
     left: 12px;
+  }
+}
+
+/* Keep navigation in one predictable strip, clear of the editing surface. */
+.canvas-controls {
+  position: absolute;
+  z-index: 3;
+  left: 12px;
+  right: 272px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.canvas-controls .floating-dock {
+  position: static;
+  transform: none;
+  height: 49px;
+  flex-shrink: 0;
+}
+.canvas-controls .view-dock {
+  margin-left: auto;
+}
+.history-dock {
+  gap: 2px;
+}
+.save-state {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.empty-search {
+  color: var(--muted);
+  line-height: 1.6;
+  padding: 12px 4px;
+}
+.layer-tree {
+  flex: 1;
+}
+.properties {
+  flex-shrink: 0;
+  padding-bottom: 16px;
+}
+.panel-foot {
+  flex-shrink: 0;
+}
+.component-palette {
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+}
+@media (max-width: 1150px) {
+  .canvas-controls .dock-label,
+  .canvas-controls .delete-button span {
+    display: none;
+  }
+  .canvas-controls .view-dock button {
+    padding: 7px 8px;
+  }
+  .canvas-controls {
+    gap: 6px;
+  }
+  .save-state {
+    display: none;
+  }
+}
+@media (max-width: 799px) {
+  .canvas-controls {
+    right: 12px;
+  }
+  .layers-panel {
+    bottom: 136px;
+  }
+}
+@media (max-width: 600px) {
+  .canvas-controls {
+    flex-wrap: wrap;
+  }
+  .canvas-controls .view-dock {
+    margin-left: 0;
+  }
+  .canvas-controls .zoom-dock {
+    margin-right: auto;
+  }
+  .status {
+    display: none;
+  }
+  .component-palette {
+    left: 76px;
+    width: min(282px, calc(100vw - 88px));
+  }
+  .help-panel {
+    max-width: calc(100vw - 24px);
+    bottom: 132px;
   }
 }

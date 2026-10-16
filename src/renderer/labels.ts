@@ -242,6 +242,7 @@ export class LabelAtlas {
   public dispose(): void {
     for (const page of this.pages) {
       if (page.batch) {
+        page.batch.dispose();
         page.batch.geometry.dispose();
         if (!Array.isArray(page.batch.material)) page.batch.material.dispose();
       }
