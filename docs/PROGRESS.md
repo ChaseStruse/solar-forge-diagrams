@@ -12,6 +12,12 @@
 - Optimized native 1920×1080 DPR 1: standard board 170 ms load, 23 draws, 5 ms pan submission p95 / 49 ms scheduled update p95; stress 639 ms, 67 draws, 12 ms / 93 ms. Zero idle frames in 500 ms; real 30-second idle CPU 0.90% normalized.
 - Resource sample: 603.11 MiB summed RSS / 350.15 MiB PSS. Memory and scheduled input exceed original targets and are explicitly accepted alpha limits. Configured display is 120 Hz; exact 60 Hz, cold-cache and physical fractional-DPI certification remain follow-ups.
 
+## Omarchy distribution follow-up — 2026-10-16
+
+The user requested Omarchy-specific delivery. Moved the canonical recipe to `packaging/omarchy/pkgbuilds/solar-forge-diagrams/` and added official-style `.omarchy/package.json` local/manual-update metadata. Added an Omarchy/x86_64 installer with package-identity and checksum checks, a bundle builder, and Omarchy launcher/upgrade/removal instructions. The installer uses a normal local pacman transaction because the installed `omarchy pkg add` implementation accepts repository names through `pacman -S`, not local paths. Omarchy's upstream packaging guide explicitly uses PKGBUILD plus metadata and `pacman -U` for local testing. There is no distinct Omarchy binary package format to convert to.
+
+The existing validated 0.1.0-2 application package is reused unchanged inside the Omarchy bundle; no runtime code or package contents changed. The official-repository submission path is documented separately and has not been executed. A public source release and owner-selected license remain prerequisites. Bundle validation passes on installed Omarchy 4.0.4 x86_64: extraction, all checksums, package identity, `install.sh --check`, shell syntax, rejection of altered documentation/checksums, and rejection of invalid arguments. The application package hash matches the previously validated artifact. Delivered `artifacts/omarchy/solar-forge-diagrams-0.1.0-2-omarchy-x86_64.tar.gz`; raw result/checksum is in `benchmarks/results/2026-10-16-omarchy-bundle.json`. No system install or desktop changes were performed. Runtime code was unchanged, so the existing native acceptance applies.
+
 ## Historical checkpoints
 
 The entries below retain the original measurements and open tasks at each checkpoint. They are historical; the current status above and final acceptance entry supersede their old pending-work lists.

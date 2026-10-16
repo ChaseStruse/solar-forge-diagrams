@@ -1,0 +1,14 @@
+{
+  "target": "Omarchy 4.0.4 x86_64",
+  "bundle": "artifacts/omarchy/solar-forge-diagrams-0.1.0-2-omarchy-x86_64.tar.gz",
+  "bundleSha256": "84a073a6a6cb3bf58e30a2316a9035243ad7b645592663333e04e9612955a187",
+  "applicationSourceCommit": "75fadd4",
+  "packageVersion": "0.1.0-2",
+  "reusesPreviouslyValidatedPackage": true,
+  "installerCheck": "passed on installed Omarchy",
+  "checksumCorruption": "rejected",
+  "invalidArguments": "rejected",
+  "shellSyntax": "passed",
+  "systemInstallationPerformed": false,
+  "officialOmarchyRepositoryPublication": false
+}
