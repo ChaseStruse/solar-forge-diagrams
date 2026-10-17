@@ -9,3 +9,9 @@ Unsaved edits schedule an atomic recovery snapshot in the platform application-d
 At startup, recover the unsaved board, explicitly discard its recovery, or close the application and leave it for later. Recovered boards open as unsaved documents and ask for a destination, protecting the original file. Closing or replacing a dirty board offers Save, Discard changes, and Cancel. Failed/cancelled saves keep the board open. One process holds an application-data lock to prevent concurrent instances overwriting the same recovery snapshot. Deleting application data removes recovery and settings, not user-selected documents.
 
 Undo retains at most 100 actions and an estimated 8 MB of affected serialized records. This is an estimate of retained payload, not a JavaScript heap guarantee. A drag is one transaction. A new edit invalidates redo. Undoing back to the saved revision clears the dirty indicator; later edits remain dirty even when an earlier asynchronous save completes.
+
+### Optional networking fields
+
+Version 1 documents may include `traffic: { protocol, port, sourceIp, direction }` at the document root. Protocol is `tcp`, `udp`, or `icmp`; direction is `ingress` or `egress`; port is an integer from 1–65535; sourceIp is an IPv4 address. If absent, playback uses TCP/443 ingress from `203.0.113.10`.
+
+Edges may include `networkRule: { action, protocol, direction, port?, sourceCidr? }`. Action is `allow` or `deny`. Protocol and direction also accept `any`. An allow rule requires all specified constraints to match; a deny rule blocks the connection unconditionally. Missing rules allow traversal. Source CIDRs use IPv4 with prefix length 0–32. Invalid network fields are rejected on import. The document version remains 1 because these fields are optional; older application versions discard them when loading/saving.

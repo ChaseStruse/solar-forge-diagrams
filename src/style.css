@@ -1065,3 +1065,15 @@ input[type="color"] {
   color: var(--accent-text);
   text-align: center;
 }
+
+#traffic-panel {
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+#traffic-panel label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}

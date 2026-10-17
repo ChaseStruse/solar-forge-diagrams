@@ -175,7 +175,15 @@ export function vpcExample(demo = false): DiagramDocument {
       : undefined,
   );
   for (const zone of ['a', 'b']) {
-    connect(`https-${zone}`, 'igw', `web-${zone}`, 'HTTPS · 443');
+    connect(
+      `https-${zone}`,
+      'igw',
+      `web-${zone}`,
+      'HTTPS · 443',
+      demo
+        ? { action: 'allow', protocol: 'tcp', port: 443, direction: 'ingress' }
+        : undefined,
+    );
     connect(
       `data-${zone}`,
       `web-${zone}`,
@@ -207,6 +215,11 @@ export function vpcExample(demo = false): DiagramDocument {
     }
   }
   if (demo) {
+    connect('outbound-internet', 'igw', 'internet', 'Internet egress', {
+      action: 'allow',
+      protocol: 'any',
+      direction: 'egress',
+    });
     service(
       'routes',
       'Public route · 0.0.0.0/0 → IGW',

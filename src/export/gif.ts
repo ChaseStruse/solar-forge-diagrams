@@ -1,4 +1,4 @@
-/** Small offline GIF89a encoder: RGB332 palette with bounded 9-bit LZW blocks. */
+/** Small offline GIF89a encoder: RGB332 palette with bounded 12-bit LZW compression. */
 export class GifEncoder {
   private parts: Uint8Array<ArrayBuffer>[] = [];
   private frames = 0;
@@ -72,29 +72,55 @@ export class GifEncoder {
         8,
       ]),
     );
-    // Reset before the decoder's dictionary grows beyond 9 bits. No large
-    // dictionary or additional dependencies; predictable memory even offline.
+    // GIF LZW grows from 9 to 12 bits, then resets its bounded dictionary.
     const bytes: number[] = [];
     let bits = 0,
-      buffer = 0;
+      buffer = 0,
+      codeSize = 9,
+      nextCode = 258;
+    const dictionary = new Map<number, number>();
     const code = (value: number) => {
       buffer |= value << bits;
-      bits += 9;
+      bits += codeSize;
       while (bits >= 8) {
         bytes.push(buffer & 255);
         buffer >>>= 8;
         bits -= 8;
       }
     };
-    for (let pixel = 0; pixel < this.width * this.height; pixel++) {
-      if (pixel % 250 === 0) code(256);
+    const color = (pixel: number) => {
       const i = pixel * 4;
-      code(
+      return (
         ((rgba[i] ?? 0) & 0xe0) |
-          (((rgba[i + 1] ?? 0) >> 3) & 0x1c) |
-          ((rgba[i + 2] ?? 0) >> 6),
+        (((rgba[i + 1] ?? 0) >> 3) & 0x1c) |
+        ((rgba[i + 2] ?? 0) >> 6)
       );
+    };
+    code(256);
+    let prefix = color(0);
+    for (let pixel = 1; pixel < this.width * this.height; pixel++) {
+      const value = color(pixel);
+      const key = prefix * 256 + value;
+      const existing = dictionary.get(key);
+      if (existing !== undefined) {
+        prefix = existing;
+        continue;
+      }
+      code(prefix);
+      if (nextCode === 4096) {
+        code(256);
+        dictionary.clear();
+        nextCode = 258;
+        codeSize = 9;
+      } else {
+        // The decoder creates a dictionary entry one emitted code later.
+        if (nextCode === 1 << codeSize) codeSize++;
+        dictionary.set(key, nextCode++);
+      }
+      prefix = value;
     }
+    code(prefix);
+    if (nextCode === 1 << codeSize) codeSize++;
     code(257);
     if (bits) bytes.push(buffer & 255);
     const blocks = new Uint8Array(

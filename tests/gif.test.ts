@@ -15,3 +15,13 @@ test('GIF has looping animation metadata, per-frame delays and a trailer', async
   expect(blob.type).toBe('image/gif');
   expect(() => gif.addFrame(new Uint8ClampedArray(1))).toThrow();
 });
+
+test('GIF compression keeps repeated-color frames small and bounds export size', async () => {
+  const gif = new GifEncoder(640, 480);
+  const pixels = new Uint8ClampedArray(640 * 480 * 4).fill(255);
+  gif.addFrame(pixels);
+  expect(gif.finish().size).toBeLessThan(2500);
+  expect(() => new GifEncoder(0, 480)).toThrow();
+  expect(() => new GifEncoder(640, 2000)).toThrow();
+  expect(() => new GifEncoder(1, 1).finish()).toThrow();
+});

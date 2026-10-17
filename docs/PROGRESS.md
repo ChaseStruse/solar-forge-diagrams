@@ -200,3 +200,11 @@ User reported that dragging to select moved the native window. Rectangle selecti
 Rectangle-selection delivery: source committed as `eab4757`. Normal non-diagnostic Omarchy 0.1.0-3 package builds successfully from the checksum-verified source archive. Its build passes frontend verification (22 tests / 138 assertions, 183,135-byte initial JS gzip) and both native atomic-write tests. The updated Omarchy install bundle extracts and passes all checksums, package identity and `install.sh --check`. Bundle: `artifacts/omarchy/solar-forge-diagrams-0.1.0-3-omarchy-x86_64.tar.gz`. Package checksums and delivery status are recorded in `benchmarks/results/2026-10-16-marquee-package.json`.
 
 Host upgrade was started with authenticated pacman and is waiting on the operating system's authentication prompt. At the last check the installed package remains 0.1.0-2; do not claim the fix is loaded in the running editor. After authentication completes, save and reopen the application to load 0.1.0-3. The current user session was deliberately left open throughout testing. Original alpha performance exceptions remain unchanged.
+
+## Networking and journey update (2026-10-17)
+
+- Fitting text and notes in both dimensions, proportional resize sizing, tile-width captions, and common 160 × 100 component defaults.
+- Ten offline container, DevOps, and networking pictograms, plus two-zone VPC and networking journey templates.
+- Persisted traffic parameters and editable per-connection rules with IPv4/CIDR validation, undo/redo, and visible denial feedback.
+- Offline GIF89a journey recording, browser download/native atomic save, bounded frame count and dimensions, and cancellation.
+- Validation: 39 Bun tests, lint, TypeScript, production build, bundle budget, and headless Chromium checks of templates and denial feedback. GIF decoding checked independently using FFmpeg. Native Rust compilation/save-dialog validation requires a machine with the Rust/Tauri toolchain.
