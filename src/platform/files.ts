@@ -54,3 +54,37 @@ export async function exportGif(blob: Blob): Promise<boolean> {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   return true;
 }
+
+export async function openInfrastructureFiles(): Promise<
+  { name: string; content: string }[]
+> {
+  if (isTauri()) return invoke('open_infrastructure');
+  const files = await new Promise<File[]>((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.tf,.json,.yaml,.yml';
+    input.onchange = () => {
+      resolve(Array.from(input.files ?? []));
+      input.remove();
+    };
+    input.oncancel = () => {
+      resolve([]);
+      input.remove();
+    };
+    input.hidden = true;
+    document.body.append(input);
+    input.click();
+  });
+  if (
+    files.length > 256 ||
+    files.reduce((sum, f) => sum + f.size, 0) > 50_000_000
+  )
+    throw Error('Choose up to 256 files totaling at most 50 MB');
+  return Promise.all(
+    files.map(async (file) => ({
+      name: file.name,
+      content: await file.text(),
+    })),
+  );
+}

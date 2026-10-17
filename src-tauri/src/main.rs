@@ -117,6 +117,28 @@ async fn open_document(
     .await
     .map_err(|e| e.to_string())?
 }
+#[derive(serde::Serialize)]
+struct InfrastructureSource { name: String, content: String }
+#[tauri::command]
+async fn open_infrastructure(app: tauri::AppHandle, window: tauri::Window) -> Result<Vec<InfrastructureSource>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(files) = app.dialog().file().set_parent(&window)
+            .add_filter("Infrastructure code", &["tf", "json", "yaml", "yml"])
+            .blocking_pick_files() else { return Ok(Vec::new()); };
+        if files.len() > 256 { return Err("Choose at most 256 files".into()); }
+        let mut result = Vec::new();
+        let mut total = 0;
+        for file in files {
+            let path = file.into_path().map_err(|e| e.to_string())?;
+            let mut content = String::new();
+            fs::File::open(&path).map_err(|e| e.to_string())?.take(50_000_001).read_to_string(&mut content).map_err(|e| e.to_string())?;
+            total += content.len();
+            if total > 50_000_000 { return Err("Infrastructure input exceeds 50 MB".into()); }
+            result.push(InfrastructureSource { name: path.file_name().unwrap_or_default().to_string_lossy().into_owned(), content });
+        }
+        Ok(result)
+    }).await.map_err(|e| e.to_string())?
+}
 #[tauri::command]
 async fn save_document(
     app: tauri::AppHandle,
@@ -510,6 +532,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             open_document,
+            open_infrastructure,
             save_document,
             export_png,
             export_gif,

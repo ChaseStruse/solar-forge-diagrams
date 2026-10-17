@@ -1,8 +1,16 @@
 import { boundaryColors, findService, legacyColors } from '../catalog/services';
 import { parseNetworkRule, parseTraffic } from './network';
+import {
+  parseResourceNetwork,
+  parseResourcePolicy,
+  type ResourceNetwork,
+  type ResourcePolicy,
+} from './policies';
 
 export type Port = 'north' | 'east' | 'south' | 'west';
 export interface DiagramNode {
+  network?: ResourceNetwork;
+  policy?: ResourcePolicy;
   id: string;
   /** Text and notes are annotations: free text, or text on a sticky note. */
   kind: 'service' | 'group' | 'text' | 'note';
@@ -45,6 +53,7 @@ export interface NetworkRule {
   direction: 'any' | JourneyTraffic['direction'];
 }
 export interface DiagramEdge {
+  relationship?: 'dependency' | 'network';
   networkRule?: NetworkRule;
   id: string;
   source: string;
@@ -154,6 +163,8 @@ export function parseDocument(json: string): DiagramDocument {
         node.journey = { mode: 'fixed', edge: text(journey.edge, 'branch') };
       else throw Error('Invalid journey branch mode');
     }
+    if (n.network !== undefined) node.network = parseResourceNetwork(n.network);
+    if (n.policy !== undefined) node.policy = parseResourcePolicy(n.policy);
     if (n.metadata !== undefined) {
       const metadata = record(n.metadata);
       node.metadata = {};
@@ -183,6 +194,27 @@ export function parseDocument(json: string): DiagramDocument {
       parent = group.parentId;
     }
   }
+  for (const node of nodes) {
+    const requirePolicy = (id: string, kind?: ResourcePolicy['kind']) => {
+      const target = byId.get(id);
+      if (!target || (kind && target.policy?.kind !== kind))
+        throw Error(`Invalid network resource reference: ${id}`);
+    };
+    for (const id of node.network?.securityGroupIds ?? [])
+      requirePolicy(id, 'security-group');
+    for (const id of node.network?.networkIds ?? []) requirePolicy(id);
+    if (node.network?.routeTableId)
+      requirePolicy(node.network.routeTableId, 'route-table');
+    if (node.network?.networkAclId)
+      requirePolicy(node.network.networkAclId, 'network-acl');
+    if (node.policy?.kind === 'route-table')
+      for (const r of node.policy.routes) {
+        if (!['local', 'blackhole'].includes(r.target)) requirePolicy(r.target);
+      }
+    else
+      for (const r of node.policy?.rules ?? [])
+        if (r.peerGroupId) requirePolicy(r.peerGroupId, 'security-group');
+  }
   const edgeIds = new Set<string>();
   const edges = input.edges.map((value: unknown): DiagramEdge => {
     const e = record(value);
@@ -211,6 +243,11 @@ export function parseDocument(json: string): DiagramDocument {
           throw Error('Invalid named port');
         edge[key] = value;
       }
+    }
+    if (e.relationship !== undefined) {
+      if (e.relationship !== 'network' && e.relationship !== 'dependency')
+        throw Error('Invalid relationship');
+      edge.relationship = e.relationship;
     }
     if (e.routing !== undefined) {
       if (e.routing !== 'horizontal' && e.routing !== 'vertical')
