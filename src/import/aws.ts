@@ -21,7 +21,7 @@ const catalog: Record<string, string> = {
   aws_internet_gateway: 'component.internet-gateway',
   aws_nat_gateway: 'component.nat-gateway',
   aws_security_group: 'component.firewall',
-  aws_network_acl: 'component.firewall',
+  aws_network_acl: 'component.network-acl',
   aws_route_table: 'component.route-table',
   aws_default_route_table: 'component.route-table',
 };
@@ -164,6 +164,8 @@ export function importAws(
       node.policy = { kind: 'network-acl', rules: [] };
     if (r.type === 'aws_route_table' || r.type === 'aws_default_route_table')
       node.policy = { kind: 'route-table', routes: [] };
+    if (r.values.__conditional)
+      incomplete(node, 'Resource condition is unresolved');
     if (r.values.dynamic)
       incomplete(
         node,
@@ -185,6 +187,9 @@ export function importAws(
   for (const r of resources) {
     const node = nodeByResource.get(r.id);
     if (!node) continue;
+    for (const key of ['vpc_id', 'subnet_id'] as const)
+      if (r.values[key] !== undefined && !ref(r.values[key]))
+        incomplete(node, `Unresolved ${key}`);
     const vpc = r.type === 'aws_vpc' ? undefined : vpcFor(r),
       parent = vpc ? nodeByResource.get(vpc.id) : undefined;
     const reg =
@@ -373,8 +378,32 @@ export function importAws(
     }
     owner.policy.routes.push({ destination, target });
   };
+  const markPolicies = (kind: ResourcePolicy['kind'], message: string) => {
+    for (const node of nodes)
+      if (node.policy?.kind === kind) incomplete(node, message, true);
+  };
+  const markSubnets = (message: string) => {
+    for (const node of nodes)
+      if (node.boundary === 'subnet') incomplete(node, message);
+  };
   for (const r of resources) {
     const node = nodeByResource.get(r.id);
+    if (associations.has(r.type) && r.values.__conditional) {
+      if (r.type.includes('security_group'))
+        markPolicies(
+          'security-group',
+          `Conditional rule ${r.id} is unresolved`,
+        );
+      else if (r.type === 'aws_network_acl_rule')
+        markPolicies(
+          'network-acl',
+          `Conditional ACL rule ${r.id} is unresolved`,
+        );
+      else if (r.type === 'aws_route')
+        markPolicies('route-table', `Conditional route ${r.id} is unresolved`);
+      else markSubnets(`Conditional association ${r.id} is unresolved`);
+      continue;
+    }
     if (node?.policy && node.policy.kind !== 'route-table') {
       for (const direction of ['ingress', 'egress'] as const)
         for (const rule of list(r.values[direction]))
@@ -416,7 +445,10 @@ export function importAws(
             ? 'egress'
             : 'ingress',
         );
-      else warnings.push(`${r.id}: security group owner unresolved`);
+      else {
+        warnings.push(`${r.id}: security group owner unresolved`);
+        markPolicies('security-group', `Unresolved rule owner: ${r.id}`);
+      }
     }
     if (r.type === 'aws_network_acl_rule') {
       const owner = policyFor(r.values.network_acl_id, 'network-acl');
@@ -427,12 +459,18 @@ export function importAws(
           r.values.egress === true ? 'egress' : 'ingress',
           true,
         );
-      else warnings.push(`${r.id}: ACL owner unresolved`);
+      else {
+        warnings.push(`${r.id}: ACL owner unresolved`);
+        markPolicies('network-acl', `Unresolved ACL rule owner: ${r.id}`);
+      }
     }
     if (r.type === 'aws_route') {
       const owner = policyFor(r.values.route_table_id, 'route-table');
       if (owner) addRoute(owner, r.values);
-      else warnings.push(`${r.id}: route table unresolved`);
+      else {
+        warnings.push(`${r.id}: route table unresolved`);
+        markPolicies('route-table', `Unresolved route owner: ${r.id}`);
+      }
     }
     if (
       r.type === 'aws_route_table_association' ||
@@ -447,7 +485,10 @@ export function importAws(
         );
       if (n?.network && owner)
         n.network[acl ? 'networkAclId' : 'routeTableId'] = owner.id;
-      else warnings.push(`${r.id}: unresolved subnet association`);
+      else {
+        warnings.push(`${r.id}: unresolved subnet association`);
+        markSubnets(`Unresolved subnet association: ${r.id}`);
+      }
     }
     if (r.type === 'aws_main_route_table_association') {
       const vpc = ref(r.values.vpc_id),
@@ -466,6 +507,8 @@ export function importAws(
         vpc = ref(r.values.vpc_id),
         n = gateway ? nodeByResource.get(gateway.id) : undefined;
       if (n && vpc) n.parentId = nodeId(vpc);
+      else if (n) incomplete(n, `Unresolved gateway attachment: ${r.id}`);
+      else warnings.push(`${r.id}: unresolved gateway attachment`);
     }
   }
   const edges: ImportResult['document']['edges'] = [];
@@ -483,7 +526,16 @@ export function importAws(
         if (dependency === r.id || !nodeByResource.has(dependency)) continue;
         const source = nodeId(r),
           target = nodeId(byId.get(dependency) as Resource);
-        if (nodes.find((n) => n.id === source)?.parentId === target) continue;
+        let parent = nodes.find((n) => n.id === source)?.parentId;
+        let containment = false;
+        while (parent) {
+          if (parent === target) {
+            containment = true;
+            break;
+          }
+          parent = nodes.find((n) => n.id === parent)?.parentId;
+        }
+        if (containment) continue;
         edges.push({
           id: `dependency:${r.id}:${dependency}`,
           source,

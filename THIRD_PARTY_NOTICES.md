@@ -2,6 +2,7 @@
 
 The original application source license is described in SOURCE_LICENSE.md. The following components have separate licenses; their copyright/license texts must accompany redistribution. No artifacts have been published by this implementation.
 
+- yaml 2.9.1 — ISC, copyright Eemeli Aro. License: node_modules/yaml/LICENSE. https://github.com/eemeli/yaml
 - Three.js 0.183.2 — MIT, copyright Three.js authors. License: node_modules/three/LICENSE. https://github.com/mrdoob/three.js
 - Tauri JavaScript API 2.10.1 and Rust core 2.12.4 — MIT OR Apache-2.0. https://github.com/tauri-apps/tauri
 - Tauri dialog plugin 2.8.3 — MIT OR Apache-2.0. https://github.com/tauri-apps/plugins-workspace

@@ -188,6 +188,7 @@ export class DiagramScene {
   private flowLines: LineSegments2 | undefined;
   private distancesDirty = false;
   private flowing = true;
+  private hasFlowEdges = false;
   private readonly animators = new Set<(time: number) => boolean>();
   private edgeGeometry: LineSegmentsGeometry | undefined;
   /** Flow dashes keep their own copy so inactive routes can go still. */
@@ -603,6 +604,9 @@ export class DiagramScene {
     const connections = new LineSegments2(this.edgeGeometry, this.edgeMaterial);
     connections.frustumCulled = false;
     this.inactive = inactiveEdges(document);
+    this.hasFlowEdges = document.edges.some(
+      (e) => e.relationship !== 'dependency',
+    );
     this.flowPositions = new Float32Array(document.edges.length * 42);
     this.flowGeometry = new LineSegmentsGeometry().setPositions(
       this.flowPositions,
@@ -703,7 +707,7 @@ export class DiagramScene {
     // Inactive routes collapse to a point in the flow copy: no marching dashes.
     const route = this.edgePositions.array;
     const base = index * 42;
-    const still = this.inactive.has(id);
+    const still = this.inactive.has(id) || edge.relationship === 'dependency';
     for (let i = 0; i < 42; i++)
       this.flowPositions[base + i] =
         route[still ? base + (i % 3) : base + i] ?? 0;
@@ -1661,7 +1665,8 @@ export class DiagramScene {
     this.scratchColor.set(color);
     // A branch off the active route fades toward the sky.
     if (
-      this.inactive.has(id) &&
+      (this.inactive.has(id) ||
+        this.edgeIndex.get(id)?.relationship === 'dependency') &&
       id !== this.selectedEdge &&
       id !== this.hoveredEdge
     )
@@ -1789,7 +1794,7 @@ export class DiagramScene {
   private get animating(): boolean {
     return (
       this.content.visible &&
-      ((this.flowing && this.edges.size > 0) || this.animators.size > 0)
+      ((this.flowing && this.hasFlowEdges) || this.animators.size > 0)
     );
   }
   private render(): void {

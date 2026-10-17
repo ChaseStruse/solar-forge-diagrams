@@ -12,6 +12,7 @@ export interface ComponentDefinition {
   boundary?: DiagramNode['boundary'];
   icon?: string;
   asset?: string;
+  policyKind?: NonNullable<DiagramNode['policy']>['kind'];
 }
 const aws: readonly (readonly [
   string,
@@ -173,6 +174,7 @@ export const legacyColors: ReadonlySet<string> = new Set([
   '#d9a15f',
 ]);
 export const componentColors: Record<string, string> = {
+  'network-acl': '#d9534f',
   docker: '#2496ed',
   container: '#326ce5',
   'container-image': '#0d9488',
@@ -243,6 +245,12 @@ export const services: ComponentDefinition[] = [
         'firewall security ingress egress allow deny',
       ],
       [
+        'network-acl',
+        'Network ACL',
+        'Networking',
+        'nacl network access control list subnet firewall',
+      ],
+      [
         'route-table',
         'Route table',
         'Networking',
@@ -258,6 +266,13 @@ export const services: ComponentDefinition[] = [
     glyph: '◇',
     description: `${category} · ${label}`,
     kind: 'service' as const,
+    ...(id === 'firewall'
+      ? { policyKind: 'security-group' as const }
+      : id === 'network-acl'
+        ? { policyKind: 'network-acl' as const }
+        : id === 'route-table'
+          ? { policyKind: 'route-table' as const }
+          : {}),
     asset: `components/${id}.svg`,
     icon: new URL(`../../assets/components/${id}.svg`, import.meta.url).href,
   })),

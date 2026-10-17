@@ -216,3 +216,11 @@ Host upgrade was started with authenticated pacman and is waiting on the operati
 - Replaced RGB332 with an image-adaptive median-cut palette and optional Floyd–Steinberg dithering; reused the palette/cache during worker encoding to keep colours stable and playback responsive.
 - Added remembered 2–120 second recording settings, binary native IPC, and a 12-bit LZW EOF limit with independent decoder regression tests for a dictionary that fills at the final pixel.
 - Validation: 48 tests, lint, TypeScript, production build, bundle budget; browser checks for templates, rules, longer recordings and cancellation; FFmpeg decoding of exported GIFs. Native Rust compilation and save-dialog checks remain unavailable without the Rust/Tauri toolchain.
+
+## Infrastructure import and resource reachability (2026-10-17)
+
+- `8cbe0d7`: deterministic layered layout, nested containment and spacing, editor command, and undo/redo.
+- `a23ced0`: offline Terraform HCL/show JSON, CloudFormation YAML/JSON, and Compose import; previews, warnings, file selection, sample infrastructure, validated network policy schema, and evaluator foundation.
+- `0f886cd`: resource policy/attachment editor, paged reachability matrix, decision details, virtual gateway journey paths, dependency-edge separation, and reference-safe copying/deletion.
+- Follow-up hardening: plan-reference recovery, conditional/partial data remains Unknown, missing ACL references cannot broaden access, static dependency rendering, and GIF export of matrix-selected journeys. Updated scope, dependency review and redistributable YAML notice.
+- Verification: 70 tests plus lint, strict TypeScript, production build and bundle budget. Browser smoke checks exercise import, resource attachments, PostgreSQL allow/SSH deny, matrix tracing, policy edits and undo, Compose isolation, CloudFormation file selection and checked-path GIF export. Native compilation/dialog validation remains unavailable without Rust/Tauri tooling.

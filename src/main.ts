@@ -92,6 +92,7 @@ function inputElement(id: string): HTMLInputElement {
 let current = starterDocument();
 let history = new DocumentHistory(current);
 let selected: string | undefined;
+let checkedJourney: { path: string[]; allowed: boolean } | undefined;
 let selectedIds = new Set<string>();
 let selectedEdge: string | undefined;
 let dirty = false;
@@ -349,7 +350,10 @@ element('gif-record').onclick = () =>
       localStorage.setItem('solar-forge-gif', JSON.stringify(options));
     } catch {}
 
-    const starts = journeyStarts(current, selected);
+    const networkPath = checkedJourney;
+    const starts = networkPath
+      ? networkPath.path.slice(0, 1)
+      : journeyStarts(current, selected);
     if (!starts.length) {
       notify('Connect components before exporting a journey.');
       return;
@@ -370,7 +374,7 @@ element('gif-record').onclick = () =>
     ];
     for (const control of controls) control.inert = true;
     try {
-      scene.playJourney(starts);
+      scene.playJourney(starts, networkPath);
       const blob = await recordJourney(
         () => scene.gifFrame(),
         (percent) =>
@@ -557,12 +561,14 @@ function inspect(): void {
   updateLayers();
 }
 scene.onSelect = (node) => {
+  checkedJourney = undefined;
   selected = node?.id;
   selectedIds = new Set(scene.selection);
   selectedEdge = undefined;
   inspect();
 };
 scene.onSelectEdge = (id) => {
+  checkedJourney = undefined;
   selected = undefined;
   selectedIds = new Set();
   selectedEdge = id;
@@ -634,6 +640,10 @@ async function canReplace(): Promise<boolean> {
 const reachability = reachabilityPanel({
   document: () => current,
   play: (result) => {
+    checkedJourney = {
+      path: result.path,
+      allowed: result.status === 'allowed',
+    };
     scene.playJourney([result.path[0] ?? ''], {
       path: result.path,
       allowed: result.status === 'allowed',
@@ -976,6 +986,14 @@ function addService(service: (typeof services)[number]): void {
       serviceId: service.id,
       ...(service.shape ? { shape: service.shape } : {}),
       ...(service.boundary ? { boundary: service.boundary } : {}),
+      ...(service.policyKind
+        ? {
+            policy:
+              service.policyKind === 'route-table'
+                ? { kind: 'route-table' as const, routes: [] }
+                : { kind: service.policyKind, rules: [] },
+          }
+        : {}),
       label: service.label,
       x: Math.round(point.x / 10) * 10,
       z: Math.round(point.z / 10) * 10,
@@ -1319,14 +1337,16 @@ function toggleJourney(): void {
     scene.stopJourney();
     return;
   }
-  const starts = journeyStarts(current, selected);
+  const starts = checkedJourney
+    ? checkedJourney.path.slice(0, 1)
+    : journeyStarts(current, selected);
   if (!starts.length) {
     notify(
       'No flow arrows. Use Reachability matrix for imported resources, or connect components.',
     );
     return;
   }
-  scene.playJourney(starts);
+  scene.playJourney(starts, checkedJourney);
   element('journey').setAttribute('aria-pressed', 'true');
   const names = starts
     .map((id) => current.nodes.find((n) => n.id === id)?.label)

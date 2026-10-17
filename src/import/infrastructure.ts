@@ -65,23 +65,51 @@ const propertyNames: Record<string, string> = {
   DBSubnetGroupName: 'db_subnet_group_name',
 };
 function yaml(content: string): unknown {
-  const customTags: (ScalarTag | CollectionTag)[] = [
+  const names = [
     'Ref',
     'GetAtt',
     'Sub',
     'GetAZs',
     'ImportValue',
     'Condition',
-  ].map((name) => ({
-    tag: `!${name}`,
-    resolve: (value) => ({ [name === 'Ref' ? 'Ref' : `Fn::${name}`]: value }),
-  }));
-  customTags.push({
-    tag: '!GetAtt',
-    collection: 'seq',
-    resolve: (value) => ({ 'Fn::GetAtt': value.toJSON() }),
-  });
+    'Join',
+    'Select',
+    'Split',
+    'FindInMap',
+    'If',
+    'Base64',
+    'Cidr',
+    'And',
+    'Equals',
+    'Not',
+    'Or',
+    'Length',
+    'ToJsonString',
+    'Transform',
+  ];
+  const customTags: (ScalarTag | CollectionTag)[] = [];
+  for (const name of names) {
+    const key = name === 'Ref' ? 'Ref' : `Fn::${name}`;
+    customTags.push({
+      tag: `!${name}`,
+      resolve: (value) => ({ [key]: value }),
+    });
+    customTags.push({
+      tag: `!${name}`,
+      collection: 'seq',
+      resolve: (value) => ({ [key]: value.toJSON() }),
+    });
+    customTags.push({
+      tag: `!${name}`,
+      collection: 'map',
+      resolve: (value) => ({ [key]: value.toJSON() }),
+    });
+  }
   const doc = parseYaml(content, { customTags, merge: true, uniqueKeys: true });
+  if (doc.warnings.some((w) => w.code === 'TAG_RESOLVE_FAILED'))
+    throw Error(
+      'Unsupported YAML tag. Use explicit CloudFormation intrinsic objects or JSON.',
+    );
   if (doc.errors.length)
     throw Error(doc.errors.map((e) => e.message).join('\n'));
   return doc.toJS({ maxAliasCount: 100 });
@@ -193,6 +221,7 @@ function cfn(root: Record<string, unknown>, warnings: string[]): Resource[] {
       Object.keys(obj(resource.Properties)).some((k) => k === 'Fn::If')
     ) {
       values.__incomplete = 'Conditional CloudFormation resource is unresolved';
+      values.__conditional = true;
       warnings.push(`${id}: CloudFormation conditions are not evaluated`);
     }
     values.depends_on = resource.DependsOn;
@@ -224,28 +253,23 @@ function terraformJson(
         resources.push({ id: `${type}.${name}`, type, values: obj(value) });
   const changes = list(root.resource_changes);
   const fallback = resources.length === 0;
+  const unknowns = new Map<string, string[]>();
   for (const value of changes) {
     const r = obj(value),
-      change = obj(r.change),
-      existing = resources.find((resource) => resource.id === r.address);
-    if (
-      existing &&
-      Object.keys(obj(change.after_unknown)).some(
-        (key) =>
-          [
-            'vpc_id',
-            'subnet_id',
-            'vpc_security_group_ids',
-            'ingress',
-            'egress',
-            'route',
-          ].includes(key) && obj(change.after_unknown)[key],
-      )
-    ) {
-      existing.values.__incomplete = 'Plan contains unknown network values';
-      warnings.push(`${r.address}: unknown network values in plan`);
-    }
-    if (fallback && change.after)
+      change = obj(r.change);
+    const keys = Object.keys(obj(change.after_unknown)).filter(
+      (key) =>
+        [
+          'vpc_id',
+          'subnet_id',
+          'vpc_security_group_ids',
+          'ingress',
+          'egress',
+          'route',
+        ].includes(key) && obj(change.after_unknown)[key],
+    );
+    if (keys.length) unknowns.set(String(r.address), keys);
+    if (fallback && change.after && r.mode !== 'data')
       resources.push({
         id: String(r.address),
         type: String(r.type),
@@ -253,11 +277,17 @@ function terraformJson(
       });
   }
   // Plan configuration retains references even when evaluated IDs are unknown.
-  const config = (module: unknown): void => {
+  const config = (module: unknown, prefix = ''): void => {
     const m = obj(module);
     for (const raw of list(m.resources)) {
       const r = obj(raw),
-        existing = resources.find((resource) => resource.id === r.address);
+        existing = resources.find(
+          (resource) =>
+            resource.id ===
+            (String(r.address).startsWith('module.')
+              ? String(r.address)
+              : prefix + String(r.address)),
+        );
       if (!existing) continue;
       for (const [key, value] of Object.entries(obj(r.expressions)))
         if (
@@ -267,21 +297,33 @@ function terraformJson(
             !(existing.values[key] as unknown[]).length)
         ) {
           const refs = list(obj(value).references).filter(
-            (r): r is string => typeof r === 'string' && !r.startsWith('var.'),
+            (r): r is string =>
+              typeof r === 'string' &&
+              !r.startsWith('var.') &&
+              !r.startsWith('data.'),
           );
           if (refs.length)
             existing.values[key] =
               key.endsWith('_ids') ||
               key === 'security_groups' ||
               key === 'subnets'
-                ? refs.map((r) => ({ $expr: r }))
-                : { $expr: refs[0] };
+                ? [...new Set(refs)].map((r) => ({ $expr: prefix + r }))
+                : { $expr: prefix + refs[0] };
         }
     }
-    for (const call of Object.values(obj(m.module_calls)))
-      config(obj(call).module);
+    for (const [name, call] of Object.entries(obj(m.module_calls)))
+      config(obj(call).module, `${prefix}module.${name}.`);
   };
   config(obj(root.configuration).root_module);
+  for (const r of resources) {
+    const keys = (unknowns.get(r.id) ?? []).filter(
+      (key) => r.values[key] === undefined || r.values[key] === null,
+    );
+    if (keys.length) {
+      r.values.__incomplete = `Plan has unknown values: ${keys.join(', ')}`;
+      warnings.push(`${r.id}: ${r.values.__incomplete}`);
+    }
+  }
   return resources;
 }
 export function importInfrastructure(
@@ -356,7 +398,7 @@ export function importInfrastructure(
     if (!file) throw Error('No file');
     const root = obj(
       file.content.trimStart().startsWith('{')
-        ? JSON.parse(file.content)
+        ? JSON.parse(file.content.trimStart())
         : yaml(file.content),
     );
     const format =

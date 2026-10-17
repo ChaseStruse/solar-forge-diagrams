@@ -15,3 +15,10 @@ Undo retains at most 100 actions and an estimated 8 MB of affected serialized re
 Version 1 documents may include `traffic: { protocol, port, sourceIp, direction }` at the document root. Protocol is `tcp`, `udp`, or `icmp`; direction is `ingress` or `egress`; port is an integer from 1–65535; sourceIp is an IPv4 address. If absent, playback uses TCP/443 ingress from `203.0.113.10`.
 
 Edges may include `networkRule: { action, protocol, direction, port?, sourceCidr? }`. Action is `allow` or `deny`. Protocol and direction also accept `any`. An allow rule requires all specified constraints to match; a deny rule blocks the connection unconditionally. Missing rules allow traversal. Source CIDRs use IPv4 with prefix length 0–32. Invalid network fields are rejected on import. The document version remains 1 because these fields are optional; older application versions discard them when loading/saving.
+
+
+### Resource networking and infrastructure relationships
+
+Nodes optionally store `network` and `policy`. `network` includes `model` (`aws`, `compose`, `generic`), IPv4 `ip`/`publicIp`, boundary `cidr`, `exposure`, `securityGroupIds`, subnet `networkAclId`/`routeTableId`, Compose `networkIds`, and `incomplete` messages. A `policy` is a `security-group` or `network-acl` with rules, or a `route-table` with routes. Rules contain action, direction, protocol, optional inclusive port range, CIDR or security-group peer; ACL rules require unique priorities per direction. Routes contain a destination CIDR and a target node ID, `local`, or `blackhole`.
+
+References are validated on load. Copy/paste remaps attached policies and peers; missing attachments are marked incomplete, removed peer rules cannot broaden access, and missing route targets become blackholes. Deletion and ungrouping preserve valid remaining references and undo restores them. An edge's optional `relationship` is `dependency` or `network`; dependency edges are excluded from journey traversal. These optional fields retain document version 1; older releases discard them when re-saving, so use this version to retain policy information.

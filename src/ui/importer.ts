@@ -13,6 +13,9 @@ export function infrastructureImporter(host: {
   panel.setAttribute('aria-label', 'Import infrastructure');
   panel.innerHTML = `<div class="dialog-heading"><h2>Import infrastructure</h2><button data-close aria-label="Close import">×</button></div><p>Choose .tf files together, or a Terraform JSON, CloudFormation, or Compose file. Files stay on this computer; code is never executed.</p><label>Format<select data-format><option value="auto">Detect format</option><option value="terraform">Terraform HCL / show JSON</option><option value="cloudformation">CloudFormation YAML / JSON</option><option value="compose">Docker Compose</option></select></label><button data-files>Choose files…</button><p data-names>No files selected</p><label>Or paste infrastructure code<textarea data-source rows="9" spellcheck="false" placeholder="Paste code here; use Format to select Terraform for pasted HCL"></textarea></label><button data-preview>Preview import</button><div data-summary role="status"></div><ul data-warnings></ul><div class="dialog-actions"><button data-apply disabled>Import diagram</button></div>`;
   document.body.append(panel);
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  const app = document.getElementById('app');
   const find = <T extends HTMLElement>(selector: string) => {
     const element = panel.querySelector<T>(selector);
     if (!element) throw Error('Missing importer control');
@@ -52,7 +55,11 @@ export function infrastructureImporter(host: {
         ? [
             {
               name:
-                format.value === 'terraform' &&
+                (format.value === 'terraform' ||
+                  (format.value === 'auto' &&
+                    /^\s*(resource|provider|variable|terraform|locals)\b/m.test(
+                      source.value,
+                    ))) &&
                 !source.value.trimStart().startsWith('{')
                   ? 'pasted.tf'
                   : 'pasted.yaml',
@@ -102,7 +109,10 @@ export function infrastructureImporter(host: {
     void host
       .apply(preview.document)
       .then((applied) => {
-        if (applied) panel.hidden = true;
+        if (applied) {
+          panel.hidden = true;
+          if (app) app.inert = false;
+        }
       })
       .catch(showError)
       .finally(() => {
@@ -110,10 +120,14 @@ export function infrastructureImporter(host: {
       });
   };
   const close = () => {
-    if (!busy) panel.hidden = true;
+    if (!busy) {
+      panel.hidden = true;
+      if (app) app.inert = false;
+    }
   };
   find('[data-close]').onclick = close;
   panel.addEventListener('keydown', (e) => {
+    e.stopPropagation();
     if (e.key === 'Escape') {
       e.stopPropagation();
       close();
@@ -122,6 +136,7 @@ export function infrastructureImporter(host: {
   return {
     open: () => {
       panel.hidden = false;
+      if (app) app.inert = true;
       format.focus();
     },
     close,

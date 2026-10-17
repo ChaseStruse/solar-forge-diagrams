@@ -133,3 +133,138 @@ test('malformed or ambiguous import input fails without producing a partial docu
     importInfrastructure([{ name: 'x.json', content: '{}' }]),
   ).toThrow();
 });
+
+test('Terraform plan configuration recovers unresolved resource references', () => {
+  const content = JSON.stringify({
+    planned_values: {
+      root_module: {
+        resources: [
+          {
+            address: 'aws_vpc.main',
+            type: 'aws_vpc',
+            values: { cidr_block: '10.0.0.0/16' },
+          },
+          {
+            address: 'aws_subnet.a',
+            type: 'aws_subnet',
+            values: { cidr_block: '10.0.1.0/24', vpc_id: null },
+          },
+        ],
+      },
+    },
+    resource_changes: [
+      { address: 'aws_subnet.a', change: { after_unknown: { vpc_id: true } } },
+    ],
+    configuration: {
+      root_module: {
+        resources: [
+          {
+            address: 'aws_subnet.a',
+            expressions: { vpc_id: { references: ['aws_vpc.main.id'] } },
+          },
+        ],
+      },
+    },
+  });
+  const result = importInfrastructure([{ name: 'plan.json', content }]);
+  const subnet = result.document.nodes.find(
+    (n) => n.id === 'resource:aws_subnet.a',
+  );
+  expect(subnet?.network?.incomplete).toBeUndefined();
+  expect(result.warnings).toEqual([]);
+  const az = result.document.nodes.find((n) => n.id === subnet?.parentId);
+  expect(az?.parentId).toBe('resource:aws_vpc.main');
+});
+test('CloudFormation GetAtt sequence syntax imports peer security group references', () => {
+  const content = `Resources:\n  Group:\n    Type: AWS::EC2::SecurityGroup\n    Properties: {}\n  App:\n    Type: AWS::EC2::Instance\n    Properties:\n      SecurityGroupIds: [!GetAtt [Group, GroupId]]\n`;
+  const doc = importInfrastructure([{ name: 'stack.yaml', content }]).document;
+  expect(
+    doc.nodes.find((n) => n.id === 'resource:App')?.network?.securityGroupIds,
+  ).toEqual(['resource:Group']);
+});
+
+test('conditional security groups never supply unconditional permission', () => {
+  const Ref = (id: string) => ({ Ref: id });
+  const instance = (ip: string) => ({
+    Type: 'AWS::EC2::Instance',
+    Properties: {
+      SubnetId: Ref('Subnet'),
+      PrivateIpAddress: ip,
+      SecurityGroupIds: [Ref('Group')],
+    },
+  });
+  const root = {
+    Resources: {
+      Vpc: { Type: 'AWS::EC2::VPC', Properties: { CidrBlock: '10.0.0.0/16' } },
+      Subnet: {
+        Type: 'AWS::EC2::Subnet',
+        Properties: { VpcId: Ref('Vpc'), CidrBlock: '10.0.1.0/24' },
+      },
+      Group: {
+        Type: 'AWS::EC2::SecurityGroup',
+        Condition: 'EnableGroup',
+        Properties: {
+          VpcId: Ref('Vpc'),
+          SecurityGroupIngress: [
+            {
+              IpProtocol: 'tcp',
+              FromPort: 443,
+              ToPort: 443,
+              CidrIp: '0.0.0.0/0',
+            },
+          ],
+        },
+      },
+      A: instance('10.0.1.10'),
+      B: instance('10.0.1.11'),
+    },
+  };
+  const result = importInfrastructure([
+    { name: 'conditional.json', content: JSON.stringify(root) },
+  ]);
+  expect(
+    checkReachability(
+      result.document,
+      'resource:A',
+      'resource:B',
+      defaultTraffic,
+    ).status,
+  ).toBe('unknown');
+  expect(result.warnings.some((w) => w.includes('condition'))).toBe(true);
+});
+
+test('manually attached resource policies also restrict shared Compose networks', () => {
+  const doc = importInfrastructure([example('docker-compose.yaml')]).document;
+  doc.nodes.push({
+    id: 'api-policy',
+    kind: 'service',
+    label: 'API policy',
+    x: 0,
+    z: 0,
+    width: 160,
+    depth: 100,
+    color: '#d97706',
+    policy: { kind: 'security-group', rules: [] },
+  });
+  const api = doc.nodes.find((n) => n.id === 'compose:service:api');
+  if (!api?.network) throw Error('Missing API');
+  api.network.securityGroupIds = ['api-policy'];
+  expect(
+    checkReachability(doc, 'compose:service:web', api.id, defaultTraffic)
+      .status,
+  ).toBe('denied');
+  const policy = doc.nodes.find((n) => n.id === 'api-policy')?.policy;
+  if (!policy || policy.kind === 'route-table') throw Error('Missing policy');
+  policy.rules.push({
+    action: 'allow',
+    direction: 'ingress',
+    protocol: 'tcp',
+    fromPort: 443,
+    toPort: 443,
+    cidr: '0.0.0.0/0',
+  });
+  expect(
+    checkReachability(doc, 'compose:service:web', api.id, defaultTraffic)
+      .status,
+  ).toBe('allowed');
+});

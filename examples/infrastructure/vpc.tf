@@ -1,3 +1,4 @@
+variable "ami_id" { type = string }
 provider "aws" { region = "us-east-1" }
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
@@ -28,15 +29,37 @@ resource "aws_route_table_association" "public" {
 }
 resource "aws_security_group" "web" {
   vpc_id = aws_vpc.main.id
-  ingress { protocol = "tcp" from_port = 443 to_port = 443 cidr_blocks = ["0.0.0.0/0"] }
-  egress { protocol = "-1" cidr_blocks = ["0.0.0.0/0"] }
+  ingress {
+    protocol = "tcp"
+    from_port = 443
+    to_port = 443
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    protocol = "-1"
+    from_port = 0
+    to_port = 0
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 resource "aws_security_group" "data" {
   vpc_id = aws_vpc.main.id
-  ingress { protocol = "tcp" from_port = 5432 to_port = 5432 security_groups = [aws_security_group.web.id] }
-  egress { protocol = "-1" cidr_blocks = ["0.0.0.0/0"] }
+  ingress {
+    protocol = "tcp"
+    from_port = 5432
+    to_port = 5432
+    security_groups = [aws_security_group.web.id]
+  }
+  egress {
+    protocol = "-1"
+    from_port = 0
+    to_port = 0
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 resource "aws_instance" "web" {
+  ami = var.ami_id
+  instance_type = "t3.micro"
   subnet_id = aws_subnet.public.id
   private_ip = "10.0.1.10"
   associate_public_ip_address = true
@@ -44,6 +67,8 @@ resource "aws_instance" "web" {
   tags = { Name = "HTTPS web" }
 }
 resource "aws_instance" "database" {
+  ami = var.ami_id
+  instance_type = "t3.micro"
   subnet_id = aws_subnet.private.id
   private_ip = "10.0.2.10"
   associate_public_ip_address = false

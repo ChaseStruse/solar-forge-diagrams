@@ -25,6 +25,15 @@ function input(value = '', type = 'text'): HTMLInputElement {
   n.value = value;
   return n;
 }
+function portRange(
+  from: HTMLInputElement,
+  to: HTMLInputElement,
+): Record<string, number> {
+  if (from.disabled || (!from.value && !to.value)) return {};
+  if (!from.value || !to.value)
+    throw Error('Enter both ends of the port range, or leave both blank');
+  return { fromPort: Number(from.value), toPort: Number(to.value) };
+}
 function select(options: [string, string][], value = ''): HTMLSelectElement {
   const n = element('select');
   for (const [id, label] of options) {
@@ -82,8 +91,10 @@ export function renderNetworkProperties(
   const ip = input(node.network?.ip ?? ''),
     publicIp = input(node.network?.publicIp ?? ''),
     cidr = input(node.network?.cidr ?? '');
-  field(details, 'Private / endpoint IPv4', ip);
-  field(details, 'Public IPv4 (if known)', publicIp);
+  if (node.kind === 'service' && !node.policy) {
+    field(details, 'Private / endpoint IPv4', ip);
+    field(details, 'Public IPv4 (if known)', publicIp);
+  }
   if (node.kind === 'group') field(details, 'Boundary CIDR', cidr);
   const exposure = select(
     [
@@ -93,13 +104,15 @@ export function renderNetworkProperties(
     ],
     node.network?.exposure ?? 'unknown',
   );
-  field(details, 'Public address assignment', exposure);
+  if (node.kind === 'service' && !node.policy)
+    field(details, 'Public address assignment', exposure);
   const sg = multi(
     doc,
     (n) => n.policy?.kind === 'security-group',
     node.network?.securityGroupIds ?? [],
   );
-  field(details, 'Attached security groups', sg);
+  if (node.kind === 'service' && !node.policy)
+    field(details, 'Attached security groups', sg);
   const choices = (kind: ResourcePolicy['kind']) =>
     [
       ['', 'Not assigned'],
@@ -255,9 +268,7 @@ export function renderNetworkProperties(
               protocol: protocol.value,
               action:
                 policyKind.value === 'security-group' ? 'allow' : action.value,
-              ...(!from.disabled && (from.value || to.value)
-                ? { fromPort: Number(from.value), toPort: Number(to.value) }
-                : {}),
+              ...portRange(from, to),
               ...(policyKind.value === 'security-group' && peerGroup.value
                 ? { peerGroupId: peerGroup.value }
                 : peer.value.trim()

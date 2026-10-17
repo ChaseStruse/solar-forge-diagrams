@@ -242,3 +242,46 @@ test('invalid references, duplicate ACL priorities and malformed CIDRs are rejec
   node(doc, web).network = { model: 'aws', cidr: '10.0.0.0/33' };
   expect(() => parseDocument(serializeDocument(doc))).toThrow();
 });
+
+test('deleting an assigned ACL does not silently fall back to unrestricted traffic', () => {
+  const doc = fixture();
+  doc.nodes.push({
+    id: 'acl',
+    kind: 'service',
+    label: 'ACL',
+    x: 0,
+    z: 0,
+    width: 160,
+    depth: 100,
+    color: '#d97706',
+    policy: { kind: 'network-acl', rules: [] },
+  });
+  const subnet = node(doc, 'resource:aws_subnet.private');
+  subnet.network ??= { model: 'aws' };
+  subnet.network.networkAclId = 'acl';
+  const history = new DocumentHistory(doc);
+  history.execute(deleteNodes(doc, new Set(['acl'])));
+  expect(() => parseDocument(serializeDocument(doc))).not.toThrow();
+  expect(check(doc).status).toBe('unknown');
+});
+
+test('missing VPC CIDR is Unknown even when a less-specific internet route is present', () => {
+  const doc = fixture();
+  delete node(doc, 'resource:aws_vpc.main').network?.cidr;
+  expect(check(doc).status).toBe('unknown');
+});
+
+test('arrows without a resource network model do not prove reachability', () => {
+  const doc = fixture();
+  for (const n of doc.nodes) {
+    delete n.network;
+    delete n.policy;
+  }
+  doc.edges.push({
+    id: 'manual',
+    source: web,
+    target: db,
+    label: 'Trust this arrow',
+  });
+  expect(check(doc).status).toBe('unknown');
+});

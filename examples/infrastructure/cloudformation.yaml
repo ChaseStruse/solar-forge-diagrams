@@ -1,4 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  ImageId:
+    Type: AWS::EC2::Image::Id
 Resources:
   Vpc:
     Type: AWS::EC2::VPC
@@ -23,6 +26,7 @@ Resources:
     Properties:
       VpcId: !Ref Vpc
   DefaultRoute:
+    DependsOn: GatewayAttachment
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PublicRoutes
@@ -46,6 +50,8 @@ Resources:
   Web:
     Type: AWS::EC2::Instance
     Properties:
+      ImageId: !Ref ImageId
+      InstanceType: t3.micro
       SubnetId: !Ref PublicSubnet
       PrivateIpAddress: 10.20.1.10
       SecurityGroupIds: [!Ref WebSecurityGroup]

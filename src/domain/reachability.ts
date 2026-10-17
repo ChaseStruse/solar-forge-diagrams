@@ -1,5 +1,4 @@
 import type { DiagramDocument, DiagramNode, JourneyTraffic } from './document';
-import { evaluateTraffic } from './network';
 import { cidrContains, type FirewallRule } from './policies';
 
 export type ReachabilityStatus = 'allowed' | 'denied' | 'unknown';
@@ -43,12 +42,18 @@ function matches(
     return false;
   if (
     traffic.protocol !== 'icmp' &&
+    rule.protocol !== 'any' &&
     rule.fromPort !== undefined &&
     (port < rule.fromPort || port > (rule.toPort ?? rule.fromPort))
   )
     return false;
   if (rule.peerGroupId) return groups.includes(rule.peerGroupId);
-  if (rule.cidr) return peerIp ? cidrContains(rule.cidr, peerIp) : undefined;
+  if (rule.cidr)
+    return rule.cidr.endsWith('/0')
+      ? true
+      : peerIp
+        ? cidrContains(rule.cidr, peerIp)
+        : undefined;
   return true;
 }
 /** Evaluate a forward connection plus stateless ACL return traffic. SG replies are stateful. */
@@ -72,36 +77,12 @@ export function checkReachability(
   if (!source || !target)
     return finish(unknown('Source or destination no longer exists'));
   if (sourceId === targetId) return finish(allow('Same resource'));
-  if (!source.network && !target.network) {
-    const queue = [sourceId],
-      paths = new Map([[sourceId, [sourceId]]]);
-    let blocked = false;
-    for (let i = 0; i < queue.length; i++)
-      for (const edge of doc.edges.filter(
-        (e) => e.source === queue[i] && e.relationship !== 'dependency',
-      )) {
-        const verdict = evaluateTraffic(edge.networkRule, traffic);
-        if (!verdict.allowed) {
-          blocked = true;
-          continue;
-        }
-        if (paths.has(edge.target)) continue;
-        const route = [...(paths.get(edge.source) ?? []), edge.target];
-        paths.set(edge.target, route);
-        if (edge.target === targetId) {
-          path = route;
-          return finish(
-            allow('Diagram path and connection rules allow traffic'),
-          );
-        }
-        queue.push(edge.target);
-      }
+  if (!source.network && !target.network)
     return finish(
-      blocked
-        ? deny('Diagram connection rules block the available path')
-        : unknown('No modeled network or diagram path'),
+      unknown(
+        'Enable resource networking; diagram arrows alone do not establish reachability',
+      ),
     );
-  }
   const sourceVpc = ancestor(doc, source, 'vpc'),
     targetVpc = ancestor(doc, target, 'vpc');
   const sourceSubnet = ancestor(doc, source, 'subnet'),
@@ -109,20 +90,6 @@ export function checkReachability(
   const sourceIp =
     source.network?.ip ?? (!sourceVpc ? traffic.sourceIp : undefined);
   const targetIp = target.network?.ip ?? target.network?.publicIp;
-  if (
-    source.network?.model === 'compose' &&
-    target.network?.model === 'compose'
-  ) {
-    if (source.network.incomplete?.length || target.network.incomplete?.length)
-      return finish(unknown('Compose network attachments are incomplete'));
-    const shared = (source.network.networkIds ?? []).filter((id) =>
-      target.network?.networkIds?.includes(id),
-    );
-    if (!shared.length)
-      return finish(deny('Containers have no shared network'));
-    path = [sourceId, shared[0] ?? '', targetId];
-    return finish(allow('Containers share a Compose network'));
-  }
   const sg = (
     node: DiagramNode,
     direction: 'ingress' | 'egress',
@@ -142,7 +109,12 @@ export function checkReachability(
     }
     let incomplete = false;
     for (const id of ids) {
-      const policy = nodes.get(id)?.policy;
+      const owner = nodes.get(id);
+      const policy = owner?.policy;
+      if (owner?.network?.incomplete?.length) {
+        incomplete = true;
+        continue;
+      }
       if (!policy || policy.kind !== 'security-group') {
         incomplete = true;
         continue;
@@ -170,6 +142,32 @@ export function checkReachability(
         )
       : deny(`${node.label}: no ${direction} security-group allow rule`);
   };
+  if (
+    source.network?.model === 'compose' &&
+    target.network?.model === 'compose'
+  ) {
+    if (source.network.incomplete?.length || target.network.incomplete?.length)
+      return finish(unknown('Compose network attachments are incomplete'));
+    const shared = (source.network.networkIds ?? []).filter((id) =>
+      target.network?.networkIds?.includes(id),
+    );
+    if (!shared.length)
+      return finish(deny('Containers have no shared network'));
+    path = [sourceId, shared[0] ?? '', targetId];
+    const verdicts = [
+      sg(source, 'egress', target, targetIp),
+      sg(target, 'ingress', source, sourceIp),
+    ];
+    checks.push(
+      'Containers share a Compose network',
+      ...verdicts.map((v) => `${v.status}: ${v.reason}`),
+    );
+    return finish(
+      verdicts.find((v) => v.status === 'denied') ??
+        verdicts.find((v) => v.status === 'unknown') ??
+        allow('Shared Compose network and attached policies allow traffic'),
+    );
+  }
   const acl = (
     subnet: DiagramNode | undefined,
     direction: 'ingress' | 'egress',
@@ -183,7 +181,12 @@ export function checkReachability(
       );
     const owner = nodes.get(subnet.network.networkAclId),
       policy = owner?.policy;
-    if (!policy || policy.kind !== 'network-acl' || policy.incomplete?.length)
+    if (
+      !policy ||
+      policy.kind !== 'network-acl' ||
+      policy.incomplete?.length ||
+      owner?.network?.incomplete?.length
+    )
       return unknown(`${subnet.label}: incomplete network ACL`);
     for (const rule of [...policy.rules].sort(
       (a, b) => (a.priority ?? 0) - (b.priority ?? 0),
@@ -216,10 +219,17 @@ export function checkReachability(
         check: unknown('Destination IPv4 address is unknown'),
         path: [node.id, destination.id],
       };
+    if (vpc && !vpc.network?.cidr)
+      return {
+        check: unknown(
+          'VPC CIDR is missing; the implicit local route cannot be resolved',
+        ),
+        path: [node.id, destination.id],
+      };
     const table = subnet?.network?.routeTableId
       ? nodes.get(subnet.network.routeTableId)
       : undefined;
-    if (table?.policy?.incomplete?.length)
+    if (table?.policy?.incomplete?.length || table?.network?.incomplete?.length)
       return {
         check: unknown(`Incomplete routes in ${table.label}`),
         path: [node.id, destination.id],
@@ -267,6 +277,11 @@ export function checkReachability(
         check: unknown('Route target missing'),
         path: [node.id, destination.id],
       };
+    if (gateway.network?.incomplete?.length)
+      return {
+        check: unknown(`Incomplete gateway settings: ${gateway.label}`),
+        path: [node.id, gateway.id, destination.id],
+      };
     if (gateway.serviceId === 'component.internet-gateway') {
       if (ancestor(doc, gateway, 'vpc')?.id !== vpc?.id)
         return {
@@ -280,6 +295,8 @@ export function checkReachability(
     }
     if (gateway.serviceId === 'component.nat-gateway') {
       const onward = route(gateway, ip, destination, visited);
+      if (onward.check.status !== 'allowed')
+        return { check: onward.check, path: [node.id, ...onward.path] };
       if (
         !onward.path.some(
           (id) => nodes.get(id)?.serviceId === 'component.internet-gateway',
@@ -297,9 +314,20 @@ export function checkReachability(
     };
   };
   const verdicts: Check[] = [];
-  if (source.network?.incomplete?.length || target.network?.incomplete?.length)
+  if (
+    [source, target, sourceSubnet, targetSubnet, sourceVpc, targetVpc].some(
+      (n) => n?.network?.incomplete?.length,
+    )
+  )
     verdicts.push(
       unknown('Resource network contains unresolved infrastructure values'),
+    );
+  if (
+    (source.network?.model === 'aws' && !sourceVpc) ||
+    (target.network?.model === 'aws' && !targetVpc)
+  )
+    verdicts.push(
+      unknown('An AWS endpoint has no modeled VPC/subnet placement'),
     );
   if (!sourceVpc && targetVpc) {
     if (target.network?.exposure === 'private')
@@ -350,7 +378,9 @@ export function checkReachability(
       !source.network?.publicIp
     )
       verdicts.push(
-        deny('Internet-gateway egress requires a public address or NAT'),
+        (source.network?.exposure === 'private' ? deny : unknown)(
+          'Internet-gateway egress requires a public address or NAT',
+        ),
       );
   } else
     verdicts.push(
