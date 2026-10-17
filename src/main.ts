@@ -8,6 +8,10 @@ import {
   parseNetworkRule,
   parseTraffic,
 } from './domain/network';
+import {
+  defaultRecordingOptions,
+  validateRecordingOptions,
+} from './export/gif';
 import { RecoveryWriter } from './persistence/recovery';
 import type { OpenedFile } from './platform/files';
 import { exportGif } from './platform/files';
@@ -64,6 +68,7 @@ root.innerHTML = `
   <nav class="canvas-controls" aria-label="Canvas controls"><div class="zoom-dock floating-dock" aria-label="Zoom controls"><button id="zoom-out" class="small-icon" aria-label="Zoom out">${icon('minus')}</button><span id="zoom-level">100%</span><button id="zoom-in" class="small-icon" aria-label="Zoom in">${icon('plus')}</button><span class="dock-divider"></span><button id="fit">Fit</button><span class="dock-divider"></span><button id="help" class="small-icon" aria-label="Keyboard help" aria-expanded="false">${icon('help')}</button></div>
   <div class="history-dock floating-dock" aria-label="Edit history"><button id="undo" class="small-icon" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button><button id="redo" class="small-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>${icon('redo')}</button></div>
   <div class="view-dock floating-dock" aria-label="View controls"><button id="journey" class="journey-button" aria-pressed="false" title="Walk a person through the data flow (P)">${icon('user')}<span>Journey</span></button><button id="traffic-settings" title="Configure journey traffic">Traffic</button><button id="flow" aria-pressed="true" title="Animate data flow along connections">${icon('flow')}<span>Flow</span></button><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
+  <section id="gif-panel" class="popover help-panel" aria-label="GIF recording settings" hidden><h2>Journey GIF</h2><label>Duration (seconds)<input id="gif-duration" type="number" min="2" max="120" step="1" value="12"></label><label class="checkbox-label"><input id="gif-dither" type="checkbox" checked> Dither gradients</label><p>Up to 8 frames per second, 640 × 480. An adaptive palette preserves theme colours. Decision forks use their first branch.</p><button id="gif-record">Record GIF</button><p>Press Esc to cancel recording.</p></section>
   <section id="traffic-panel" class="popover help-panel" aria-label="Journey traffic" hidden><h2>Journey traffic</h2><p>Rules on connections allow matching traffic. Blocked attempts flash red and stop at the source. This illustrates configured paths, not a full AWS policy simulation.</p><label>Protocol<select id="traffic-protocol"><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Destination port<input id="traffic-port" type="number" min="1" max="65535" value="443"></label><label>Source IPv4<input id="traffic-source" value="203.0.113.10"></label><label>Direction<select id="traffic-direction"><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="traffic-apply">Apply traffic</button><p>For private egress in the demo, select a private worker, use source 10.0.10.10 and Egress, then play Journey.</p></section>
   <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add · Enter drops it <kbd>C</kbd> Connect</p><p><kbd>T</kbd> Text <kbd>N</kbd> Note <kbd>P</kbd> Journey</p><p>Double-click to rename · <kbd>Ctrl K</kbd> Commands</p><p><kbd>Esc</kbd> Deselect · stop</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><label class="quality-label">Rendering quality<select id="quality"><option value="1">Efficient · 1×</option><option value="1.5" selected>Balanced · 1.5×</option><option value="2">Sharp · 2×</option></select></label><p>Drag empty canvas to select. Shift-drag adds.<br>Hold Ctrl while dragging to skip guides.<br>Scroll to zoom. Right-drag to pan.</p></section>
   <section id="context-menu" class="popover context-menu" aria-label="Selection actions" hidden><button data-action="duplicate">Duplicate</button><button data-action="tool-group">Group</button><button data-action="ungroup">Ungroup</button><div class="align-row" data-multi><button data-align="left" title="Align left edges">⇤</button><button data-align="center" title="Align centres horizontally">↔</button><button data-align="right" title="Align right edges">⇥</button><button data-align="top" title="Align top edges">⤒</button><button data-align="middle" title="Align middles">↕</button><button data-align="bottom" title="Align bottom edges">⤓</button></div><div class="align-row" data-multi><button data-align="distribute-x" title="Distribute horizontally">⋯ Space evenly ↔</button><button data-align="distribute-z" title="Distribute vertically">⋮ ↕</button></div><button data-action="edge-active">Make active route</button><button data-action="edge-all-routes">Show all routes</button><button data-action="delete">Delete</button><button data-action="fit">Fit view</button></section>
@@ -316,14 +321,36 @@ for (const template of templates) {
 }
 let recordingGif = false;
 let recordingAbort: AbortController | undefined;
-element('export-gif').onclick = () =>
+element('export-gif').onclick = () => {
+  element('file-menu').hidden = true;
+  element('gif-panel').hidden = false;
+  inputElement('gif-duration').focus();
+};
+try {
+  const saved = localStorage.getItem('solar-forge-gif');
+  const options = saved
+    ? validateRecordingOptions(JSON.parse(saved))
+    : defaultRecordingOptions;
+  inputElement('gif-duration').value = String(options.duration);
+  inputElement('gif-dither').checked = options.dither;
+} catch {}
+element('gif-record').onclick = () =>
   void action(async () => {
+    const options = validateRecordingOptions({
+      duration: Number(inputElement('gif-duration').value),
+      dither: inputElement('gif-dither').checked,
+    });
+    try {
+      localStorage.setItem('solar-forge-gif', JSON.stringify(options));
+    } catch {}
+
     const starts = journeyStarts(current, selected);
     if (!starts.length) {
       notify('Connect components before exporting a journey.');
       return;
     }
     const { recordJourney } = await import('./export/gif');
+    element('gif-panel').hidden = true;
     recordingGif = true;
     recordingAbort = new AbortController();
     element('file-menu').hidden = true;
@@ -343,13 +370,16 @@ element('export-gif').onclick = () =>
         () => scene.gifFrame(),
         (percent) =>
           notify(
-            `Recording journey GIF · ${percent}% · 12 seconds · Esc cancels; decision forks use the first branch`,
+            `Recording journey GIF · ${percent}% · ${options.duration} seconds · Esc cancels; decision forks use the first branch`,
           ),
         recordingAbort.signal,
+        options,
       );
       scene.stopJourney();
       if (await exportGif(blob))
-        notify('Journey GIF exported · 12 seconds, 8 fps');
+        notify(
+          `Journey GIF exported · ${options.duration} seconds, up to 8 fps`,
+        );
     } finally {
       recordingGif = false;
       recordingAbort = undefined;
@@ -1800,6 +1830,7 @@ window.addEventListener('keydown', (event) => {
     element('file-menu').hidden = true;
     element('help-panel').hidden = true;
     element('traffic-panel').hidden = true;
+    element('gif-panel').hidden = true;
     element('theme-menu').hidden = true;
     element('menu').setAttribute('aria-expanded', 'false');
     element('help').setAttribute('aria-expanded', 'false');

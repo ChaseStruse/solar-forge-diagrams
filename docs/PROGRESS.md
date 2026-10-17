@@ -208,3 +208,11 @@ Host upgrade was started with authenticated pacman and is waiting on the operati
 - Persisted traffic parameters and editable per-connection rules with IPv4/CIDR validation, undo/redo, and visible denial feedback.
 - Offline GIF89a journey recording, browser download/native atomic save, bounded frame count and dimensions, and cancellation.
 - Validation: 39 Bun tests, lint, TypeScript, production build, bundle budget, and headless Chromium checks of templates and denial feedback. GIF decoding checked independently using FFmpeg. Native Rust compilation/save-dialog validation requires a machine with the Rust/Tauri toolchain.
+
+## Networking review follow-up (2026-10-17)
+
+- Confirmed both templates in Chromium; widened the VPC to reserve a left margin for the internet gateway, route table, and security group outside the AZ footprints. Geometry regression checks cover containment and AZ separation.
+- Wrapped service captions in the canvas atlas and SVG export; assigned individual component colours to both catalog tiles and SVG artwork. Deny/Unrestricted disable ignored traffic fields.
+- Replaced RGB332 with an image-adaptive median-cut palette and optional Floyd–Steinberg dithering; reused the palette/cache during worker encoding to keep colours stable and playback responsive.
+- Added remembered 2–120 second recording settings, binary native IPC, and a 12-bit LZW EOF limit with independent decoder regression tests for a dictionary that fills at the final pixel.
+- Validation: 48 tests, lint, TypeScript, production build, bundle budget; browser checks for templates, rules, longer recordings and cancellation; FFmpeg decoding of exported GIFs. Native Rust compilation and save-dialog checks remain unavailable without the Rust/Tauri toolchain.

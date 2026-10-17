@@ -1,10 +1,17 @@
-/** Small offline GIF89a encoder: RGB332 palette with bounded 12-bit LZW compression. */
+import {
+  createPaletteMapper,
+  type PaletteMapper,
+  quantizeFrame,
+} from './palette';
+/** Small offline GIF89a encoder: adaptive palettes and dithering with bounded 12-bit LZW compression. */
 export class GifEncoder {
   private parts: Uint8Array<ArrayBuffer>[] = [];
   private frames = 0;
+  private mapper: PaletteMapper | undefined;
   constructor(
     readonly width: number,
     readonly height: number,
+    readonly dither = true,
   ) {
     if (
       !Number.isInteger(width) ||
@@ -24,16 +31,10 @@ export class GifEncoder {
       97,
       ...word(width),
       ...word(height),
-      0xf7,
+      0x70,
       0,
       0,
     ];
-    for (let i = 0; i < 256; i++)
-      header.push(
-        Math.round((((i >> 5) & 7) * 255) / 7),
-        Math.round((((i >> 2) & 7) * 255) / 7),
-        Math.round(((i & 3) * 255) / 3),
-      );
     // Loop forever.
     header.push(
       0x21,
@@ -51,7 +52,16 @@ export class GifEncoder {
   addFrame(rgba: Uint8ClampedArray, delay = 12): void {
     if (rgba.length !== this.width * this.height * 4)
       throw Error('GIF frame size mismatch');
-    if (++this.frames > 96) throw Error('GIF export is limited to 96 frames');
+    if (++this.frames > 960)
+      throw Error('GIF export is limited to 120 seconds');
+    this.mapper ??= createPaletteMapper(rgba, true);
+    const { palette, indices } = quantizeFrame(
+      rgba,
+      this.width,
+      this.height,
+      this.dither,
+      this.mapper,
+    );
     this.parts.push(
       new Uint8Array([
         0x21,
@@ -68,61 +78,12 @@ export class GifEncoder {
         0,
         ...word(this.width),
         ...word(this.height),
-        0,
+        0x87,
+        ...palette,
         8,
       ]),
     );
-    // GIF LZW grows from 9 to 12 bits, then resets its bounded dictionary.
-    const bytes: number[] = [];
-    let bits = 0,
-      buffer = 0,
-      codeSize = 9,
-      nextCode = 258;
-    const dictionary = new Map<number, number>();
-    const code = (value: number) => {
-      buffer |= value << bits;
-      bits += codeSize;
-      while (bits >= 8) {
-        bytes.push(buffer & 255);
-        buffer >>>= 8;
-        bits -= 8;
-      }
-    };
-    const color = (pixel: number) => {
-      const i = pixel * 4;
-      return (
-        ((rgba[i] ?? 0) & 0xe0) |
-        (((rgba[i + 1] ?? 0) >> 3) & 0x1c) |
-        ((rgba[i + 2] ?? 0) >> 6)
-      );
-    };
-    code(256);
-    let prefix = color(0);
-    for (let pixel = 1; pixel < this.width * this.height; pixel++) {
-      const value = color(pixel);
-      const key = prefix * 256 + value;
-      const existing = dictionary.get(key);
-      if (existing !== undefined) {
-        prefix = existing;
-        continue;
-      }
-      code(prefix);
-      if (nextCode === 4096) {
-        code(256);
-        dictionary.clear();
-        nextCode = 258;
-        codeSize = 9;
-      } else {
-        // The decoder creates a dictionary entry one emitted code later.
-        if (nextCode === 1 << codeSize) codeSize++;
-        dictionary.set(key, nextCode++);
-      }
-      prefix = value;
-    }
-    code(prefix);
-    if (nextCode === 1 << codeSize) codeSize++;
-    code(257);
-    if (bits) bytes.push(buffer & 255);
+    const { bytes } = encodeLzw(indices);
     const blocks = new Uint8Array(
       bytes.length + Math.ceil(bytes.length / 255) + 1,
     );
@@ -134,6 +95,8 @@ export class GifEncoder {
       offset += chunk.length;
     }
     this.parts.push(blocks);
+    if (this.parts.reduce((sum, part) => sum + part.byteLength, 0) > 49_000_000)
+      throw Error('GIF exceeds 49 MB; shorten the duration');
   }
   finish(): Blob {
     if (!this.frames) throw Error('No GIF frames');
@@ -141,6 +104,80 @@ export class GifEncoder {
       type: 'image/gif',
     });
   }
+}
+/** Encode GIF's LZW stream; EOF never grows past the 12-bit dictionary limit. */
+export function encodeLzw(indices: Uint8Array): {
+  bytes: number[];
+  bitLength: number;
+} {
+  if (!indices.length) throw Error('Empty LZW stream');
+  let bitLength = 0;
+  // GIF LZW grows from 9 to 12 bits, then resets its bounded dictionary.
+  const bytes: number[] = [];
+  let bits = 0,
+    buffer = 0,
+    codeSize = 9,
+    nextCode = 258;
+  const dictionary = new Map<number, number>();
+  const code = (value: number) => {
+    bitLength += codeSize;
+    buffer |= value << bits;
+    bits += codeSize;
+    while (bits >= 8) {
+      bytes.push(buffer & 255);
+      buffer >>>= 8;
+      bits -= 8;
+    }
+  };
+  code(256);
+  let prefix = indices[0] ?? 0;
+  for (let pixel = 1; pixel < indices.length; pixel++) {
+    const value = indices[pixel] ?? 0;
+    const key = prefix * 256 + value;
+    const existing = dictionary.get(key);
+    if (existing !== undefined) {
+      prefix = existing;
+      continue;
+    }
+    code(prefix);
+    if (nextCode === 4096) {
+      code(256);
+      dictionary.clear();
+      nextCode = 258;
+      codeSize = 9;
+    } else {
+      // The decoder creates a dictionary entry one emitted code later.
+      if (nextCode === 1 << codeSize) codeSize++;
+      dictionary.set(key, nextCode++);
+    }
+    prefix = value;
+  }
+  code(prefix);
+  if (codeSize < 12 && nextCode === 1 << codeSize) codeSize++;
+  code(257);
+  if (bits) bytes.push(buffer & 255);
+  return { bytes, bitLength };
+}
+
+export interface RecordingOptions {
+  duration: number;
+  dither: boolean;
+}
+export const defaultRecordingOptions: RecordingOptions = {
+  duration: 12,
+  dither: true,
+};
+export function validateRecordingOptions(
+  options: RecordingOptions,
+): RecordingOptions {
+  if (
+    !Number.isInteger(options.duration) ||
+    options.duration < 2 ||
+    options.duration > 120 ||
+    typeof options.dither !== 'boolean'
+  )
+    throw Error('GIF duration must be a whole number from 2 to 120 seconds');
+  return { ...options };
 }
 function word(value: number): number[] {
   return [value & 255, (value >> 8) & 255];
@@ -151,28 +188,92 @@ export async function recordJourney(
   frame: () => HTMLCanvasElement,
   progress: (percent: number) => void,
   signal?: AbortSignal,
+  options: RecordingOptions = defaultRecordingOptions,
 ): Promise<Blob> {
+  validateRecordingOptions(options);
   const first = frame();
   const context = first.getContext('2d');
   if (!context) throw Error('GIF canvas unavailable');
-  const encoder = new GifEncoder(first.width, first.height);
-  const started = performance.now();
-  for (let i = 0; i < 96; i++) {
-    if (signal?.aborted) throw Error('GIF recording cancelled');
-    const canvas = i === 0 ? first : frame();
+  // Encoding runs off the UI thread so the journeyman keeps moving smoothly.
+  const worker = new Worker(new URL('./gif-worker.ts', import.meta.url), {
+    type: 'module',
+  });
+  let rejectPending: ((reason: Error) => void) | undefined;
+  const aborted = () => rejectPending?.(Error('GIF recording cancelled'));
+  signal?.addEventListener('abort', aborted);
+  const request = (
+    message: unknown,
+    transfer: Transferable[] = [],
+  ): Promise<{ blob?: Blob }> =>
+    new Promise((resolve, reject) => {
+      rejectPending = reject;
+      worker.onmessage = (event) => {
+        rejectPending = undefined;
+        if (event.data.error) reject(Error(event.data.error));
+        else resolve(event.data);
+      };
+      worker.onerror = (event) => {
+        rejectPending = undefined;
+        reject(Error(event.message || 'GIF encoder failed'));
+      };
+      worker.postMessage(message, transfer);
+    });
+  const capture = (
+    canvas: HTMLCanvasElement,
+  ): Uint8ClampedArray<ArrayBuffer> => {
+    if (canvas.width !== first.width || canvas.height !== first.height)
+      throw Error('View size changed during recording; try again');
     const ctx = canvas.getContext('2d');
     if (!ctx) throw Error('GIF canvas unavailable');
-    encoder.addFrame(
-      ctx.getImageData(0, 0, canvas.width, canvas.height).data,
-      i % 2 ? 13 : 12,
-    );
-    progress(Math.round(((i + 1) / 96) * 100));
-    await new Promise((resolve) =>
-      setTimeout(
-        resolve,
-        Math.max(0, started + (i + 1) * 125 - performance.now()),
-      ),
-    );
+    return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  };
+  const started = performance.now(),
+    duration = options.duration * 1000;
+  let previous = capture(first),
+    encodedUntil = 0,
+    nextCapture = 125;
+  try {
+    for (;;) {
+      if (signal?.aborted) throw Error('GIF recording cancelled');
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          Math.max(
+            0,
+            started + Math.min(duration, nextCapture) - performance.now(),
+          ),
+        ),
+      );
+      if (signal?.aborted) throw Error('GIF recording cancelled');
+      const elapsed = Math.min(duration, performance.now() - started);
+      const until = Math.round(elapsed / 10);
+      const last = elapsed >= duration;
+      const next = last ? undefined : capture(frame());
+      // Delay reflects actual capture time, so slower CPUs never accelerate
+      // playback or stretch the requested recording into a longer journey.
+      await request(
+        {
+          type: 'frame',
+          width: first.width,
+          height: first.height,
+          dither: options.dither,
+          delay: Math.max(1, until - encodedUntil),
+          buffer: previous.buffer,
+        },
+        [previous.buffer],
+      );
+      progress(Math.round((elapsed / duration) * 100));
+      if (!next) break;
+      previous = next;
+      encodedUntil = until;
+      nextCapture += 125;
+    }
+    if (signal?.aborted) throw Error('GIF recording cancelled');
+    const result = await request({ type: 'finish' });
+    if (!result.blob) throw Error('GIF encoder returned no animation');
+    return result.blob;
+  } finally {
+    signal?.removeEventListener('abort', aborted);
+    worker.terminate();
   }
-  return encoder.finish();
 }

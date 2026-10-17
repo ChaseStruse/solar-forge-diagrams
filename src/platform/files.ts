@@ -45,10 +45,7 @@ export async function copyPng(blob: Blob): Promise<void> {
 }
 
 export async function exportGif(blob: Blob): Promise<boolean> {
-  if (isTauri())
-    return invoke<boolean>('export_gif', {
-      bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
-    });
+  if (isTauri()) return invoke<boolean>('export_gif', await blob.arrayBuffer());
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

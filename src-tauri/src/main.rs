@@ -326,11 +326,15 @@ async fn export_png(
 async fn export_gif(
     app: tauri::AppHandle,
     window: tauri::Window,
-    bytes: Vec<u8>,
+    request: tauri::ipc::Request<'_>,
 ) -> Result<bool, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("GIF export requires a binary payload".into());
+    };
     if bytes.len() > 50_000_000 || !bytes.starts_with(b"GIF89a") {
         return Err("Invalid GIF export".into());
     }
+    let bytes = bytes.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let Some(file) = app
             .dialog()
