@@ -17,6 +17,12 @@ const xmlText = (text: string) =>
       })[c] ?? c,
   );
 export async function exportSvg(doc: DiagramDocument): Promise<string> {
+  const context = document.createElement('canvas').getContext('2d');
+  if (!context) throw Error('Text canvas unavailable');
+  const measure = (text: string, size: number, weight = 600) => {
+    context.font = `${weight} ${size}px system-ui, sans-serif`;
+    return context.measureText(text).width;
+  };
   const nodes = new Map(doc.nodes.map((n) => [n.id, n]));
   const positioned = doc.nodes.map((node) => ({
     node,
@@ -89,10 +95,7 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
         z = p.z - node.depth / 2;
       const service = findService(node.serviceId ?? node.label);
       const image = service?.asset ? icons.get(service.asset) : undefined;
-      const caption = serviceCaption(
-        node,
-        (text, size) => text.length * size * 0.62,
-      );
+      const caption = serviceCaption(node, measure);
       const captionTop = node.shape
         ? p.z - (caption.lines.length * caption.size * 1.28) / 2
         : z + node.depth + 12;
@@ -121,7 +124,7 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
         node.width - padding * 2,
         node.depth - padding * 2,
         fontSize(node),
-        (text, size) => text.length * size * 0.6,
+        (text, size) => measure(text, size, note ? 500 : 600),
       );
       const text = lines
         .map(
