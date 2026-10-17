@@ -86,3 +86,19 @@ test('auto fit preserves all text inside narrow and short boxes', async () => {
     resizedFont(node, { width: 100, depth: 60 }, { width: 200, depth: 120 }),
   ).toBe(40);
 });
+
+test('service captions wrap long labels without flattening the font', async () => {
+  const { serviceCaption } = await import('../src/domain/text');
+  const caption = serviceCaption(
+    { label: 'Public route · 0.0.0.0/0 → IGW', width: 160, depth: 100 },
+    (text, size) => text.length * size * 0.6,
+  );
+  expect(caption.lines.length).toBeGreaterThan(1);
+  expect(caption.size).toBeGreaterThan(16);
+  expect(
+    caption.lines.every(
+      (line) => line.length * caption.size * 0.6 <= 160 * 0.82,
+    ),
+  ).toBe(true);
+  expect(caption.lines.length * caption.size * 1.28).toBeLessThanOrEqual(75);
+});

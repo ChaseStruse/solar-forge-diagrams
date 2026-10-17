@@ -2,7 +2,7 @@ import { findService } from '../catalog/services';
 import type { DiagramDocument } from '../domain/document';
 import { worldPosition } from '../domain/document';
 import { fansOf, obstaclesOf, routeEdge } from '../domain/routing';
-import { fitText, fontSize } from '../domain/text';
+import { fitText, fontSize, serviceCaption } from '../domain/text';
 
 const xmlText = (text: string) =>
   text.replace(
@@ -38,7 +38,7 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
   const zs = [
     ...positioned.flatMap(({ node, p }) => [
       p.z - node.depth / 2 - 30,
-      p.z + node.depth / 2 + 60,
+      p.z + node.depth / 2 + (node.kind === 'service' ? node.depth + 40 : 60),
     ]),
     ...routes.flatMap((r) => r.points.map((p) => p.z)),
   ];
@@ -89,11 +89,24 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
         z = p.z - node.depth / 2;
       const service = findService(node.serviceId ?? node.label);
       const image = service?.asset ? icons.get(service.asset) : undefined;
+      const caption = serviceCaption(
+        node,
+        (text, size) => text.length * size * 0.62,
+      );
+      const captionTop = node.shape
+        ? p.z - (caption.lines.length * caption.size * 1.28) / 2
+        : z + node.depth + 12;
+      const captionText = caption.lines
+        .map(
+          (line, i) =>
+            `<tspan x="${p.x}" y="${captionTop + (i + 0.85) * caption.size * 1.28}">${xmlText(line)}</tspan>`,
+        )
+        .join('');
       const shape =
         node.shape === 'decision'
           ? `<polygon points="${p.x},${z} ${x + node.width},${p.z} ${p.x},${z + node.depth} ${x},${p.z}"`
           : `<rect x="${x}" y="${z}" width="${node.width}" height="${node.depth}" rx="${node.shape === 'terminal' ? node.depth / 2 : 8}"`;
-      return `<g><title>${xmlText(node.label)}</title>${shape} fill="#fff" stroke="${node.color}" stroke-width="2"/>${image && !node.shape ? `<image href="${image}" x="${p.x - 26}" y="${p.z - 26}" width="52" height="52"/>` : ''}<text x="${p.x}" y="${node.shape ? p.z + 5 : z + node.depth + 26}" text-anchor="middle" font-size="${Math.min((16 * node.width) / 160, (node.width - 16) / Math.max(1, node.label.length * 0.65), node.depth / 3)}" fill="#172c43">${xmlText(node.label)}</text></g>`;
+      return `<g><title>${xmlText(node.label)}</title>${shape} fill="#fff" stroke="${node.color}" stroke-width="2"/>${image && !node.shape ? `<image href="${image}" x="${p.x - 26}" y="${p.z - 26}" width="52" height="52"/>` : ''}<text text-anchor="middle" font-size="${caption.size}" fill="#172c43">${captionText}</text></g>`;
     })
     .join('');
   const annotations = positioned

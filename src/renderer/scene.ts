@@ -560,7 +560,9 @@ export class DiagramScene {
         node.label,
         this.camera.zoom,
         node.kind === 'group' ? 'group' : 'node',
+        { width: node.width, depth: node.depth },
       );
+      label.userData.captionBelow = node.kind === 'service' && !node.shape;
       label.userData.nodeWidth = node.width;
       label.userData.nodeDepth = node.depth;
       label.position.set(
@@ -572,7 +574,7 @@ export class DiagramScene {
           ? -node.depth / 2 + 22
           : node.shape
             ? 0
-            : node.depth / 2 + 43,
+            : node.depth / 2 + 16,
       );
       group.add(label);
       this.content.add(group);
@@ -1272,7 +1274,7 @@ export class DiagramScene {
         ? -tile.node.depth / 2 + 22
         : tile.node.shape
           ? 0
-          : tile.node.depth / 2 + 43,
+          : tile.node.depth / 2 + 16,
     );
     this.invalidate();
   }

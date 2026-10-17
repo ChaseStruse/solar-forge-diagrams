@@ -78,8 +78,8 @@ export function vpcExample(demo = false): DiagramDocument {
       ...(networkRule ? { networkRule } : {}),
     });
   }
-  boundary('region', 'AWS Region', 'region', 0, 0, 1800, 1300);
-  boundary('vpc', 'VPC · 10.0.0.0/16', 'vpc', 70, 30, 1580, 1160, 'region');
+  boundary('region', 'AWS Region', 'region', 0, 0, 2200, 1300);
+  boundary('vpc', 'VPC · 10.0.0.0/16', 'vpc', 70, 30, 1960, 1160, 'region');
   for (const [i, zone] of ['a', 'b'].entries()) {
     boundary(
       `az-${zone}`,
@@ -154,7 +154,7 @@ export function vpcExample(demo = false): DiagramDocument {
     'igw',
     'Internet gateway',
     'component.internet-gateway',
-    -660,
+    -880,
     -100,
     'vpc',
   );
@@ -224,16 +224,16 @@ export function vpcExample(demo = false): DiagramDocument {
       'routes',
       'Public route · 0.0.0.0/0 → IGW',
       'component.route-table',
-      0,
-      -470,
+      -880,
+      -400,
       'vpc',
     );
     service(
       'security',
       'Web SG · TCP 443 ingress',
       'component.firewall',
-      0,
-      470,
+      -880,
+      300,
       'vpc',
     );
   }

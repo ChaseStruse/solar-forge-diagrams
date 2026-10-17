@@ -78,3 +78,17 @@ export function resizedFont(
     ),
   );
 }
+
+/** Shared readable, multiline service caption layout for canvas and SVG. */
+export function serviceCaption(
+  node: Pick<DiagramNode, 'label' | 'width' | 'depth'>,
+  measure: (text: string, size: number) => number,
+): { size: number; lines: string[] } {
+  return fitText(
+    node.label,
+    node.width * 0.82,
+    node.depth * 0.75,
+    Math.min(node.width * 0.13, node.depth * 0.25),
+    measure,
+  );
+}

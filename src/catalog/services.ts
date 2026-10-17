@@ -172,6 +172,18 @@ export const legacyColors: ReadonlySet<string> = new Set([
   '#79a950',
   '#d9a15f',
 ]);
+export const componentColors: Record<string, string> = {
+  docker: '#2496ed',
+  container: '#326ce5',
+  'container-image': '#0d9488',
+  'github-actions': '#24292f',
+  git: '#f05032',
+  pipeline: '#7c3aed',
+  'internet-gateway': '#8c4fff',
+  'nat-gateway': '#c084fc',
+  firewall: '#d97706',
+  'route-table': '#059669',
+};
 export const services: ComponentDefinition[] = [
   ...(['process', 'decision', 'terminal'] as const).map((shape) => ({
     id: `flow.${shape}`,
@@ -242,7 +254,7 @@ export const services: ComponentDefinition[] = [
     label,
     category,
     aliases,
-    color: '#4c9aff',
+    color: componentColors[id] ?? '#4c9aff',
     glyph: '◇',
     description: `${category} · ${label}`,
     kind: 'service' as const,

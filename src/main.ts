@@ -481,6 +481,7 @@ function inspect(): void {
     field('rule-port').value = String(edge.networkRule?.port ?? '');
     field('rule-source').value = edge.networkRule?.sourceCidr ?? '';
     field('rule-direction').value = edge.networkRule?.direction ?? 'any';
+    updateRuleFields();
     inputElement('edge-label').value = edge.label;
     const options = current.nodes.map(
       (n) => [n.id, n.label] as [string, string],
@@ -1257,12 +1258,25 @@ element('traffic-apply').onclick = () => {
     notify(String(error));
   }
 };
+function updateRuleFields(): void {
+  const disabled = field('rule-action').value !== 'allow';
+  for (const id of [
+    'rule-protocol',
+    'rule-port',
+    'rule-source',
+    'rule-direction',
+  ])
+    field(id).disabled = disabled;
+}
+field('rule-action').onchange = updateRuleFields;
 element('rule-apply').onclick = () => {
   const edge = current.edges.find((e) => e.id === selectedEdge);
   if (!edge) return;
   try {
     const value = { ...edge };
     if (field('rule-action').value === 'none') delete value.networkRule;
+    else if (field('rule-action').value === 'deny')
+      value.networkRule = { action: 'deny', protocol: 'any', direction: 'any' };
     else
       value.networkRule = parseNetworkRule({
         action: field('rule-action').value,

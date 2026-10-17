@@ -24,3 +24,33 @@ test('curated catalog IDs are stable and official icon files are present', () =>
     expect(source).not.toContain('<script');
   }
 });
+
+test('VPC shared services stay inside the VPC and outside both AZs', async () => {
+  const { vpcExample } = await import('../src/catalog/networking');
+  const { worldPosition } = await import('../src/domain/document');
+  for (const demo of [false, true]) {
+    const doc = vpcExample(demo);
+    const nodes = new Map(doc.nodes.map((n) => [n.id, n]));
+    const bounds = (id: string) => {
+      const n = nodes.get(id);
+      if (!n) throw Error('Missing template node');
+      const p = worldPosition(n, nodes);
+      return {
+        left: p.x - n.width / 2,
+        right: p.x + n.width / 2,
+        top: p.z - n.depth / 2,
+        bottom: p.z + n.depth / 2,
+      };
+    };
+    const vpc = bounds('vpc');
+    for (const id of demo ? ['igw', 'routes', 'security'] : ['igw']) {
+      const b = bounds(id);
+      expect(b.left).toBeGreaterThanOrEqual(vpc.left);
+      expect(b.right).toBeLessThanOrEqual(vpc.right);
+      expect(b.top).toBeGreaterThanOrEqual(vpc.top);
+      expect(b.bottom).toBeLessThanOrEqual(vpc.bottom);
+      for (const zone of ['az-a', 'az-b'])
+        expect(b.right).toBeLessThan(bounds(zone).left);
+    }
+  }
+});
