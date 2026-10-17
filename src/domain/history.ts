@@ -2,6 +2,11 @@ import type { DiagramDocument, DiagramEdge, DiagramNode } from './document';
 
 type Position = Pick<DiagramNode, 'x' | 'z'>;
 export type Edit =
+  | {
+      type: 'traffic';
+      from: DiagramDocument['traffic'];
+      to: NonNullable<DiagramDocument['traffic']>;
+    }
   | { type: 'move'; id: string; from: Position; to: Position }
   | { type: 'rename'; id: string; label: string }
   | { type: 'insert'; node: DiagramNode }
@@ -62,6 +67,19 @@ export class DocumentHistory {
     let redo: () => void;
     let retained: unknown = edit;
     switch (edit.type) {
+      case 'traffic': {
+        const before = structuredClone(doc.traffic);
+        const after = structuredClone(edit.to);
+        if (JSON.stringify(before) === JSON.stringify(after)) return false;
+        undo = () => {
+          if (before) doc.traffic = structuredClone(before);
+          else delete doc.traffic;
+        };
+        redo = () => {
+          doc.traffic = structuredClone(after);
+        };
+        break;
+      }
       case 'graph': {
         function changes<T extends { id: string }>(
           source: T[],

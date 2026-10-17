@@ -322,6 +322,33 @@ async fn export_png(
     .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+async fn export_gif(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    bytes: Vec<u8>,
+) -> Result<bool, String> {
+    if bytes.len() > 50_000_000 || !bytes.starts_with(b"GIF89a") {
+        return Err("Invalid GIF export".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(file) = app
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("GIF animation", &["gif"])
+            .set_file_name("journey.gif")
+            .blocking_save_file()
+        else {
+            return Ok(false);
+        };
+        atomic_write(&file.into_path().map_err(|e| e.to_string())?, &bytes)?;
+        Ok(true)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Put a PNG on the desktop clipboard with the session's clipboard tool.
 #[tauri::command]
 async fn copy_png(bytes: Vec<u8>) -> Result<(), String> {
@@ -481,6 +508,7 @@ fn main() {
             open_document,
             save_document,
             export_png,
+            export_gif,
             copy_png,
             export_svg,
             read_recovery,

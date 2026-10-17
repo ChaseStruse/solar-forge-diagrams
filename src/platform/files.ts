@@ -43,3 +43,17 @@ export async function copyPng(blob: Blob): Promise<void> {
   }
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 }
+
+export async function exportGif(blob: Blob): Promise<boolean> {
+  if (isTauri())
+    return invoke<boolean>('export_gif', {
+      bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
+    });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'journey.gif';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
+}

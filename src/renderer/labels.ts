@@ -241,15 +241,20 @@ export class LabelAtlas {
         }
         const width: unknown = entry.object.userData.nodeWidth;
         const tilePixels = typeof width === 'number' ? width / pixel : 120;
+        const nodeDepth: unknown = entry.object.userData.nodeDepth;
+        const depthPixels =
+          typeof nodeDepth === 'number' ? nodeDepth / pixel : 100;
         const factor =
           entry.kind === 'icon'
-            ? Math.min(58, Math.max(25, tilePixels * 0.28)) / 64
+            ? Math.min(58, tilePixels * 0.28, depthPixels * 0.7) / 64
             : entry.kind === 'node'
               ? Math.min(
                   (tilePixels * 0.13) / 34,
                   (tilePixels * 0.9) / entry.width,
                 )
-              : 0.5;
+              : entry.kind === 'group'
+                ? Math.min(0.5, (tilePixels * 0.9) / entry.width)
+                : 0.5;
         this.scale.set(
           entry.width * factor * pixel,
           entry.height * factor * pixel,

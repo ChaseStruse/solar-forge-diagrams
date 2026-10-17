@@ -553,6 +553,7 @@ export class DiagramScene {
         );
         glyph.position.y = 28;
         glyph.userData.nodeWidth = node.width;
+        glyph.userData.nodeDepth = node.depth;
         group.add(glyph);
       }
       const label = this.labels.create(
@@ -561,6 +562,7 @@ export class DiagramScene {
         node.kind === 'group' ? 'group' : 'node',
       );
       label.userData.nodeWidth = node.width;
+      label.userData.nodeDepth = node.depth;
       label.position.set(
         node.kind === 'group'
           ? -node.width / 2 + Math.min(node.width / 2, 150)
@@ -1202,7 +1204,10 @@ export class DiagramScene {
     const mesh = tile.group.children[0];
     if (mesh instanceof Mesh)
       mesh.scale.set(tile.node.width, pickHeight(tile.node), tile.node.depth);
-    tile.label.userData.nodeWidth = tile.node.width;
+    for (const child of tile.group.children) {
+      child.userData.nodeWidth = tile.node.width;
+      child.userData.nodeDepth = tile.node.depth;
+    }
     // Stretch the drawn annotation live; it is redrawn crisply on commit.
     const root = tile.annotation?.root;
     if (root)
@@ -1679,6 +1684,7 @@ export class DiagramScene {
     });
   }
   /** Walk a person along the arrows from the given nodes, looping until stopped. */
+  public onJourneyPermit: (edge: string) => boolean = () => true;
   public playJourney(starts: readonly string[]): void {
     this.journey?.dispose();
     this.journey = new JourneyPlayer(
@@ -1715,6 +1721,7 @@ export class DiagramScene {
         cancelChoice: () => this.onJourneyCancelChoice(),
         target: (id) => this.edgeIndex.get(id)?.target,
         onHop: (id) => this.onJourneyHop(id),
+        permit: (id) => this.onJourneyPermit(id),
         onFinish: () => this.onJourneyEnd(),
       },
       this.palette,
@@ -1966,6 +1973,18 @@ export class DiagramScene {
     right = Math.min(this.width, Math.ceil(right + padding));
     bottom = Math.min(this.height, Math.ceil(bottom + padding));
     return { left, top, width: right - left, height: bottom - top };
+  }
+  public gifFrame(): HTMLCanvasElement {
+    this.render();
+    const canvas = document.createElement('canvas');
+    const source = this.renderer.domElement;
+    const scale = Math.min(1, 640 / source.width, 480 / source.height);
+    canvas.width = Math.max(1, Math.round(source.width * scale));
+    canvas.height = Math.max(1, Math.round(source.height * scale));
+    canvas
+      .getContext('2d')
+      ?.drawImage(source, 0, 0, canvas.width, canvas.height);
+    return canvas;
   }
   public png(): Promise<Blob> {
     this.render();
