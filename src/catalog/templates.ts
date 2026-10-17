@@ -29,8 +29,8 @@ function architecture(title: string, ids: readonly string[]): DiagramDocument {
       color: service.color,
       x: (index - (ids.length - 1) / 2) * 260,
       z: 0,
-      width: 150,
-      depth: 96,
+      width: 160,
+      depth: 100,
       parentId: group.id,
     };
   });
@@ -97,7 +97,7 @@ export const templates: Template[] = [
           label: 'Start',
           x: -260,
           z: 0,
-          width: 150,
+          width: 160,
           depth: 90,
           color: '#d9b677',
         },
@@ -108,8 +108,8 @@ export const templates: Template[] = [
           label: 'Process',
           x: 0,
           z: 0,
-          width: 150,
-          depth: 96,
+          width: 160,
+          depth: 100,
           color: '#d9b677',
         },
         {

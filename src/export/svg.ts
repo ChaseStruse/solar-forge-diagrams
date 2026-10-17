@@ -2,7 +2,7 @@ import { findService } from '../catalog/services';
 import type { DiagramDocument } from '../domain/document';
 import { worldPosition } from '../domain/document';
 import { fansOf, obstaclesOf, routeEdge } from '../domain/routing';
-import { fontSize, wrapText } from '../domain/text';
+import { fitText, fontSize } from '../domain/text';
 
 const xmlText = (text: string) =>
   text.replace(
@@ -93,7 +93,7 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
         node.shape === 'decision'
           ? `<polygon points="${p.x},${z} ${x + node.width},${p.z} ${p.x},${z + node.depth} ${x},${p.z}"`
           : `<rect x="${x}" y="${z}" width="${node.width}" height="${node.depth}" rx="${node.shape === 'terminal' ? node.depth / 2 : 8}"`;
-      return `<g><title>${xmlText(node.label)}</title>${shape} fill="#fff" stroke="${node.color}" stroke-width="2"/>${image && !node.shape ? `<image href="${image}" x="${p.x - 26}" y="${p.z - 26}" width="52" height="52"/>` : ''}<text x="${p.x}" y="${node.shape ? p.z + 5 : z + node.depth + 26}" text-anchor="middle" font-size="16" fill="#172c43">${xmlText(node.label)}</text></g>`;
+      return `<g><title>${xmlText(node.label)}</title>${shape} fill="#fff" stroke="${node.color}" stroke-width="2"/>${image && !node.shape ? `<image href="${image}" x="${p.x - 26}" y="${p.z - 26}" width="52" height="52"/>` : ''}<text x="${p.x}" y="${node.shape ? p.z + 5 : z + node.depth + 26}" text-anchor="middle" font-size="${Math.min((16 * node.width) / 160, (node.width - 16) / Math.max(1, node.label.length * 0.65), node.depth / 3)}" fill="#172c43">${xmlText(node.label)}</text></g>`;
     })
     .join('');
   const annotations = positioned
@@ -102,16 +102,13 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
       const note = node.kind === 'note';
       const x = p.x - node.width / 2,
         z = p.z - node.depth / 2;
-      const size = fontSize(node);
       const padding = note ? 14 : 4;
-      // Approximate glyph width; SVG has no layout engine to wrap for us.
-      const lines = wrapText(
+      const { size, lines } = fitText(
         node.label,
         node.width - padding * 2,
-        (text) => text.length * size * 0.56,
-      ).slice(
-        0,
-        Math.max(1, Math.floor((node.depth - padding) / (size * 1.28))),
+        node.depth - padding * 2,
+        fontSize(node),
+        (text, size) => text.length * size * 0.6,
       );
       const text = lines
         .map(

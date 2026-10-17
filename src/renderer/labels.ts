@@ -245,7 +245,10 @@ export class LabelAtlas {
           entry.kind === 'icon'
             ? Math.min(58, Math.max(25, tilePixels * 0.28)) / 64
             : entry.kind === 'node'
-              ? Math.min(24, Math.max(14, tilePixels * 0.13)) / 34
+              ? Math.min(
+                  (tilePixels * 0.13) / 34,
+                  (tilePixels * 0.9) / entry.width,
+                )
               : 0.5;
         this.scale.set(
           entry.width * factor * pixel,

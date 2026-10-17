@@ -38,3 +38,43 @@ export function wrapText(
   }
   return lines;
 }
+
+/** Fit every line in both dimensions, using a caller's actual font metrics. */
+export function fitText(
+  text: string,
+  width: number,
+  height: number,
+  preferred: number,
+  measure: (text: string, size: number) => number,
+): { size: number; lines: string[] } {
+  const w = Math.max(0.01, width),
+    h = Math.max(0.01, height);
+  const layout = (size: number) =>
+    wrapText(text, w, (line) => measure(line, size));
+  let low = 0,
+    high = Math.max(0.01, preferred);
+  for (let i = 0; i < 24; i++) {
+    const size = (low + high) / 2;
+    const lines = layout(size);
+    if (
+      lines.length * size * 1.28 <= h &&
+      lines.every((line) => measure(line, size) <= w)
+    )
+      low = size;
+    else high = size;
+  }
+  return { size: low, lines: layout(low) };
+}
+export function resizedFont(
+  node: DiagramNode,
+  from: { width: number; depth: number },
+  to: { width: number; depth: number },
+): number {
+  return Math.max(
+    4,
+    Math.min(
+      400,
+      fontSize(node) * Math.min(to.width / from.width, to.depth / from.depth),
+    ),
+  );
+}

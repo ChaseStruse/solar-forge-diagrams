@@ -19,7 +19,7 @@ import {
 import type { Edit } from './domain/history';
 import { DocumentHistory } from './domain/history';
 import { journeyBranches, journeyStarts } from './domain/journey';
-import { fontSize } from './domain/text';
+import { fontSize, resizedFont } from './domain/text';
 import {
   type Alignment,
   alignNodes,
@@ -838,7 +838,7 @@ function defaultSize(kind: DiagramNode['kind']): [number, number] {
   if (kind === 'group') return [500, 320];
   if (kind === 'text') return [280, 60];
   if (kind === 'note') return [220, 170];
-  return [150, 96];
+  return [160, 100];
 }
 /** Drop a text or note at a board point and start typing into it. */
 function placeAnnotation(kind: 'text' | 'note', x: number, z: number): void {
@@ -1080,7 +1080,19 @@ scene.onResize = (changes) => {
   const nodes = changes.flatMap(({ id, from, to }) => {
     const node = current.nodes.find((n) => n.id === id);
     if (!node) return [];
-    const value = { ...node, ...to };
+    const value = {
+      ...node,
+      ...to,
+      ...(node.kind === 'text' || node.kind === 'note'
+        ? {
+            fontSize: resizedFont(
+              node,
+              { ...node, ...from },
+              { ...node, ...to },
+            ),
+          }
+        : {}),
+    };
     Object.assign(node, from);
     return [{ id, value }];
   });
@@ -1280,7 +1292,19 @@ for (const key of ['x', 'z', 'width', 'depth'] as const)
     commit({
       type: 'graph',
       label: `Change ${key}`,
-      nodes: [{ id: node.id, value: { ...node, [key]: value } }],
+      nodes: [
+        {
+          id: node.id,
+          value: {
+            ...node,
+            [key]: value,
+            ...((node.kind === 'text' || node.kind === 'note') &&
+            (key === 'width' || key === 'depth')
+              ? { fontSize: resizedFont(node, node, { ...node, [key]: value }) }
+              : {}),
+          },
+        },
+      ],
     });
   };
 field('node-parent').onchange = () => {

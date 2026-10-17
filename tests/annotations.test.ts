@@ -59,3 +59,30 @@ test('text and sticky notes roundtrip with their font size', () => {
   (invalid.nodes[0] as { fontSize: number }).fontSize = 9000;
   expect(() => parseDocument(serializeDocument(invalid))).toThrow();
 });
+
+test('auto fit preserves all text inside narrow and short boxes', async () => {
+  const { fitText, resizedFont } = await import('../src/domain/text');
+  const text = 'A long label\nwith unbreakablewords and many more lines';
+  const result = fitText(
+    text,
+    60,
+    25,
+    40,
+    (line, size) => line.length * size * 0.6,
+  );
+  expect(result.size).toBeLessThan(40);
+  expect(result.lines.length * result.size * 1.28).toBeLessThanOrEqual(25);
+  expect(
+    result.lines.every((line) => line.length * result.size * 0.6 <= 60),
+  ).toBe(true);
+  expect(result.lines.join('').replace(/\s/g, '')).toBe(
+    text.replace(/\s/g, ''),
+  );
+  const node = {
+    kind: 'text',
+    fontSize: 20,
+  } as import('../src/domain/document').DiagramNode;
+  expect(
+    resizedFont(node, { width: 100, depth: 60 }, { width: 200, depth: 120 }),
+  ).toBe(40);
+});
