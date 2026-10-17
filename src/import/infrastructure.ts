@@ -1,4 +1,8 @@
-import { parseDocument as parseYaml, type ScalarTag } from 'yaml';
+import {
+  type CollectionTag,
+  parseDocument as parseYaml,
+  type ScalarTag,
+} from 'yaml';
 import { parseDocument, serializeDocument } from '../domain/document';
 import { importAws } from './aws';
 import { importCompose } from './compose';
@@ -61,7 +65,7 @@ const propertyNames: Record<string, string> = {
   DBSubnetGroupName: 'db_subnet_group_name',
 };
 function yaml(content: string): unknown {
-  const customTags: ScalarTag[] = [
+  const customTags: (ScalarTag | CollectionTag)[] = [
     'Ref',
     'GetAtt',
     'Sub',
@@ -72,6 +76,11 @@ function yaml(content: string): unknown {
     tag: `!${name}`,
     resolve: (value) => ({ [name === 'Ref' ? 'Ref' : `Fn::${name}`]: value }),
   }));
+  customTags.push({
+    tag: '!GetAtt',
+    collection: 'seq',
+    resolve: (value) => ({ 'Fn::GetAtt': value.toJSON() }),
+  });
   const doc = parseYaml(content, { customTags, merge: true, uniqueKeys: true });
   if (doc.errors.length)
     throw Error(doc.errors.map((e) => e.message).join('\n'));
@@ -214,6 +223,7 @@ function terraformJson(
       for (const [name, value] of Object.entries(obj(values)))
         resources.push({ id: `${type}.${name}`, type, values: obj(value) });
   const changes = list(root.resource_changes);
+  const fallback = resources.length === 0;
   for (const value of changes) {
     const r = obj(value),
       change = obj(r.change),
@@ -235,7 +245,7 @@ function terraformJson(
       existing.values.__incomplete = 'Plan contains unknown network values';
       warnings.push(`${r.address}: unknown network values in plan`);
     }
-    if (!resources.length && change.after)
+    if (fallback && change.after)
       resources.push({
         id: String(r.address),
         type: String(r.type),

@@ -1687,7 +1687,24 @@ export class DiagramScene {
   }
   /** Walk a person along the arrows from the given nodes, looping until stopped. */
   public onJourneyPermit: (edge: string) => boolean = () => true;
-  public playJourney(starts: readonly string[]): void {
+  public playJourney(
+    starts: readonly string[],
+    networkPath?: { path: string[]; allowed: boolean },
+  ): void {
+    const virtual = new Map<string, DiagramEdge>();
+    if (networkPath)
+      for (let i = 1; i < networkPath.path.length; i++) {
+        const source = networkPath.path[i - 1],
+          target = networkPath.path[i];
+        if (source && target)
+          virtual.set(`reachability:${i}`, {
+            id: `reachability:${i}`,
+            source,
+            target,
+            label: '',
+          });
+      }
+    const edgeAt = (id: string) => virtual.get(id) ?? this.edgeIndex.get(id);
     this.journey?.dispose();
     this.journey = new JourneyPlayer(
       {
@@ -1695,7 +1712,7 @@ export class DiagramScene {
         remove: (object) => this.scene.remove(object),
         animate: (step) => this.animate(step),
         route: (id) => {
-          const edge = this.edgeIndex.get(id);
+          const edge = edgeAt(id);
           const source = edge && this.tiles.get(edge.source);
           const target = edge && this.tiles.get(edge.target);
           if (!edge || !source || !target) return;
@@ -1718,12 +1735,21 @@ export class DiagramScene {
             radius: Math.max(tile.node.width, tile.node.depth) * 0.62,
           };
         },
-        branches: (id) => this.onJourneyBranches(id),
+        branches: (id) =>
+          networkPath
+            ? {
+                mode: 'all',
+                edges: [...virtual.values()]
+                  .filter((e) => e.source === id)
+                  .map((e) => e.id),
+              }
+            : this.onJourneyBranches(id),
         choose: (id, edges) => this.onJourneyChoose(id, edges),
         cancelChoice: () => this.onJourneyCancelChoice(),
-        target: (id) => this.edgeIndex.get(id)?.target,
+        target: (id) => edgeAt(id)?.target,
         onHop: (id) => this.onJourneyHop(id),
-        permit: (id) => this.onJourneyPermit(id),
+        permit: (id) =>
+          networkPath ? networkPath.allowed : this.onJourneyPermit(id),
         onFinish: () => this.onJourneyEnd(),
       },
       this.palette,

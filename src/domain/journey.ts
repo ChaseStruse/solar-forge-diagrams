@@ -8,8 +8,9 @@ export function journeyStarts(
   doc: DiagramDocument,
   selected?: string,
 ): string[] {
-  const outgoing = new Set(doc.edges.map((edge) => edge.source));
-  const incoming = new Set(doc.edges.map((edge) => edge.target));
+  const flowEdges = doc.edges.filter((e) => e.relationship !== 'dependency');
+  const outgoing = new Set(flowEdges.map((edge) => edge.source));
+  const incoming = new Set(flowEdges.map((edge) => edge.target));
   if (selected && outgoing.has(selected)) return [selected];
   const actors = doc.nodes.filter(
     (node) => node.serviceId?.startsWith('actor.') && outgoing.has(node.id),
@@ -20,7 +21,7 @@ export function journeyStarts(
   );
   if (sources.length) return sources.map((node) => node.id);
   // Everything sits on a cycle: start anywhere.
-  const first = doc.edges[0]?.source;
+  const first = flowEdges[0]?.source;
   return first ? [first] : [];
 }
 
@@ -34,7 +35,9 @@ export function journeyBranches(
   doc: DiagramDocument,
   nodeId: string,
 ): { mode: BranchMode; edges: string[] } {
-  const edges = doc.edges.filter((e) => e.source === nodeId).map((e) => e.id);
+  const edges = doc.edges
+    .filter((e) => e.source === nodeId && e.relationship !== 'dependency')
+    .map((e) => e.id);
   const node = doc.nodes.find((n) => n.id === nodeId);
   if (!node || edges.length < 2) return { mode: 'all', edges };
   const setting = node.journey ?? {

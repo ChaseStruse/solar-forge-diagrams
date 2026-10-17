@@ -1145,3 +1145,78 @@ input[type="color"] {
   margin: 4px 0;
   border-radius: 8px;
 }
+.network-rule-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  margin: 10px 0;
+}
+.network-rule-row label {
+  margin-top: 8px;
+}
+#resource-network p {
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+#resource-network input[type="checkbox"] {
+  width: auto;
+}
+#resource-network select[multiple] {
+  height: auto;
+  min-height: 80px;
+}
+.reachability-dialog {
+  width: min(1100px, calc(100vw - 40px));
+}
+.reachability-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 14px;
+}
+.matrix-scroll {
+  overflow: auto;
+  max-height: 450px;
+}
+.matrix-scroll table {
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.matrix-scroll th,
+.matrix-scroll td {
+  border: 1px solid var(--border);
+  padding: 5px;
+  min-width: 85px;
+}
+.matrix-scroll th {
+  max-width: 160px;
+  overflow-wrap: anywhere;
+}
+.matrix-scroll button {
+  font-size: 10px;
+  padding: 6px;
+}
+.workspace-dialog .allowed {
+  color: #52d8a0;
+}
+.workspace-dialog .denied {
+  color: #ff7788;
+}
+.workspace-dialog .unknown {
+  color: #e7bc63;
+}
+.reachability-result {
+  padding: 12px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.matrix-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 750px) {
+  .reachability-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+}

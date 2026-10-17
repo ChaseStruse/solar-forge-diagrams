@@ -1,6 +1,10 @@
 import type { DiagramDocument, DiagramNode } from '../domain/document';
 import { worldPosition } from '../domain/document';
 import type { Change, Edit } from '../domain/history';
+import {
+  cleanNetworkChanges,
+  remapNetwork,
+} from '../domain/network-references';
 
 export function descendants(
   doc: DiagramDocument,
@@ -25,9 +29,12 @@ export function deleteNodes(
   return {
     type: 'graph',
     label: 'Delete selection',
-    nodes: doc.nodes
-      .filter((n) => ids.has(n.id))
-      .map((n) => ({ id: n.id, value: null })),
+    nodes: cleanNetworkChanges(
+      doc,
+      doc.nodes
+        .filter((n) => ids.has(n.id))
+        .map((n) => ({ id: n.id, value: null })),
+    ),
     edges: doc.edges
       .filter((e) => ids.has(e.source) || ids.has(e.target))
       .map((e) => ({ id: e.id, value: null })),
@@ -124,7 +131,7 @@ export function ungroupNodes(
   return {
     type: 'graph',
     label: 'Ungroup selection',
-    nodes,
+    nodes: cleanNetworkChanges(doc, nodes),
     edges: doc.edges
       .filter((e) => groups.has(e.source) || groups.has(e.target))
       .map((e) => ({ id: e.id, value: null })),
@@ -142,7 +149,10 @@ export function copyFragment(
     nodes: doc.nodes
       .filter((n) => ids.has(n.id))
       .map((node) => {
-        const value = structuredClone(node);
+        const value = remapNetwork(
+          node,
+          new Map([...ids].map((id) => [id, id])),
+        );
         if (!value.parentId || !ids.has(value.parentId)) {
           const p = worldPosition(node, index);
           delete value.parentId;
@@ -168,7 +178,7 @@ export function pasteFragment(
     nodes: fragment.nodes.map((node) => {
       const next = ids.get(node.id);
       if (!next) throw Error('Missing pasted node');
-      const value = { ...structuredClone(node), id: next };
+      const value = { ...remapNetwork(node, ids), id: next };
       if (node.parentId) {
         const parent = ids.get(node.parentId);
         if (parent) value.parentId = parent;

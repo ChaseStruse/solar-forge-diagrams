@@ -113,6 +113,8 @@ export function checkReachability(
     source.network?.model === 'compose' &&
     target.network?.model === 'compose'
   ) {
+    if (source.network.incomplete?.length || target.network.incomplete?.length)
+      return finish(unknown('Compose network attachments are incomplete'));
     const shared = (source.network.networkIds ?? []).filter((id) =>
       target.network?.networkIds?.includes(id),
     );
@@ -126,6 +128,7 @@ export function checkReachability(
     direction: 'ingress' | 'egress',
     peer: DiagramNode,
     peerIp?: string,
+    peerGroups = true,
   ): Check => {
     const ids = node.network?.securityGroupIds;
     if (!ids?.length) {
@@ -152,7 +155,7 @@ export function checkReachability(
           traffic,
           traffic.port,
           peerIp,
-          peer.network?.securityGroupIds ?? [],
+          peerGroups ? (peer.network?.securityGroupIds ?? []) : [],
         );
         if (match)
           return allow(
@@ -331,6 +334,8 @@ export function checkReachability(
     const forward = route(source, targetIp, target);
     path = forward.path;
     verdicts.push(forward.check);
+    if (targetVpc && sourceVpc.id === targetVpc.id)
+      verdicts.push(route(target, sourceIp, source).check);
     if (targetVpc && sourceVpc.id !== targetVpc.id)
       verdicts.push(unknown('Cross-VPC routing is not supported'));
     if (
@@ -359,7 +364,7 @@ export function checkReachability(
     : sourceIp;
   verdicts.push(
     sg(source, 'egress', target, targetIp),
-    sg(target, 'ingress', source, ingressPeer),
+    sg(target, 'ingress', source, ingressPeer, !translated),
   );
   if (!sourceSubnet || sourceSubnet.id !== targetSubnet?.id) {
     verdicts.push(
