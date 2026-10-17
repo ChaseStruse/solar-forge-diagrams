@@ -1,4 +1,5 @@
 import { boundaryColors, findService, legacyColors } from '../catalog/services';
+import { parseNetworkRule, parseTraffic } from './network';
 
 export type Port = 'north' | 'east' | 'south' | 'west';
 export interface DiagramNode {
@@ -30,7 +31,21 @@ export interface DiagramNode {
     tags?: string;
   };
 }
+export interface JourneyTraffic {
+  protocol: 'tcp' | 'udp' | 'icmp';
+  port: number;
+  sourceIp: string;
+  direction: 'ingress' | 'egress';
+}
+export interface NetworkRule {
+  action: 'allow' | 'deny';
+  protocol: 'any' | JourneyTraffic['protocol'];
+  port?: number;
+  sourceCidr?: string;
+  direction: 'any' | JourneyTraffic['direction'];
+}
 export interface DiagramEdge {
+  networkRule?: NetworkRule;
   id: string;
   source: string;
   target: string;
@@ -42,6 +57,7 @@ export interface DiagramEdge {
 }
 export interface DiagramDocument {
   version: 1;
+  traffic?: JourneyTraffic;
   title: string;
   nodes: DiagramNode[];
   edges: DiagramEdge[];
@@ -202,10 +218,20 @@ export function parseDocument(json: string): DiagramDocument {
       edge.routing = e.routing;
     }
     if (e.bend !== undefined) edge.bend = finite(e.bend);
+    if (e.networkRule !== undefined)
+      edge.networkRule = parseNetworkRule(e.networkRule);
     edgeIds.add(edge.id);
     return edge;
   });
-  return { version: 1, title: text(input.title, 'title'), nodes, edges };
+  return {
+    version: 1,
+    title: text(input.title, 'title'),
+    nodes,
+    edges,
+    ...(input.traffic !== undefined
+      ? { traffic: parseTraffic(input.traffic) }
+      : {}),
+  };
 }
 export function serializeDocument(document: DiagramDocument): string {
   return `${JSON.stringify(document, null, 2)}\n`;

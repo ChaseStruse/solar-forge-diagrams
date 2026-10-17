@@ -194,6 +194,61 @@ export const services: ComponentDefinition[] = [
     kind: 'service' as const,
     shape,
   })),
+  ...(
+    [
+      ['docker', 'Docker', 'Containers', 'docker engine whale runtime'],
+      ['container', 'Container', 'Containers', 'running container workload'],
+      [
+        'container-image',
+        'Container image',
+        'Containers',
+        'oci image artifact registry',
+      ],
+      [
+        'github-actions',
+        'GitHub Actions',
+        'DevOps',
+        'github actions workflow ci cd automation',
+      ],
+      ['git', 'Git repository', 'DevOps', 'git source code version control'],
+      ['pipeline', 'CI/CD pipeline', 'DevOps', 'build test deploy delivery'],
+      [
+        'internet-gateway',
+        'Internet gateway',
+        'Networking',
+        'vpc igw inbound outbound internet',
+      ],
+      [
+        'nat-gateway',
+        'NAT gateway',
+        'Networking',
+        'vpc nat private egress outbound',
+      ],
+      [
+        'firewall',
+        'Security group',
+        'Networking',
+        'firewall security ingress egress allow deny',
+      ],
+      [
+        'route-table',
+        'Route table',
+        'Networking',
+        'routes routing subnet gateway',
+      ],
+    ] as const
+  ).map(([id, label, category, aliases]) => ({
+    id: `component.${id}`,
+    label,
+    category,
+    aliases,
+    color: '#4c9aff',
+    glyph: '◇',
+    description: `${category} · ${label}`,
+    kind: 'service' as const,
+    asset: `components/${id}.svg`,
+    icon: new URL(`../../assets/components/${id}.svg`, import.meta.url).href,
+  })),
   ...aws.map(([id, label, file, category, aliases, color]) => ({
     id: `aws.${id}`,
     label,

@@ -1,5 +1,6 @@
 import type { DiagramDocument, DiagramNode } from '../domain/document';
 import { sampleDocument } from '../domain/document';
+import { vpcExample } from './networking';
 import { boundaryColors, findService } from './services';
 export interface Template {
   id: string;
@@ -49,6 +50,16 @@ function architecture(title: string, ids: readonly string[]): DiagramDocument {
   };
 }
 export const templates: Template[] = [
+  {
+    id: 'vpc',
+    name: 'VPC · public and private subnets',
+    create: () => vpcExample(),
+  },
+  {
+    id: 'networking',
+    name: 'Networking journey demo',
+    create: () => vpcExample(true),
+  },
   {
     id: 'serverless',
     name: 'Serverless API',
