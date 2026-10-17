@@ -1,0 +1,37 @@
+# Build from the reviewed local source archive; no application runtime server.
+pkgname=solar-forge-diagrams
+pkgver=0.1.0
+pkgrel=6
+pkgdesc='Native offline flowcharts and AWS architecture diagrams'
+arch=('x86_64')
+license=('LicenseRef-SolarForge' 'LicenseRef-AWS-Architecture-Icons' 'MIT' 'Apache-2.0')
+depends=('webkit2gtk-4.1' 'gtk3' 'xdg-desktop-portal')
+makedepends=('rust' 'bun' 'pkgconf' 'python')
+optdepends=('xdg-desktop-portal-gtk: file chooser backend when not provided by your desktop'
+            'wl-clipboard: copy diagram images to the clipboard on Wayland'
+            'xclip: copy diagram images to the clipboard on X11')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP') # Run updpkgsums after generating the reviewed local archive.
+
+build() {
+  cd "$srcdir/$pkgname-$pkgver"
+  bun install --frozen-lockfile
+  bun run verify
+  cargo test --manifest-path src-tauri/Cargo.toml --locked
+  cargo build --manifest-path src-tauri/Cargo.toml --release --locked
+  python scripts/collect-licenses.py
+}
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+  install -Dm755 "${CARGO_TARGET_DIR:-src-tauri/target}/release/solar-forge-diagrams" "$pkgdir/usr/bin/solar-forge-diagrams"
+  install -Dm644 packaging/linux/com.solarforge.diagrams.desktop "$pkgdir/usr/share/applications/com.solarforge.diagrams.desktop"
+  install -Dm644 assets/solar-forge.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/com.solarforge.diagrams.svg"
+  install -Dm644 packaging/linux/com.solarforge.diagrams.xml "$pkgdir/usr/share/mime/packages/com.solarforge.diagrams.xml"
+  install -Dm644 assets/aws/NOTICE.md "$pkgdir/usr/share/licenses/$pkgname/AWS-NOTICE.md"
+  install -Dm644 SOURCE_LICENSE.md "$pkgdir/usr/share/licenses/$pkgname/SOURCE_LICENSE.md"
+  install -Dm644 THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
+  cp -r artifacts/licenses "$pkgdir/usr/share/licenses/$pkgname/dependencies"
+  install -Dm644 docs/USER_GUIDE.md "$pkgdir/usr/share/doc/$pkgname/USER_GUIDE.md"
+  install -Dm644 docs/DOCUMENTS.md "$pkgdir/usr/share/doc/$pkgname/DOCUMENTS.md"
+}

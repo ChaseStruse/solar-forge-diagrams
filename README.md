@@ -2,6 +2,10 @@
 
 Native, offline-first architecture diagramming with a Three.js isometric canvas and a small Tauri shell. Implementation follows [the plan](IMPLEMENTATION_PLAN.md); see [progress and commit mapping](docs/PROGRESS.md).
 
+## Install on Omarchy
+
+Download/extract the [Omarchy install bundle](artifacts/omarchy/solar-forge-diagrams-0.1.0-6-omarchy-x86_64.tar.gz), then run `./install.sh --check` and `./install.sh` in its directory. Launch **Solar Forge Diagrams** with `Super+Space`. The x86_64 bundle uses Omarchy's native package manager and includes desktop/file integration. See [installation and removal](packaging/omarchy/README.md).
+
 ## Development
 
 Install Bun 1.3.11 and a stable Rust toolchain, plus the Tauri Linux prerequisites (WebKitGTK 4.1 and GTK 3 development libraries).
@@ -30,7 +34,9 @@ The opt-in smoke check (debug builds, or release builds compiled with `--feature
 
 ## Current checkpoint
 
-M0 native feasibility is implemented; M1 document history/recovery is next. The prototype supports view switching, dragging, service insertion, native Save/Open, and labeled PNG export. See the plan's execution table and `docs/PROGRESS.md` for exact commits and remaining acceptance checks. Save currently asks for a destination each time; autosave and undo are not yet implemented.
+M1–M5 are complete for the alpha: durable documents/recovery, manual editing and grouping, flowcharts, offline AWS catalog/templates, PNG/SVG exports, usability tools, Omarchy packaging and pinned Docker builds. Read the [user guide](docs/USER_GUIDE.md), [progress](docs/PROGRESS.md), and [build/package instructions](docs/BUILDING.md).
+
+Accepted alpha limits: the native 500-node board measured approximately **603 MiB summed RSS / 350 MiB PSS** and **49 ms scheduled pan-update p95**. The original 250 MiB / 33 ms targets remain unmet. Exact 60 Hz, physical high-DPI and cold-cache release certification remain follow-ups. Optional M6 3D exploration is deferred.
 
 The Linux file chooser uses XDG desktop portals. Omarchy must have its normal portal service and file-chooser backend available; the app does not edit desktop configuration.
 

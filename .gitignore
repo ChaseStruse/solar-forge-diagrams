@@ -5,3 +5,8 @@ src-tauri/target/
 
 .tools/
 src-tauri/gen/
+artifacts/
+packaging/omarchy/pkgbuilds/*/src/
+packaging/omarchy/pkgbuilds/*/pkg/
+packaging/omarchy/pkgbuilds/*/*.tar.gz
+packaging/omarchy/pkgbuilds/*/*.pkg.tar.zst

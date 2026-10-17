@@ -1,0 +1,11 @@
+.git
+.agents
+.codex
+.aws
+.tools
+node_modules
+dist
+src-tauri/target
+src-tauri/gen
+artifacts
+*.log

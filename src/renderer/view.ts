@@ -9,11 +9,16 @@ export interface BoardBounds {
   maxY: number;
 }
 
-/** Centered camera: horizontal rows stay horizontal in both editor views. */
+/**
+ * Centered camera: horizontal rows stay horizontal in both editor views.
+ * The 2.5D view uses a narrow lens from a fairly high angle, so tiles read as
+ * gently tilted slabs rather than steep trapezoids.
+ */
+const ELEVATION = (52 * Math.PI) / 180;
 export class BoardView {
   public readonly target = new Vector3();
-  private readonly spatial = new PerspectiveCamera(38, 1, 1, 40000);
-  private readonly plan = new OrthographicCamera(-1, 1, 1, -1, 0.1, 40000);
+  private readonly spatial = new PerspectiveCamera(20, 1, 20, 80000);
+  private readonly plan = new OrthographicCamera(-1, 1, 1, -1, 0.1, 80000);
   private mode: ViewMode = 'isometric';
   private width = 1;
   private height = 1;
@@ -49,8 +54,8 @@ export class BoardView {
     } else
       camera.position.set(
         this.target.x,
-        this.target.y + this.distance * 0.625,
-        this.target.z + this.distance * 0.781,
+        this.target.y + this.distance * Math.sin(ELEVATION),
+        this.target.z + this.distance * Math.cos(ELEVATION),
       );
     camera.lookAt(this.target);
     camera.setViewOffset(
@@ -83,7 +88,7 @@ export class BoardView {
     const previousMode = this.mode;
     this.mode = 'isometric';
     let low = 200;
-    let high = 30000;
+    let high = 60000;
     for (let step = 0; step < 14; step++) {
       this.distance = (low + high) / 2;
       this.update();
@@ -109,6 +114,22 @@ export class BoardView {
     this.distance = high;
     this.mode = previousMode;
     this.update();
+  }
+  /** Everything needed to put the camera back exactly where it was. */
+  public snapshot(): () => void {
+    const target = this.target.clone();
+    const { distance, rightInset, mode } = this;
+    const spatialZoom = this.spatial.zoom;
+    const planZoom = this.plan.zoom;
+    return () => {
+      this.target.copy(target);
+      this.distance = distance;
+      this.rightInset = rightInset;
+      this.mode = mode;
+      this.spatial.zoom = spatialZoom;
+      this.plan.zoom = planZoom;
+      this.update();
+    };
   }
   public zoomBy(factor: number): void {
     this.camera.zoom = Math.min(4, Math.max(0.1, this.camera.zoom * factor));

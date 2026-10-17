@@ -10,8 +10,23 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [{ "title": "Solar Forge Diagrams", "width": 1440, "height": 960, "minWidth": 900, "minHeight": 600 }],
-    "security": { "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src ipc: http://ipc.localhost" }
+    "windows": [
+      {
+        "title": "Solar Forge Diagrams",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 900,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src ipc: http://ipc.localhost"
+    }
   },
-  "bundle": { "active": false }
+  "bundle": {
+    "active": false,
+    "icon": [
+      "icons/icon.png"
+    ]
+  }
 }

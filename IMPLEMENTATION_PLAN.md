@@ -286,3 +286,7 @@ A feature is done only when it works in the native app, preserves documents/hist
 - [Docker Desktop Linux environment](https://docs.docker.com/desktop/setup/install/linux/)
 
 Use Sketchlab for interaction inspiration. Verify licensing before copying any source or assets. Its implementation is not a required dependency.
+
+## Alpha acceptance update — 2026-10-16
+
+The user approved treating the measured native memory and scheduled-input latency misses as documented limitations for the first alpha. Preserve the original section 7 targets and raw measurements; do not report the misses as passes or as production performance certification. M1–M5 can close for the alpha once implementation and remaining package/workflow checks pass. M6 remains optional and deferred. Exact 60 Hz/cold-start/high-DPI hardware release certification remains a follow-up rather than a claim about this alpha.

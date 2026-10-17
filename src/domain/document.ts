@@ -1,6 +1,10 @@
+import { boundaryColors, findService, legacyColors } from '../catalog/services';
+
+export type Port = 'north' | 'east' | 'south' | 'west';
 export interface DiagramNode {
   id: string;
-  kind: 'service' | 'group';
+  /** Text and notes are annotations: free text, or text on a sticky note. */
+  kind: 'service' | 'group' | 'text' | 'note';
   label: string;
   x: number;
   z: number;
@@ -8,12 +12,33 @@ export interface DiagramNode {
   depth: number;
   color: string;
   parentId?: string;
+  serviceId?: string;
+  shape?: 'process' | 'decision' | 'terminal';
+  boundary?: 'account' | 'region' | 'vpc' | 'zone' | 'subnet';
+  /** World-unit font size for text and notes. */
+  fontSize?: number;
+  /**
+   * What a journey does where this node has several outgoing connections:
+   * walk them all, ask which way, or always take one connection.
+   */
+  journey?: { mode: 'all' | 'ask' } | { mode: 'fixed'; edge: string };
+  metadata?: {
+    region?: string;
+    environment?: string;
+    resourceName?: string;
+    notes?: string;
+    tags?: string;
+  };
 }
 export interface DiagramEdge {
   id: string;
   source: string;
   target: string;
   label: string;
+  sourcePort?: Port;
+  targetPort?: Port;
+  routing?: 'horizontal' | 'vertical';
+  bend?: number;
 }
 export interface DiagramDocument {
   version: 1;
@@ -27,8 +52,10 @@ function record(value: unknown): Record<string, unknown> {
     throw new Error('Expected an object');
   return Object.fromEntries(Object.entries(value));
 }
+export const MAX_TEXT = 4000;
+const nodeKinds = new Set(['service', 'group', 'text', 'note']);
 function text(value: unknown, name: string): string {
-  if (typeof value !== 'string' || value.length > 1000)
+  if (typeof value !== 'string' || value.length > MAX_TEXT)
     throw new Error(`Invalid ${name}`);
   return value;
 }
@@ -54,11 +81,10 @@ export function parseDocument(json: string): DiagramDocument {
     throw new Error('Invalid graph size');
   const nodes = input.nodes.map((value: unknown): DiagramNode => {
     const n = record(value);
-    if (n.kind !== 'service' && n.kind !== 'group')
-      throw new Error('Invalid node kind');
+    if (!nodeKinds.has(String(n.kind))) throw new Error('Invalid node kind');
     const node: DiagramNode = {
       id: text(n.id, 'node ID'),
-      kind: n.kind,
+      kind: n.kind as DiagramNode['kind'],
       label: text(n.label, 'label'),
       x: finite(n.x),
       z: finite(n.z),
@@ -74,6 +100,57 @@ export function parseDocument(json: string): DiagramDocument {
     )
       throw new Error('Invalid node geometry or color');
     if (n.parentId !== undefined) node.parentId = text(n.parentId, 'parent ID');
+    if (n.serviceId !== undefined)
+      node.serviceId = text(n.serviceId, 'service ID');
+    if (n.shape !== undefined) {
+      if (
+        n.shape !== 'process' &&
+        n.shape !== 'decision' &&
+        n.shape !== 'terminal'
+      )
+        throw Error('Invalid flowchart shape');
+      node.shape = n.shape;
+    }
+    if (n.boundary !== undefined) {
+      if (
+        !['account', 'region', 'vpc', 'zone', 'subnet'].includes(
+          String(n.boundary),
+        )
+      )
+        throw Error('Invalid boundary kind');
+      node.boundary = n.boundary as NonNullable<DiagramNode['boundary']>;
+    }
+    if (legacyColors.has(node.color.toLowerCase())) {
+      const service = node.serviceId ? findService(node.serviceId) : undefined;
+      if (service && node.kind === 'service') node.color = service.color;
+      else if (node.boundary) node.color = boundaryColors[node.boundary];
+    }
+    if (n.fontSize !== undefined) {
+      const size = finite(n.fontSize);
+      if (size < 4 || size > 400) throw Error('Invalid font size');
+      node.fontSize = size;
+    }
+    if (n.journey !== undefined) {
+      const journey = record(n.journey);
+      if (journey.mode === 'all' || journey.mode === 'ask')
+        node.journey = { mode: journey.mode };
+      else if (journey.mode === 'fixed')
+        node.journey = { mode: 'fixed', edge: text(journey.edge, 'branch') };
+      else throw Error('Invalid journey branch mode');
+    }
+    if (n.metadata !== undefined) {
+      const metadata = record(n.metadata);
+      node.metadata = {};
+      for (const key of [
+        'region',
+        'environment',
+        'resourceName',
+        'notes',
+        'tags',
+      ] as const)
+        if (metadata[key] !== undefined)
+          node.metadata[key] = text(metadata[key], key);
+    }
     return node;
   });
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -93,7 +170,7 @@ export function parseDocument(json: string): DiagramDocument {
   const edgeIds = new Set<string>();
   const edges = input.edges.map((value: unknown): DiagramEdge => {
     const e = record(value);
-    const edge = {
+    const edge: DiagramEdge = {
       id: text(e.id, 'edge ID'),
       source: text(e.source, 'source'),
       target: text(e.target, 'target'),
@@ -106,6 +183,25 @@ export function parseDocument(json: string): DiagramDocument {
       !byId.has(edge.target)
     )
       throw new Error('Invalid edge reference');
+    for (const key of ['sourcePort', 'targetPort'] as const) {
+      const value = e[key];
+      if (value !== undefined) {
+        if (
+          value !== 'north' &&
+          value !== 'east' &&
+          value !== 'south' &&
+          value !== 'west'
+        )
+          throw Error('Invalid named port');
+        edge[key] = value;
+      }
+    }
+    if (e.routing !== undefined) {
+      if (e.routing !== 'horizontal' && e.routing !== 'vertical')
+        throw Error('Invalid routing');
+      edge.routing = e.routing;
+    }
+    if (e.bend !== undefined) edge.bend = finite(e.bend);
     edgeIds.add(edge.id);
     return edge;
   });
@@ -141,76 +237,83 @@ export function sampleDocument(): DiagramDocument {
         id: 'region',
         kind: 'group',
         label: 'AWS / us-east-1',
+        boundary: 'region',
         x: 0,
         z: 0,
         width: 940,
         depth: 900,
-        color: '#27323b',
+        color: '#00a4a6',
       },
       {
         id: 'vpc',
         kind: 'group',
         label: 'Application boundary',
+        boundary: 'vpc',
         x: 50,
         z: 10,
         width: 650,
         depth: 720,
-        color: '#34413b',
+        color: '#8c4fff',
         parentId: 'region',
       },
       {
         id: 'gateway',
         kind: 'service',
         label: 'API Gateway',
+        serviceId: 'aws.api-gateway',
         x: -280,
         z: -110,
         width: 150,
         depth: 96,
-        color: '#a568ce',
+        color: '#8c4fff',
         parentId: 'region',
       },
       {
         id: 'lambda',
         kind: 'service',
         label: 'Lambda',
+        serviceId: 'aws.lambda',
         x: -40,
         z: -80,
         width: 150,
         depth: 96,
-        color: '#ed983c',
+        color: '#ed7100',
         parentId: 'vpc',
       },
       {
         id: 'db',
         kind: 'service',
         label: 'DynamoDB',
+        serviceId: 'aws.dynamodb',
         x: 190,
         z: -80,
         width: 150,
         depth: 96,
-        color: '#548bc4',
+        color: '#c925d1',
         parentId: 'vpc',
       },
       {
         id: 'queue',
         kind: 'service',
         label: 'SQS',
+        serviceId: 'aws.sqs',
         x: -40,
         z: 310,
         width: 150,
         depth: 96,
-        color: '#cb6186',
+        color: '#e7157b',
         parentId: 'vpc',
       },
       {
         id: 'storage',
         kind: 'service',
         label: 'S3',
+        serviceId: 'aws.s3',
         x: 190,
         z: 310,
         width: 150,
         depth: 96,
-        color: '#79a950',
+        color: '#7aa116',
         parentId: 'vpc',
       },
     ],
@@ -231,23 +334,25 @@ export function starterDocument(): DiagramDocument {
     nodes: [
       {
         id: 'function',
+        serviceId: 'aws.lambda',
         kind: 'service',
         label: 'Lambda',
         x: -300,
         z: 0,
         width: 180,
         depth: 150,
-        color: '#f6bd72',
+        color: '#ed7100',
       },
       {
         id: 'database',
+        serviceId: 'aws.dynamodb',
         kind: 'service',
         label: 'DynamoDB',
         x: 300,
         z: 0,
         width: 180,
         depth: 150,
-        color: '#82b7df',
+        color: '#c925d1',
       },
     ],
     edges: [

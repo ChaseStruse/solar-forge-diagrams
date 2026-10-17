@@ -1,0 +1,46 @@
+{
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+  "viewport": [1920, 1080],
+  "pixelRatio": 1,
+  "navigationToDiagnosticsMs": 2323,
+  "build": "optimized shell / production frontend / diagnostics feature",
+  "gpu": {
+    "renderer": "Apple GPU",
+    "vendor": "Apple Inc."
+  },
+  "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+  "rectangleSelection": "pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented",
+  "editorWorkflows": "pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection",
+  "idleFramesOver500ms": 0,
+  "500nodes": {
+    "loadMs": 187.00000000000045,
+    "panEventToFrameP95Ms": 54.99999999999909,
+    "panRenderSubmissionP95Ms": 4,
+    "textures": 15,
+    "drawCalls": 23,
+    "renderSubmissionP95Ms": 7,
+    "cameraChangeToFrameP95Ms": 53
+  },
+  "2000nodes": {
+    "loadMs": 698,
+    "panEventToFrameP95Ms": 101,
+    "panRenderSubmissionP95Ms": 11.000000000001819,
+    "textures": 59,
+    "drawCalls": 67,
+    "renderSubmissionP95Ms": 13.000000000001819,
+    "cameraChangeToFrameP95Ms": 97
+  },
+  "repeatedOpenTextureCheck": {
+    "cycles": 10,
+    "textures": 2
+  },
+  "contextLossRecovery": true,
+  "context": "Functional regression run on private D-Bus session with NO_AT_BRIDGE=1 and existing user editor preserved; timings are not a controlled replacement for alpha acceptance measurements.",
+  "compositorPointerCheck": {
+    "windowStayedFixed": true,
+    "sizeStayedFixed": true,
+    "rectangleDuringDrag": "visually verified",
+    "bothServicesSelectedOnRelease": "visually verified",
+    "delivery": "Hyprland mouse down, eight cursor moves, mouse up, post-release motion"
+  }
+}

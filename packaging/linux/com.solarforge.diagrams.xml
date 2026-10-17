@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info"><mime-type type="application/x-solar-forge-diagram"><comment>Solar Forge diagram</comment><sub-class-of type="application/json"/><glob pattern="*.sforge.json" weight="80"/></mime-type></mime-info>
