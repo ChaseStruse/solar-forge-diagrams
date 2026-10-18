@@ -17,7 +17,7 @@ import {
 } from './export/gif';
 import { RecoveryWriter } from './persistence/recovery';
 import type { OpenedFile } from './platform/files';
-import { exportGif } from './platform/files';
+import { exportGif, exportText, exportVideo } from './platform/files';
 import { choose, commandPalette, promptText } from './ui/dialogs';
 import { infrastructureImporter } from './ui/importer';
 import { renderNetworkProperties } from './ui/network-properties';
@@ -66,7 +66,7 @@ root.innerHTML = `
     <div class="board-heading"><button id="menu" class="icon-button" aria-label="File menu" aria-expanded="false" title="File menu">${icon('menu')}</button><span class="forge-mark" aria-hidden="true">✦</span><span class="brand">Solar Forge</span><span class="heading-divider"></span><button id="title" class="document-title" title="Rename diagram"></button><span id="save-state" class="save-state">Unchanged</span></div>
     <div class="top-actions"><button id="components" class="quiet-button" title="Components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="copy-image" class="quiet-button" title="Copy diagram image to clipboard (Ctrl+Shift+C)">${icon('camera')}<span>Copy image</span></button><button id="theme" class="icon-button" aria-label="Theme" aria-expanded="false" title="Theme">${icon('palette')}</button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
   </header>
-  <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="import-infrastructure">Import infrastructure…</button><button id="reachability">Reachability matrix…</button><button id="auto-layout">Automatic layout</button><button id="export">Export PNG ${icon('arrow')}</button><button id="export-gif">Export journey GIF</button><button id="export-svg">Export SVG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">RECENT DIAGRAMS</p><div id="recent-files"></div><div class="menu-divider"></div><p class="popover-caption">TEMPLATES</p><button id="example-starter">Two-service starter</button><button id="example-serverless">Serverless architecture</button><div id="templates"></div></section>
+  <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="import-infrastructure">Import infrastructure…</button><button id="reachability">Reachability matrix…</button><button id="auto-layout">Automatic layout</button><button id="export">Export PNG ${icon('arrow')}</button><button id="export-gif">Export journey GIF</button><button id="export-video">Export journey video…</button><button id="export-mermaid">Export Mermaid source</button><button id="export-plantuml">Export PlantUML source</button><button id="export-drawio">Export draw.io project</button><button id="export-svg">Export SVG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">RECENT DIAGRAMS</p><div id="recent-files"></div><div class="menu-divider"></div><p class="popover-caption">TEMPLATES</p><button id="example-starter">Two-service starter</button><button id="example-serverless">Serverless architecture</button><div id="templates"></div></section>
   <section id="theme-menu" class="popover theme-menu" aria-label="Themes" hidden><p class="popover-caption">THEME</p><div id="theme-list"></div></section>
   <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add component" title="Add component (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-text" class="tool" aria-label="Text" aria-pressed="false" title="Text: click the board (T)">${icon('text')}<kbd>T</kbd></button><button id="tool-note" class="tool" aria-label="Sticky note" aria-pressed="false" title="Sticky note: click the board (N)">${icon('note')}<kbd>N</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
   <section id="component-palette" class="popover component-palette" aria-label="Components" hidden><div class="popover-heading"><h2>Components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a component to add it to your board.</p></section>
@@ -74,7 +74,7 @@ root.innerHTML = `
   <nav class="canvas-controls" aria-label="Canvas controls"><div class="zoom-dock floating-dock" aria-label="Zoom controls"><button id="zoom-out" class="small-icon" aria-label="Zoom out">${icon('minus')}</button><span id="zoom-level">100%</span><button id="zoom-in" class="small-icon" aria-label="Zoom in">${icon('plus')}</button><span class="dock-divider"></span><button id="fit">Fit</button><span class="dock-divider"></span><button id="help" class="small-icon" aria-label="Keyboard help" aria-expanded="false">${icon('help')}</button></div>
   <div class="history-dock floating-dock" aria-label="Edit history"><button id="undo" class="small-icon" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button><button id="redo" class="small-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>${icon('redo')}</button></div>
   <div class="view-dock floating-dock" aria-label="View controls"><button id="journey" class="journey-button" aria-pressed="false" title="Walk a person through the data flow (P)">${icon('user')}<span>Journey</span></button><button id="traffic-settings" title="Configure journey traffic">Traffic</button><button id="flow" aria-pressed="true" title="Animate data flow along connections">${icon('flow')}<span>Flow</span></button><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
-  <section id="gif-panel" class="popover help-panel" aria-label="GIF recording settings" hidden><h2>Journey GIF</h2><label>Duration (seconds)<input id="gif-duration" type="number" min="2" max="120" step="1" value="12"></label><label class="checkbox-label"><input id="gif-dither" type="checkbox" checked> Dither gradients</label><p>Up to 8 frames per second, 640 × 480. An adaptive palette preserves theme colours. Decision forks use their first branch.</p><button id="gif-record">Record GIF</button><p>Press Esc to cancel recording.</p></section>
+  <section id="gif-panel" class="popover help-panel" aria-label="GIF recording settings" hidden><h2 id="recording-title">Journey GIF</h2><label id="video-format-row" hidden>Video format<select id="video-format"><option value="webm">WebM</option><option value="mp4">MP4</option></select></label><p id="video-help" hidden>Up to 30 fps, 1280 × 720, full colour. Format availability depends on your browser. Decision forks use their first branch.</p><label>Duration (seconds)<input id="gif-duration" type="number" min="2" max="120" step="1" value="12"></label><label id="gif-dither-row" class="checkbox-label"><input id="gif-dither" type="checkbox" checked> Dither gradients</label><p id="gif-help">Up to 8 frames per second, 640 × 480. An adaptive palette preserves theme colours. Decision forks use their first branch.</p><button id="gif-record">Record GIF</button><p>Press Esc to cancel recording.</p></section>
   <section id="traffic-panel" class="popover help-panel" aria-label="Journey traffic" hidden><h2>Journey traffic</h2><label>Saved scenario<select id="traffic-scenario"></select></label><div class="property-actions"><button id="scenario-use">Use scenario</button><button id="scenario-delete">Delete</button></div><label>Scenario name<input id="scenario-name" maxlength="100"></label><label>Start (optional)<select id="scenario-source"></select></label><label>Destination (optional)<select id="scenario-target"></select></label><button id="scenario-save">Save / update scenario</button><p>Rules on connections allow matching traffic. Blocked attempts flash red and stop at the source. This illustrates configured paths, not a full AWS policy simulation.</p><label>Protocol<select id="traffic-protocol"><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Destination port<input id="traffic-port" type="number" min="1" max="65535" value="443"></label><label>Source IPv4<input id="traffic-source" value="203.0.113.10"></label><label>Direction<select id="traffic-direction"><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="traffic-apply">Apply traffic</button><p>For private egress in the demo, select a private worker, use source 10.0.10.10 and Egress, then play Journey.</p></section>
   <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add · Enter drops it <kbd>C</kbd> Connect</p><p><kbd>T</kbd> Text <kbd>N</kbd> Note <kbd>P</kbd> Journey</p><p>Double-click to rename · <kbd>Ctrl K</kbd> Commands</p><p><kbd>Esc</kbd> Deselect · stop</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><label class="quality-label">Rendering quality<select id="quality"><option value="1">Efficient · 1×</option><option value="1.5" selected>Balanced · 1.5×</option><option value="2">Sharp · 2×</option></select></label><p>Drag empty canvas to select. Shift-drag adds.<br>Hold Ctrl while dragging to skip guides.<br>Scroll to zoom. Right-drag to pan.</p></section>
   <section id="context-menu" class="popover context-menu" aria-label="Selection actions" hidden><button data-action="duplicate">Duplicate</button><button data-action="tool-group">Group</button><button data-action="ungroup">Ungroup</button><div class="align-row" data-multi><button data-align="left" title="Align left edges">⇤</button><button data-align="center" title="Align centres horizontally">↔</button><button data-align="right" title="Align right edges">⇥</button><button data-align="top" title="Align top edges">⤒</button><button data-align="middle" title="Align middles">↕</button><button data-align="bottom" title="Align bottom edges">⤓</button></div><div class="align-row" data-multi><button data-align="distribute-x" title="Distribute horizontally">⋯ Space evenly ↔</button><button data-align="distribute-z" title="Distribute vertically">⋮ ↕</button></div><button data-action="edge-active">Make active route</button><button data-action="edge-all-routes">Show all routes</button><button data-action="delete">Delete</button><button data-action="fit">Fit view</button></section>
@@ -198,6 +198,7 @@ function updateLayers(): void {
       n.parentId,
       n.serviceId,
       n.kind,
+      n.detailId,
     ]),
     current.edges.map((e) => [e.id, e.label, e.source, e.target]),
   ]);
@@ -253,6 +254,19 @@ function updateLayers(): void {
       layerButtons.set(`node:${node.id}`, button);
       button.onclick = (event) => scene.select(node.id, event.shiftKey);
       list.append(button);
+      if (node.detailId) {
+        const detail = project.details?.find(
+          (entry) => entry.id === node.detailId,
+        );
+        if (detail) {
+          const open = document.createElement('button');
+          open.className = 'detail-layer-link';
+          open.textContent = '↳ Open detail ↗';
+          open.setAttribute('aria-label', `Open detail for ${node.label}`);
+          open.onclick = () => navigateDiagram(detail.document);
+          list.append(open);
+        }
+      }
     }
     if (current.edges.length) {
       const heading = document.createElement('p');
@@ -329,12 +343,39 @@ for (const template of templates) {
   element('templates').append(button);
 }
 let recordingGif = false;
+let recordingMode: 'gif' | 'video' = 'gif';
 let recordingAbort: AbortController | undefined;
-element('export-gif').onclick = () => {
+function openRecording(mode: 'gif' | 'video'): void {
+  recordingMode = mode;
   element('file-menu').hidden = true;
   element('gif-panel').hidden = false;
+  element('recording-title').textContent =
+    mode === 'gif' ? 'Journey GIF' : 'Journey video';
+  element('gif-record').textContent =
+    mode === 'gif' ? 'Record GIF' : 'Record video';
+  element('video-format-row').hidden = mode === 'gif';
+  element('video-help').hidden = mode === 'gif';
+  element('gif-dither-row').hidden = mode !== 'gif';
+  element('gif-help').hidden = mode !== 'gif';
   inputElement('gif-duration').focus();
-};
+  if (mode === 'video')
+    void import('./export/video').then(({ videoMime }) => {
+      for (const option of (element('video-format') as HTMLSelectElement)
+        .options) {
+        const supported = !!videoMime(option.value as 'webm' | 'mp4');
+        option.disabled = !supported;
+        option.textContent =
+          option.value.toUpperCase() + (supported ? '' : ' (unavailable)');
+      }
+      const select = element('video-format') as HTMLSelectElement;
+      if (select.selectedOptions[0]?.disabled)
+        select.value =
+          [...select.options].find((option) => !option.disabled)?.value ?? '';
+    });
+}
+element('export-gif').onclick = () => openRecording('gif');
+element('export-video').onclick = () => openRecording('video');
+
 try {
   const saved = localStorage.getItem('solar-forge-gif');
   const options = saved
@@ -362,35 +403,44 @@ element('gif-record').onclick = () =>
       return;
     }
     const { recordJourney } = await import('./export/gif');
+    const mode = recordingMode;
+    const format = field('video-format').value as 'webm' | 'mp4';
+    const video = mode === 'video' ? await import('./export/video') : undefined;
+    if (video && !video.videoMime(format))
+      throw Error('Choose an available video format');
     element('gif-panel').hidden = true;
     recordingGif = true;
     recordingAbort = new AbortController();
     element('file-menu').hidden = true;
     scene.stopJourney();
-    const controls = [
-      element('canvas'),
-      element('layers-panel'),
-      element('traffic-panel'),
-      ...document.querySelectorAll<HTMLElement>(
-        '.topbar, .canvas-controls, .tool-rail',
-      ),
-    ];
+    const controls = [element('app')];
     for (const control of controls) control.inert = true;
     try {
       scene.playJourney(starts, networkPath);
-      const blob = await recordJourney(
-        () => scene.gifFrame(),
-        (percent) =>
-          notify(
-            `Recording journey GIF · ${percent}% · ${options.duration} seconds · Esc cancels; decision forks use the first branch`,
-          ),
-        recordingAbort.signal,
-        options,
-      );
-      scene.stopJourney();
-      if (await exportGif(blob))
+      const progress = (percent: number) =>
         notify(
-          `Journey GIF exported · ${options.duration} seconds, up to 8 fps`,
+          `Recording journey ${mode === 'gif' ? 'GIF' : format.toUpperCase()} · ${percent}% · ${options.duration} seconds · Esc cancels; decision forks use the first branch`,
+        );
+      const blob = video
+        ? await video.recordVideo(
+            () => scene.gifFrame(1280, 720),
+            progress,
+            recordingAbort.signal,
+            { duration: options.duration, format },
+          )
+        : await recordJourney(
+            () => scene.gifFrame(),
+            progress,
+            recordingAbort.signal,
+            options,
+          );
+      scene.stopJourney();
+      const saved = video
+        ? await exportVideo(blob, format)
+        : await exportGif(blob);
+      if (saved)
+        notify(
+          `Journey ${video ? format.toUpperCase() : 'GIF'} exported · ${options.duration} seconds`,
         );
     } finally {
       recordingGif = false;
@@ -407,6 +457,25 @@ element('export-svg').onclick = () =>
     )
       notify('SVG exported');
   });
+for (const [id, format] of [
+  ['export-mermaid', 'mmd'],
+  ['export-plantuml', 'puml'],
+  ['export-drawio', 'drawio'],
+] as const) {
+  element(id).onclick = () =>
+    void action(async () => {
+      const { exportInterchange } = await import('./export/interchange');
+      const content = exportInterchange(
+        format === 'drawio' ? project : current,
+        format,
+      );
+      if (await exportText(content, format))
+        notify(
+          `Exported ${format === 'drawio' ? 'draw.io project' : 'diagram source'}`,
+        );
+      element('file-menu').hidden = true;
+    });
+}
 function updateHeader(): void {
   dirty = history.isDirty;
   if (recoveryReady) recovery.schedule();
@@ -680,20 +749,29 @@ element('reachability').onclick = () => {
 const importer = infrastructureImporter({
   notify,
   apply: async (doc) => {
-    if (!(await canReplace())) return false;
-    replaceDocument({
-      version: 1,
-      title: doc.title,
-      nodes: [],
-      edges: [],
-      ...(doc.traffic ? { traffic: doc.traffic } : {}),
-    });
+    const nodeChanges = new Map(
+      current.nodes.map((node) => [
+        node.id,
+        { id: node.id, value: null as DiagramNode | null },
+      ]),
+    );
+    for (const value of doc.nodes)
+      nodeChanges.set(value.id, { id: value.id, value });
+    const edgeChanges = new Map(
+      current.edges.map((edge) => [
+        edge.id,
+        { id: edge.id, value: null as DiagramEdge | null },
+      ]),
+    );
+    for (const value of doc.edges)
+      edgeChanges.set(value.id, { id: value.id, value });
     commit(
       {
         type: 'graph',
         label: 'Import infrastructure',
-        nodes: doc.nodes.map((value) => ({ id: value.id, value })),
-        edges: doc.edges.map((value) => ({ id: value.id, value })),
+        title: doc.title,
+        nodes: [...nodeChanges.values()],
+        edges: [...edgeChanges.values()],
       },
       [],
     );
@@ -1370,7 +1448,7 @@ function renderDiagramPath(): void {
   nav.replaceChildren();
   if (current === project) return;
   const home = document.createElement('button');
-  home.textContent = '⌂ ' + project.title;
+  home.textContent = `⌂ ${project.title}`;
   home.onclick = () => navigateDiagram(project, true);
   const back = document.createElement('button');
   back.textContent = '← Back';
@@ -1383,10 +1461,12 @@ function renderDiagramPath(): void {
   nav.append(home, back, label);
 }
 function navigateDiagram(board: typeof current, returning = false): void {
+  if (board === current) return;
   scene.finishInteraction();
   closeEditor?.(true);
   scene.stopJourney();
   if (!returning && board !== current) diagramTrail.push(current);
+  if (diagramTrail.length > 100) diagramTrail.shift();
   if (board === project) diagramTrail = [];
   current = board;
   history.document = board;
@@ -1398,7 +1478,7 @@ function navigateDiagram(board: typeof current, returning = false): void {
   scene.fit();
   updateHeader();
   inspect();
-  notify('Opened ' + board.title);
+  notify(`Opened ${board.title}`);
 }
 element('detail-open').onclick = () => {
   const id = current.nodes.find((n) => n.id === selected)?.detailId;
@@ -1415,7 +1495,7 @@ element('detail-create').onclick = () => {
   const id = crypto.randomUUID();
   const board: typeof current = {
     version: 1,
-    title: node.label + ' detail',
+    title: `${node.label} detail`,
     nodes: [],
     edges: [],
   };
@@ -1495,8 +1575,16 @@ field('traffic-scenario').onchange = () => {
   );
   if (!scenario) return;
   field('scenario-name').value = scenario.name;
-  field('scenario-source').value = scenario.sourceId ?? '';
-  field('scenario-target').value = scenario.targetId ?? '';
+  for (const [key, endpoint] of [
+    ['sourceId', 'scenario-source'],
+    ['targetId', 'scenario-target'],
+  ] as const) {
+    const select = element(endpoint) as HTMLSelectElement;
+    const id = scenario[key];
+    if (id && ![...select.options].some((option) => option.value === id))
+      select.add(new Option(`Missing resource: ${id}`, id));
+    select.value = id ?? '';
+  }
   field('traffic-protocol').value = scenario.traffic.protocol;
   field('traffic-port').value = String(scenario.traffic.port);
   field('traffic-source').value = scenario.traffic.sourceIp;
@@ -1525,7 +1613,7 @@ element('scenario-save').onclick = () => {
     commit({ type: 'scenarios', scenarios });
     refreshScenarioChoices();
     field('traffic-scenario').value = id;
-    notify('Saved scenario ' + name);
+    notify(`Saved scenario ${name}`);
   } catch (error) {
     notify(String(error));
   }
@@ -1542,7 +1630,6 @@ element('scenario-delete').onclick = () => {
 element('scenario-use').onclick = () => {
   try {
     const traffic = readTrafficFields();
-    commit({ type: 'traffic', from: current.traffic, to: traffic });
     const source = field('scenario-source').value,
       target = field('scenario-target').value;
     checkedJourney = undefined;
@@ -1550,9 +1637,10 @@ element('scenario-use').onclick = () => {
       throw Error('Scenario start is missing; choose another resource');
     if (target && !current.nodes.some((n) => n.id === target))
       throw Error('Scenario destination is missing; choose another resource');
+    commit({ type: 'traffic', from: current.traffic, to: traffic });
     if (source && target) {
       const result = checkReachability(current, source, target, traffic);
-      notify(result.status + ': ' + result.reason);
+      notify(`${result.status}: ${result.reason}`);
       if (result.status !== 'unknown')
         checkedJourney = {
           path: result.path,
@@ -2092,6 +2180,10 @@ window.addEventListener('keydown', (event) => {
         'reachability',
         'import-infrastructure',
         'export-gif',
+        'export-video',
+        'export-mermaid',
+        'export-plantuml',
+        'export-drawio',
         'fit',
         'iso',
         'top',
@@ -2244,6 +2336,7 @@ if (import.meta.env.DEV)
     solarForge: {
       scene,
       document: () => current,
+      project: () => project,
       load: (json: string) => replaceDocument(parseDocument(json)),
     },
   });

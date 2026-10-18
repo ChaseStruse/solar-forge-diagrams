@@ -84,3 +84,27 @@ Open **File menu → Reachability matrix…**. Choose a source, destination, pro
 The supplied Terraform example allows **HTTPS web → Private PostgreSQL** on TCP/5432 using a security-group peer rule, and denies TCP/22. Change a rule or the port and check again. Missing addresses, unresolved source values, incomplete policy references, IPv6, prefix lists, peering, transit gateways, interface endpoints, appliance routing, ICMP type/code restrictions, application listeners, DNS and load-balancer behavior are outside this static IPv4 evaluator. Unsupported paths return Unknown where modeled; this is an offline model check, not an AWS Reachability Analyzer or a deployment verification.
 
 Manually attached resource policies also constrain Compose flows on shared networks. A traced matrix path can also be recorded with **Export journey GIF**. The checked path remains selected until the board is edited or a new object is selected. Dependency arrows stay static and do not keep an otherwise idle imported board animating. The example Terraform file takes an `ami_id` variable and the CloudFormation example takes an `ImageId` parameter if you use them outside the diagram importer.
+
+### Saved traffic scenarios and walkthrough captions
+
+Open **Traffic** and choose **Public HTTPS**, **SSH from office**, or **Worker egress**. The example office address is a documentation IP; replace it with your intended source. Edit the traffic fields, give the profile a name, and choose **Save / update scenario**. Choose the blank scenario entry to save a new profile. **Use scenario** applies its parameters; **Delete** removes the selected profile. Profiles are stored per diagram, travel with the project, and support undo/redo. The Reachability matrix also offers the saved profiles.
+
+A profile can save an optional start and destination. With both set, **Use scenario** runs the resource reachability check and prepares its known allowed/denied path for Journey or recording. An Unknown result provides no checked path; use the matrix decision details to supply the missing policy information. With only a start, Journey follows its arrows. Add a **Walkthrough caption** in each resource's properties to explain that hop. The current resource label and caption appear during live journeys and in GIF/video recordings. At simultaneous forks the most recently visited resource supplies the caption.
+
+### Video recording
+
+Choose **Export journey video…** in the file menu or command search. Select **WebM** or **MP4**, set **2–120 seconds**, and record. Unsupported formats are marked unavailable: container/codec support depends on the browser or native WebKit runtime. Recording uses the offline MediaRecorder API; it does not call a conversion service. Capture is up to **30 fps** and **1280 × 720**, maintaining the current view's aspect ratio, with full colour and hop captions. The export includes no audio. Files are limited to **100 MB**. Press **Esc** to cancel; cancellation stops the recorder, releases the stream, and restores editing. Decision forks use their first branch during recording, as with GIF.
+
+### Linked detail diagrams
+
+Select a VPC, boundary, or service, expand **Detail diagram**, and choose **Create detail diagram** to create an empty board linked to that resource. Build its details using the ordinary editing/import/layout tools. **← Back** and the project name above the canvas navigate between boards. All boards share one project file, recovery snapshot, saved state, and undo history. Undo/redo opens the board containing the affected edit.
+
+Open an existing detail with the resource's **Open detail ↗** button, its link in Layers, or by double-clicking the linked resource on the canvas. Use the Label property to rename linked resources. **Linked diagram** can attach another existing detail or unlink it; unlinked diagrams remain in that selector so they can be reused. A project supports up to 100 detail boards. Detail boards may link to other detail boards. Copies made through the clipboard omit project links; relink the pasted resource using its properties.
+
+Imports operate on the current board. Saving or Save As always saves the whole project. PNG/SVG/GIF/video and Mermaid/PlantUML export the current board; draw.io export includes the project overview and every detail as a page, with internal page links on linked resources.
+
+### Diagram source exports
+
+The file menu and command search offer **Export Mermaid source** (`.mmd`), **Export PlantUML source** (`.puml`), and **Export draw.io project** (`.drawio`). These exports work offline. Mermaid and PlantUML retain nested boundaries, nodes, labeled arrows, and dependency relationships as deterministic text suitable for documentation and git diffs. Hop captions and detail IDs are included as comments. Draw.io produces uncompressed editable XML, preserving box coordinates, hierarchy, colours, and linked detail pages.
+
+These formats describe the architecture; they do not reproduce Solar Forge's resource policies, saved scenarios, animation, artwork, or every manual edge bend. Keep the native JSON project as the editable source of truth for those features. Native projects are also formatted plain text. Exported Mermaid/PlantUML source requires a compatible renderer when embedded in other tools.

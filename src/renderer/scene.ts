@@ -1762,7 +1762,7 @@ export class DiagramScene {
           const node = this.nodeIndex.get(id);
           this.setJourneyCaption(
             node
-              ? `${node.label}${node.journeyCaption ? '\n' + node.journeyCaption : ''}`
+              ? `${node.label}${node.journeyCaption ? `\n${node.journeyCaption}` : ''}`
               : '',
           );
         },
@@ -1772,7 +1772,7 @@ export class DiagramScene {
             ? networkPath.allowed
             : this.onJourneyPermit(id);
           if (!permitted)
-            this.setJourneyCaption('Blocked · ' + this.journeyCaption);
+            this.setJourneyCaption(`Blocked · ${this.journeyCaption}`);
           return permitted;
         },
         onFinish: () => this.onJourneyEnd(),

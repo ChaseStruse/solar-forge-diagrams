@@ -8,6 +8,7 @@ import {
   checkReachability,
   type ReachabilityResult,
 } from '../domain/reachability';
+import { defaultScenarios } from '../domain/scenarios';
 
 const el = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -34,7 +35,7 @@ export function reachabilityPanel(host: {
   panel.className = 'workspace-dialog reachability-dialog';
   panel.hidden = true;
   panel.setAttribute('aria-label', 'Reachability matrix');
-  panel.innerHTML = `<div class="dialog-heading"><h2>Can A reach B?</h2><button data-close aria-label="Close reachability">×</button></div><p>Static IPv4 reachability from the modeled routes, security groups and subnet ACLs. Security-group replies are stateful; ACL replies use the source port. Missing addresses and unsupported constructs produce Unknown. Unassigned ACLs assume default allow. External routing is assumed available after a valid internet-gateway route.</p><div class="reachability-controls"><label>Protocol<select data-protocol><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Destination port<input data-port type="number" min="1" max="65535" value="443"></label><label>Source port for ACL replies<input data-source-port type="number" min="1" max="65535" value="49152"></label><label>Source IPv4 fallback for external actors<input data-ip value="203.0.113.10"></label><label>From<select data-source></select></label><label>To<select data-target></select></label></div><div class="dialog-actions"><button data-check>Check flow</button><button data-build>Refresh matrix</button></div><div data-result role="status"></div><button data-play disabled>Trace journey</button><details><summary>Decision details</summary><ol data-checks></ol></details><hr><label>Filter resources<input data-filter placeholder="Name or resource ID"></label><div class="matrix-pages"><button data-rows-prev>Previous sources</button><button data-rows-next>Next sources</button><button data-cols-prev>Previous destinations</button><button data-cols-next>Next destinations</button></div><p data-page></p><div class="matrix-scroll" data-matrix></div>`;
+  panel.innerHTML = `<div class="dialog-heading"><h2>Can A reach B?</h2><button data-close aria-label="Close reachability">×</button></div><p>Static IPv4 reachability from the modeled routes, security groups and subnet ACLs. Security-group replies are stateful; ACL replies use the source port. Missing addresses and unsupported constructs produce Unknown. Unassigned ACLs assume default allow. External routing is assumed available after a valid internet-gateway route.</p><label>Traffic scenario<select data-scenario><option value="">Custom traffic</option></select></label><div class="reachability-controls"><label>Protocol<select data-protocol><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Destination port<input data-port type="number" min="1" max="65535" value="443"></label><label>Source port for ACL replies<input data-source-port type="number" min="1" max="65535" value="49152"></label><label>Source IPv4 fallback for external actors<input data-ip value="203.0.113.10"></label><label>From<select data-source></select></label><label>To<select data-target></select></label></div><div class="dialog-actions"><button data-check>Check flow</button><button data-build>Refresh matrix</button></div><div data-result role="status"></div><button data-play disabled>Trace journey</button><details><summary>Decision details</summary><ol data-checks></ol></details><hr><label>Filter resources<input data-filter placeholder="Name or resource ID"></label><div class="matrix-pages"><button data-rows-prev>Previous sources</button><button data-rows-next>Next sources</button><button data-cols-prev>Previous destinations</button><button data-cols-next>Next destinations</button></div><p data-page></p><div class="matrix-scroll" data-matrix></div>`;
   document.body.append(panel);
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
@@ -43,6 +44,20 @@ export function reachabilityPanel(host: {
     const n = panel.querySelector<T>(q);
     if (!n) throw Error('Missing reachability control');
     return n;
+  };
+  const scenarioSelect = find<HTMLSelectElement>('[data-scenario]');
+  scenarioSelect.onchange = () => {
+    const scenario = (host.document().scenarios ?? defaultScenarios).find(
+      (item) => item.id === scenarioSelect.value,
+    );
+    if (!scenario) return;
+    protocol.value = scenario.traffic.protocol;
+    port.value = String(scenario.traffic.port);
+    ip.value = scenario.traffic.sourceIp;
+    if (scenario.sourceId) source.value = scenario.sourceId;
+    if (scenario.targetId) target.value = scenario.targetId;
+    build();
+    check();
   };
   const source = find<HTMLSelectElement>('[data-source]'),
     target = find<HTMLSelectElement>('[data-target]'),
@@ -247,6 +262,12 @@ export function reachabilityPanel(host: {
     open: () => {
       const doc = host.document(),
         traffic = doc.traffic ?? defaultTraffic;
+      scenarioSelect.replaceChildren(
+        new Option('Custom traffic', ''),
+        ...(doc.scenarios ?? defaultScenarios).map(
+          (item) => new Option(item.name, item.id),
+        ),
+      );
       protocol.value = traffic.protocol;
       port.value = String(traffic.port);
       ip.value = traffic.sourceIp;

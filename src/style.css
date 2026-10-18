@@ -1270,3 +1270,22 @@ input[type="color"] {
 #traffic-panel {
   width: 340px;
 }
+
+.detail-layer-link {
+  font-size: 11px;
+  margin: 0 0 6px 26px;
+  padding: 3px 8px;
+  color: var(--accent-text);
+}
+@media (max-width: 700px) {
+  .diagram-path {
+    left: 72px;
+    max-width: calc(100% - 90px);
+    gap: 4px;
+  }
+  .diagram-path button,
+  .diagram-path span {
+    font-size: 11px;
+    padding: 6px;
+  }
+}
