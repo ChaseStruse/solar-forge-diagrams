@@ -2,6 +2,13 @@ import type { DiagramDocument, DiagramEdge, DiagramNode } from './document';
 
 type Position = Pick<DiagramNode, 'x' | 'z'>;
 export type Edit =
+  | { type: 'scenarios'; scenarios: NonNullable<DiagramDocument['scenarios']> }
+  | {
+      type: 'detail';
+      root: DiagramDocument;
+      id: string;
+      board: DiagramDocument;
+    }
   | {
       type: 'traffic';
       from: DiagramDocument['traffic'];
@@ -24,6 +31,7 @@ export interface Change<T> {
 }
 interface Entry {
   edit: Edit;
+  document: DiagramDocument;
   undo: () => void;
   redo: () => void;
   bytes: number;
@@ -40,7 +48,7 @@ export class DocumentHistory {
   private revision = 0;
   private savedRevision = 0;
   constructor(
-    private readonly document: DiagramDocument,
+    public document: DiagramDocument,
     private readonly maxEntries = 100,
     private readonly maxBytes = 8_000_000,
   ) {}
@@ -67,6 +75,33 @@ export class DocumentHistory {
     let redo: () => void;
     let retained: unknown = edit;
     switch (edit.type) {
+      case 'detail': {
+        const root = edit.root;
+        if (root.details?.some((entry) => entry.id === edit.id)) return false;
+        const entry = { id: edit.id, document: edit.board };
+        undo = () => {
+          root.details = root.details?.filter((item) => item !== entry) ?? [];
+        };
+        redo = () => {
+          root.details ??= [];
+          root.details.push(entry);
+        };
+        retained = [edit.id, edit.board];
+        break;
+      }
+      case 'scenarios': {
+        const before = structuredClone(doc.scenarios);
+        const after = structuredClone(edit.scenarios);
+        if (JSON.stringify(before) === JSON.stringify(after)) return false;
+        undo = () => {
+          if (before) doc.scenarios = structuredClone(before);
+          else delete doc.scenarios;
+        };
+        redo = () => {
+          doc.scenarios = structuredClone(after);
+        };
+        break;
+      }
       case 'traffic': {
         const before = structuredClone(doc.traffic);
         const after = structuredClone(edit.to);
@@ -209,6 +244,7 @@ export class DocumentHistory {
     this.future = [];
     const entry: Entry = {
       edit,
+      document: doc,
       undo,
       redo,
       bytes: JSON.stringify(retained).length * 2,
@@ -227,6 +263,7 @@ export class DocumentHistory {
   public undo(): Edit | undefined {
     const entry = this.past.pop();
     if (!entry) return;
+    this.document = entry.document;
     entry.undo();
     this.revision = entry.before;
     this.future.push(entry);
@@ -235,6 +272,7 @@ export class DocumentHistory {
   public redo(): Edit | undefined {
     const entry = this.future.pop();
     if (!entry) return;
+    this.document = entry.document;
     entry.redo();
     this.revision = entry.after;
     this.past.push(entry);

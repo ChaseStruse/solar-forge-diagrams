@@ -10,6 +10,7 @@ import {
   parseTraffic,
 } from './domain/network';
 import { checkReachability } from './domain/reachability';
+import { defaultScenarios } from './domain/scenarios';
 import {
   defaultRecordingOptions,
   validateRecordingOptions,
@@ -60,7 +61,7 @@ import { icon } from './ui/icons';
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('Application root is missing');
 root.innerHTML = `
-  <main class="workspace" aria-label="Diagram workspace"><div id="canvas"></div></main>
+  <main class="workspace" aria-label="Diagram workspace"><div id="canvas"></div><nav id="diagram-path" class="diagram-path" aria-label="Diagram navigation"></nav><div id="journey-caption" class="journey-caption" hidden role="status"></div></main>
   <header class="topbar">
     <div class="board-heading"><button id="menu" class="icon-button" aria-label="File menu" aria-expanded="false" title="File menu">${icon('menu')}</button><span class="forge-mark" aria-hidden="true">✦</span><span class="brand">Solar Forge</span><span class="heading-divider"></span><button id="title" class="document-title" title="Rename diagram"></button><span id="save-state" class="save-state">Unchanged</span></div>
     <div class="top-actions"><button id="components" class="quiet-button" title="Components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="copy-image" class="quiet-button" title="Copy diagram image to clipboard (Ctrl+Shift+C)">${icon('camera')}<span>Copy image</span></button><button id="theme" class="icon-button" aria-label="Theme" aria-expanded="false" title="Theme">${icon('palette')}</button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
@@ -69,12 +70,12 @@ root.innerHTML = `
   <section id="theme-menu" class="popover theme-menu" aria-label="Themes" hidden><p class="popover-caption">THEME</p><div id="theme-list"></div></section>
   <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add component" title="Add component (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-text" class="tool" aria-label="Text" aria-pressed="false" title="Text: click the board (T)">${icon('text')}<kbd>T</kbd></button><button id="tool-note" class="tool" aria-label="Sticky note" aria-pressed="false" title="Sticky note: click the board (N)">${icon('note')}<kbd>N</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
   <section id="component-palette" class="popover component-palette" aria-label="Components" hidden><div class="popover-heading"><h2>Components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a component to add it to your board.</p></section>
-  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label id="node-branch-row">Journey at this fork<select id="node-branch"></select></label><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><div id="resource-network"></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><div class="property-actions"><button id="edge-active">Make active route</button><button id="edge-all-routes">Show all routes</button></div><details><summary>Journey traffic rule</summary><label>Action<select id="rule-action"><option value="none">Unrestricted</option><option value="allow">Allow matching traffic</option><option value="deny">Deny all traffic</option></select></label><label>Protocol<select id="rule-protocol"><option value="any">Any</option><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Port (blank = any)<input id="rule-port" type="number" min="1" max="65535"></label><label>Source CIDR (blank = any)<input id="rule-source" placeholder="0.0.0.0/0"></label><label>Direction<select id="rule-direction"><option value="any">Any</option><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="rule-apply">Apply rule</button><p id="rule-result" class="muted" role="status"></p></details><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
+  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label id="node-branch-row">Journey at this fork<select id="node-branch"></select></label><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><label>Walkthrough caption<textarea id="node-caption" maxlength="1000" rows="3" placeholder="Explain what happens at this hop"></textarea></label><details id="detail-controls"><summary>Detail diagram</summary><label>Linked diagram<select id="node-detail"></select></label><button id="detail-open">Open detail ↗</button><button id="detail-create">Create detail diagram</button><p class="muted">Double-click a linked resource to open it. Use Label to rename it.</p></details><div id="resource-network"></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><div class="property-actions"><button id="edge-active">Make active route</button><button id="edge-all-routes">Show all routes</button></div><details><summary>Journey traffic rule</summary><label>Action<select id="rule-action"><option value="none">Unrestricted</option><option value="allow">Allow matching traffic</option><option value="deny">Deny all traffic</option></select></label><label>Protocol<select id="rule-protocol"><option value="any">Any</option><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Port (blank = any)<input id="rule-port" type="number" min="1" max="65535"></label><label>Source CIDR (blank = any)<input id="rule-source" placeholder="0.0.0.0/0"></label><label>Direction<select id="rule-direction"><option value="any">Any</option><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="rule-apply">Apply rule</button><p id="rule-result" class="muted" role="status"></p></details><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
   <nav class="canvas-controls" aria-label="Canvas controls"><div class="zoom-dock floating-dock" aria-label="Zoom controls"><button id="zoom-out" class="small-icon" aria-label="Zoom out">${icon('minus')}</button><span id="zoom-level">100%</span><button id="zoom-in" class="small-icon" aria-label="Zoom in">${icon('plus')}</button><span class="dock-divider"></span><button id="fit">Fit</button><span class="dock-divider"></span><button id="help" class="small-icon" aria-label="Keyboard help" aria-expanded="false">${icon('help')}</button></div>
   <div class="history-dock floating-dock" aria-label="Edit history"><button id="undo" class="small-icon" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button><button id="redo" class="small-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>${icon('redo')}</button></div>
   <div class="view-dock floating-dock" aria-label="View controls"><button id="journey" class="journey-button" aria-pressed="false" title="Walk a person through the data flow (P)">${icon('user')}<span>Journey</span></button><button id="traffic-settings" title="Configure journey traffic">Traffic</button><button id="flow" aria-pressed="true" title="Animate data flow along connections">${icon('flow')}<span>Flow</span></button><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
   <section id="gif-panel" class="popover help-panel" aria-label="GIF recording settings" hidden><h2>Journey GIF</h2><label>Duration (seconds)<input id="gif-duration" type="number" min="2" max="120" step="1" value="12"></label><label class="checkbox-label"><input id="gif-dither" type="checkbox" checked> Dither gradients</label><p>Up to 8 frames per second, 640 × 480. An adaptive palette preserves theme colours. Decision forks use their first branch.</p><button id="gif-record">Record GIF</button><p>Press Esc to cancel recording.</p></section>
-  <section id="traffic-panel" class="popover help-panel" aria-label="Journey traffic" hidden><h2>Journey traffic</h2><p>Rules on connections allow matching traffic. Blocked attempts flash red and stop at the source. This illustrates configured paths, not a full AWS policy simulation.</p><label>Protocol<select id="traffic-protocol"><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Destination port<input id="traffic-port" type="number" min="1" max="65535" value="443"></label><label>Source IPv4<input id="traffic-source" value="203.0.113.10"></label><label>Direction<select id="traffic-direction"><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="traffic-apply">Apply traffic</button><p>For private egress in the demo, select a private worker, use source 10.0.10.10 and Egress, then play Journey.</p></section>
+  <section id="traffic-panel" class="popover help-panel" aria-label="Journey traffic" hidden><h2>Journey traffic</h2><label>Saved scenario<select id="traffic-scenario"></select></label><div class="property-actions"><button id="scenario-use">Use scenario</button><button id="scenario-delete">Delete</button></div><label>Scenario name<input id="scenario-name" maxlength="100"></label><label>Start (optional)<select id="scenario-source"></select></label><label>Destination (optional)<select id="scenario-target"></select></label><button id="scenario-save">Save / update scenario</button><p>Rules on connections allow matching traffic. Blocked attempts flash red and stop at the source. This illustrates configured paths, not a full AWS policy simulation.</p><label>Protocol<select id="traffic-protocol"><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Destination port<input id="traffic-port" type="number" min="1" max="65535" value="443"></label><label>Source IPv4<input id="traffic-source" value="203.0.113.10"></label><label>Direction<select id="traffic-direction"><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="traffic-apply">Apply traffic</button><p>For private egress in the demo, select a private worker, use source 10.0.10.10 and Egress, then play Journey.</p></section>
   <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add · Enter drops it <kbd>C</kbd> Connect</p><p><kbd>T</kbd> Text <kbd>N</kbd> Note <kbd>P</kbd> Journey</p><p>Double-click to rename · <kbd>Ctrl K</kbd> Commands</p><p><kbd>Esc</kbd> Deselect · stop</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><label class="quality-label">Rendering quality<select id="quality"><option value="1">Efficient · 1×</option><option value="1.5" selected>Balanced · 1.5×</option><option value="2">Sharp · 2×</option></select></label><p>Drag empty canvas to select. Shift-drag adds.<br>Hold Ctrl while dragging to skip guides.<br>Scroll to zoom. Right-drag to pan.</p></section>
   <section id="context-menu" class="popover context-menu" aria-label="Selection actions" hidden><button data-action="duplicate">Duplicate</button><button data-action="tool-group">Group</button><button data-action="ungroup">Ungroup</button><div class="align-row" data-multi><button data-align="left" title="Align left edges">⇤</button><button data-align="center" title="Align centres horizontally">↔</button><button data-align="right" title="Align right edges">⇥</button><button data-align="top" title="Align top edges">⤒</button><button data-align="middle" title="Align middles">↕</button><button data-align="bottom" title="Align bottom edges">⤓</button></div><div class="align-row" data-multi><button data-align="distribute-x" title="Distribute horizontally">⋯ Space evenly ↔</button><button data-align="distribute-z" title="Distribute vertically">⋮ ↕</button></div><button data-action="edge-active">Make active route</button><button data-action="edge-all-routes">Show all routes</button><button data-action="delete">Delete</button><button data-action="fit">Fit view</button></section>
   <div id="status" class="status" role="status">Ready</div><span id="count" class="board-count"></span>`;
@@ -90,7 +91,9 @@ function inputElement(id: string): HTMLInputElement {
   return result;
 }
 let current = starterDocument();
+let project = current;
 let history = new DocumentHistory(current);
+let diagramTrail: (typeof current)[] = [];
 let selected: string | undefined;
 let checkedJourney: { path: string[]; allowed: boolean } | undefined;
 let selectedIds = new Set<string>();
@@ -100,7 +103,7 @@ let busy = false;
 let fileHandle: number | undefined;
 let recoveryReady = false;
 const recovery = new RecoveryWriter(
-  () => (history.isDirty ? serializeDocument(current) : null),
+  () => (history.isDirty ? serializeDocument(project) : null),
   (content) =>
     nativeAvailable()
       ? invoke('write_recovery', { content })
@@ -424,6 +427,7 @@ function updateHeader(): void {
   element('ground-summary').textContent =
     `${count('service')} services · ${count('group')} boundaries${notes ? ` · ${notes} notes` : ''}`;
   updateLayers();
+  renderDiagramPath();
 }
 function inspect(): void {
   const node = current.nodes.find((n) => n.id === selected);
@@ -434,6 +438,19 @@ function inspect(): void {
         (node.kind === 'note' ? 'Sticky note' : 'Text')
       : (node?.label ?? '');
   inputElement('node-label').value = node?.label ?? '';
+  (element('node-caption') as HTMLTextAreaElement).value =
+    node?.journeyCaption ?? '';
+  element('detail-controls').hidden =
+    !node || !['group', 'service'].includes(node.kind);
+  const detailSelect = element('node-detail') as HTMLSelectElement;
+  detailSelect.replaceChildren(
+    new Option('No detail diagram', ''),
+    ...(project.details ?? []).map(
+      (entry) => new Option(entry.document.title, entry.id),
+    ),
+  );
+  detailSelect.value = node?.detailId ?? '';
+  (element('detail-open') as HTMLButtonElement).disabled = !node?.detailId;
   const annotation = node?.kind === 'text' || node?.kind === 'note';
   inputElement('node-label').hidden = annotation;
   field('node-text').hidden = !annotation;
@@ -589,6 +606,8 @@ scene.onZoom = (percent) => {
 function replaceDocument(next: typeof current): void {
   fileHandle = undefined;
   current = next;
+  project = next;
+  diagramTrail = [];
   history = new DocumentHistory(current);
   selected = undefined;
   dirty = false;
@@ -614,7 +633,7 @@ async function saveCurrent(saveAs = false): Promise<boolean> {
   const savedHistory = history;
   const token = history.token;
   const saved = await saveDocumentFile(
-    serializeDocument(current),
+    serializeDocument(project),
     saveAs ? undefined : fileHandle,
   );
   if (!saved) return false;
@@ -911,6 +930,12 @@ function travelHistory(redo: boolean): void {
   scene.finishInteraction();
   const edit = redo ? history.redo() : history.undo();
   if (!edit) return;
+  if (current !== history.document) {
+    current = history.document;
+    diagramTrail = current === project ? [] : [project];
+    scene.load(current);
+    scene.fit();
+  }
   const selection = [...selectedIds];
   const edge = selectedEdge;
   if (edit.type === 'move') scene.refreshPosition(edit.id);
@@ -1047,7 +1072,15 @@ function placeAnnotation(kind: 'text' | 'note', x: number, z: number): void {
   openEditor({ kind: 'node', id }, true);
 }
 scene.onPlace = placeAnnotation;
-scene.onEditRequest = (target) => openEditor(target);
+scene.onEditRequest = (target) => {
+  const node =
+    target.kind === 'node'
+      ? current.nodes.find((n) => n.id === target.id)
+      : undefined;
+  const detail = project.details?.find((entry) => entry.id === node?.detailId);
+  if (detail) navigateDiagram(detail.document);
+  else openEditor(target);
+};
 
 let closeEditor: ((save: boolean) => void) | undefined;
 /**
@@ -1332,6 +1365,209 @@ try {
   if (localStorage.getItem('solar-forge-flow') === '0') setFlow(false);
 } catch {}
 element('flow').onclick = () => setFlow(!scene.flow);
+function renderDiagramPath(): void {
+  const nav = element('diagram-path');
+  nav.replaceChildren();
+  if (current === project) return;
+  const home = document.createElement('button');
+  home.textContent = '⌂ ' + project.title;
+  home.onclick = () => navigateDiagram(project, true);
+  const back = document.createElement('button');
+  back.textContent = '← Back';
+  back.onclick = () => {
+    const previous = diagramTrail.pop();
+    if (previous) navigateDiagram(previous, true);
+  };
+  const label = document.createElement('span');
+  label.textContent = current.title;
+  nav.append(home, back, label);
+}
+function navigateDiagram(board: typeof current, returning = false): void {
+  scene.finishInteraction();
+  closeEditor?.(true);
+  scene.stopJourney();
+  if (!returning && board !== current) diagramTrail.push(current);
+  if (board === project) diagramTrail = [];
+  current = board;
+  history.document = board;
+  selected = undefined;
+  selectedEdge = undefined;
+  selectedIds.clear();
+  checkedJourney = undefined;
+  scene.load(current);
+  scene.fit();
+  updateHeader();
+  inspect();
+  notify('Opened ' + board.title);
+}
+element('detail-open').onclick = () => {
+  const id = current.nodes.find((n) => n.id === selected)?.detailId;
+  const board = project.details?.find((entry) => entry.id === id)?.document;
+  if (board) navigateDiagram(board);
+};
+element('detail-create').onclick = () => {
+  const node = current.nodes.find((n) => n.id === selected);
+  if (!node) return;
+  if ((project.details?.length ?? 0) >= 100) {
+    notify('A project supports up to 100 detail diagrams');
+    return;
+  }
+  const id = crypto.randomUUID();
+  const board: typeof current = {
+    version: 1,
+    title: node.label + ' detail',
+    nodes: [],
+    edges: [],
+  };
+  history.execute({ type: 'detail', root: project, id, board });
+  commit({
+    type: 'graph',
+    label: 'Link detail diagram',
+    nodes: [{ id: node.id, value: { ...node, detailId: id } }],
+  });
+  navigateDiagram(board);
+};
+field('node-detail').onchange = () => {
+  const node = current.nodes.find((n) => n.id === selected);
+  if (!node) return;
+  const value = { ...node };
+  if (field('node-detail').value) value.detailId = field('node-detail').value;
+  else delete value.detailId;
+  commit({
+    type: 'graph',
+    label: 'Link detail diagram',
+    nodes: [{ id: node.id, value }],
+  });
+};
+field('node-caption').onchange = () => {
+  const node = current.nodes.find((n) => n.id === selected);
+  if (!node) return;
+  commit({
+    type: 'graph',
+    label: 'Edit walkthrough caption',
+    nodes: [
+      {
+        id: node.id,
+        value: {
+          ...node,
+          journeyCaption: field('node-caption').value.slice(0, 1000),
+        },
+      },
+    ],
+  });
+};
+function scenarioOptions() {
+  return current.scenarios ?? defaultScenarios;
+}
+function refreshScenarioChoices(): void {
+  const select = element('traffic-scenario') as HTMLSelectElement;
+  const previous = select.value;
+  select.replaceChildren(
+    new Option('Choose a scenario…', ''),
+    ...scenarioOptions().map(
+      (scenario) => new Option(scenario.name, scenario.id),
+    ),
+  );
+  select.value = previous;
+  for (const id of ['scenario-source', 'scenario-target']) {
+    const endpoint = element(id) as HTMLSelectElement;
+    const value = endpoint.value;
+    endpoint.replaceChildren(
+      new Option('Not set', ''),
+      ...current.nodes
+        .filter((n) => n.kind === 'service')
+        .map((n) => new Option(n.label, n.id)),
+    );
+    endpoint.value = value;
+  }
+}
+function readTrafficFields() {
+  return parseTraffic({
+    protocol: field('traffic-protocol').value,
+    port: Number(field('traffic-port').value),
+    sourceIp: field('traffic-source').value.trim(),
+    direction: field('traffic-direction').value,
+  });
+}
+field('traffic-scenario').onchange = () => {
+  const scenario = scenarioOptions().find(
+    (item) => item.id === field('traffic-scenario').value,
+  );
+  if (!scenario) return;
+  field('scenario-name').value = scenario.name;
+  field('scenario-source').value = scenario.sourceId ?? '';
+  field('scenario-target').value = scenario.targetId ?? '';
+  field('traffic-protocol').value = scenario.traffic.protocol;
+  field('traffic-port').value = String(scenario.traffic.port);
+  field('traffic-source').value = scenario.traffic.sourceIp;
+  field('traffic-direction').value = scenario.traffic.direction;
+};
+element('scenario-save').onclick = () => {
+  try {
+    const name = field('scenario-name').value.trim();
+    if (!name) throw Error('Give the scenario a name');
+    const existing = field('traffic-scenario').value;
+    const id = existing || crypto.randomUUID();
+    const scenarios = scenarioOptions().filter((item) => item.id !== id);
+    if (scenarios.length >= 100)
+      throw Error('A diagram supports up to 100 scenarios');
+    scenarios.push({
+      id,
+      name,
+      traffic: readTrafficFields(),
+      ...(field('scenario-source').value
+        ? { sourceId: field('scenario-source').value }
+        : {}),
+      ...(field('scenario-target').value
+        ? { targetId: field('scenario-target').value }
+        : {}),
+    });
+    commit({ type: 'scenarios', scenarios });
+    refreshScenarioChoices();
+    field('traffic-scenario').value = id;
+    notify('Saved scenario ' + name);
+  } catch (error) {
+    notify(String(error));
+  }
+};
+element('scenario-delete').onclick = () => {
+  const id = field('traffic-scenario').value;
+  if (!id) return;
+  commit({
+    type: 'scenarios',
+    scenarios: scenarioOptions().filter((item) => item.id !== id),
+  });
+  refreshScenarioChoices();
+};
+element('scenario-use').onclick = () => {
+  try {
+    const traffic = readTrafficFields();
+    commit({ type: 'traffic', from: current.traffic, to: traffic });
+    const source = field('scenario-source').value,
+      target = field('scenario-target').value;
+    checkedJourney = undefined;
+    if (source && !current.nodes.some((n) => n.id === source))
+      throw Error('Scenario start is missing; choose another resource');
+    if (target && !current.nodes.some((n) => n.id === target))
+      throw Error('Scenario destination is missing; choose another resource');
+    if (source && target) {
+      const result = checkReachability(current, source, target, traffic);
+      notify(result.status + ': ' + result.reason);
+      if (result.status !== 'unknown')
+        checkedJourney = {
+          path: result.path,
+          allowed: result.status === 'allowed',
+        };
+    } else {
+      if (source) scene.select(source);
+      notify('Traffic scenario applied');
+    }
+    scene.stopJourney();
+    element('traffic-panel').hidden = true;
+  } catch (error) {
+    notify(String(error));
+  }
+};
 function toggleJourney(): void {
   if (scene.journeyPlaying) {
     scene.stopJourney();
@@ -1357,6 +1593,7 @@ element('journey').onclick = toggleJourney;
 element('traffic-settings').onclick = () => {
   const panel = element('traffic-panel');
   panel.hidden = !panel.hidden;
+  refreshScenarioChoices();
   const traffic = current.traffic ?? defaultTraffic;
   field('traffic-protocol').value = traffic.protocol;
   field('traffic-port').value = String(traffic.port);
@@ -1451,6 +1688,10 @@ scene.onJourneyHop = (id) => {
   notify(
     `${edge.networkRule ? 'Allowed · ' : ''}${name(edge.source)} → ${name(edge.target)}${edge.label ? ` · ${edge.label}` : ''}`,
   );
+};
+scene.onJourneyCaption = (caption) => {
+  element('journey-caption').textContent = caption;
+  element('journey-caption').hidden = !caption;
 };
 scene.onJourneyEnd = () => {
   element('journey').setAttribute('aria-pressed', 'false');

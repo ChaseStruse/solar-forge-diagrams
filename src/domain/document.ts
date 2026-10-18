@@ -9,6 +9,8 @@ import {
 
 export type Port = 'north' | 'east' | 'south' | 'west';
 export interface DiagramNode {
+  detailId?: string;
+  journeyCaption?: string;
   network?: ResourceNetwork;
   policy?: ResourcePolicy;
   id: string;
@@ -64,7 +66,17 @@ export interface DiagramEdge {
   routing?: 'horizontal' | 'vertical';
   bend?: number;
 }
+export interface TrafficScenario {
+  id: string;
+  name: string;
+  traffic: JourneyTraffic;
+  sourceId?: string;
+  targetId?: string;
+}
 export interface DiagramDocument {
+  /** Flat project library: detail boards can link to other boards by ID. */
+  details?: { id: string; document: DiagramDocument }[];
+  scenarios?: TrafficScenario[];
   version: 1;
   traffic?: JourneyTraffic;
   title: string;
@@ -94,6 +106,34 @@ function finite(value: unknown): number {
   return value;
 }
 export function parseDocument(json: string): DiagramDocument {
+  const result = parseBoard(json);
+  const input = record(JSON.parse(json));
+  if (input.details !== undefined) {
+    if (!Array.isArray(input.details) || input.details.length > 100)
+      throw Error('Invalid detail diagram library');
+    const ids = new Set<string>();
+    result.details = input.details.map((value: unknown) => {
+      const entry = record(value);
+      const id = text(entry.id, 'detail ID');
+      if (!id || ids.has(id)) throw Error('Duplicate detail ID');
+      ids.add(id);
+      const board = record(entry.document);
+      if (board.details !== undefined)
+        throw Error('Detail libraries must be flat');
+      return { id, document: parseBoard(JSON.stringify(board)) };
+    });
+  }
+  const ids = new Set(result.details?.map((entry) => entry.id));
+  for (const board of [
+    result,
+    ...(result.details?.map((entry) => entry.document) ?? []),
+  ])
+    for (const node of board.nodes)
+      if (node.detailId && !ids.has(node.detailId))
+        throw Error('Missing detail diagram');
+  return result;
+}
+function parseBoard(json: string): DiagramDocument {
   if (json.length > 10_000_000) throw new Error('Document exceeds 10 MB limit');
   const input = record(JSON.parse(json));
   if (input.version !== 1) throw new Error('Unsupported document version');
@@ -124,6 +164,9 @@ export function parseDocument(json: string): DiagramDocument {
       !/^#[0-9a-f]{6}$/i.test(node.color)
     )
       throw new Error('Invalid node geometry or color');
+    if (n.detailId !== undefined) node.detailId = text(n.detailId, 'detail ID');
+    if (n.journeyCaption !== undefined)
+      node.journeyCaption = text(n.journeyCaption, 'journey caption');
     if (n.parentId !== undefined) node.parentId = text(n.parentId, 'parent ID');
     if (n.serviceId !== undefined)
       node.serviceId = text(n.serviceId, 'service ID');
@@ -260,9 +303,33 @@ export function parseDocument(json: string): DiagramDocument {
     edgeIds.add(edge.id);
     return edge;
   });
+  let scenarios: TrafficScenario[] | undefined;
+  if (input.scenarios !== undefined) {
+    if (!Array.isArray(input.scenarios) || input.scenarios.length > 100)
+      throw Error('Invalid scenarios');
+    const ids = new Set<string>();
+    scenarios = input.scenarios.map((value: unknown) => {
+      const scenario = record(value);
+      const id = text(scenario.id, 'scenario ID');
+      const name = text(scenario.name, 'scenario name');
+      if (!id || !name.trim() || ids.has(id))
+        throw Error('Invalid or duplicate scenario');
+      ids.add(id);
+      const result: TrafficScenario = {
+        id,
+        name,
+        traffic: parseTraffic(scenario.traffic),
+      };
+      for (const key of ['sourceId', 'targetId'] as const) {
+        if (scenario[key] !== undefined) result[key] = text(scenario[key], key);
+      }
+      return result;
+    });
+  }
   return {
     version: 1,
     title: text(input.title, 'title'),
+    ...(scenarios ? { scenarios } : {}),
     nodes,
     edges,
     ...(input.traffic !== undefined

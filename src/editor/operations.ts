@@ -153,6 +153,8 @@ export function copyFragment(
           node,
           new Map([...ids].map((id) => [id, id])),
         );
+        // Clipboard fragments are standalone graphs; project links remain in the source.
+        delete value.detailId;
         if (!value.parentId || !ids.has(value.parentId)) {
           const p = worldPosition(node, index);
           delete value.parentId;

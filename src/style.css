@@ -1220,3 +1220,53 @@ input[type="color"] {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.diagram-path {
+  position: absolute;
+  top: 86px;
+  left: 90px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 5;
+  max-width: calc(100% - 430px);
+}
+.diagram-path:empty {
+  display: none;
+}
+.diagram-path button,
+.diagram-path span {
+  background: var(--panel, #20242d);
+  color: var(--text, #e6edf3);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+.diagram-path span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.journey-caption {
+  position: absolute;
+  bottom: 115px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(650px, 65vw);
+  padding: 14px 20px;
+  border-radius: 12px;
+  background: #111827ee;
+  color: #fff;
+  white-space: pre-wrap;
+  text-align: center;
+  pointer-events: none;
+  z-index: 6;
+}
+
+#traffic-panel,
+#gif-panel {
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+}
+#traffic-panel {
+  width: 340px;
+}

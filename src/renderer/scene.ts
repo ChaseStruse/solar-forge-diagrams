@@ -258,6 +258,12 @@ export class DiagramScene {
   private edgeColors: Float32Array<ArrayBufferLike> = new Float32Array();
   private edgeColorBuffer: InterleavedBuffer | undefined;
   public onSelectEdge: (id: string | undefined) => void = () => {};
+  private journeyCaption = '';
+  public onJourneyCaption: (caption: string) => void = () => {};
+  private setJourneyCaption(caption: string): void {
+    this.journeyCaption = caption;
+    this.onJourneyCaption(caption);
+  }
   public onJourneyHop: (edgeId: string) => void = () => {};
   public onJourneyEnd: () => void = () => {};
   public onJourneyBranches: (nodeId: string) => {
@@ -1752,9 +1758,23 @@ export class DiagramScene {
         choose: (id, edges) => this.onJourneyChoose(id, edges),
         cancelChoice: () => this.onJourneyCancelChoice(),
         target: (id) => edgeAt(id)?.target,
+        onVisit: (id) => {
+          const node = this.nodeIndex.get(id);
+          this.setJourneyCaption(
+            node
+              ? `${node.label}${node.journeyCaption ? '\n' + node.journeyCaption : ''}`
+              : '',
+          );
+        },
         onHop: (id) => this.onJourneyHop(id),
-        permit: (id) =>
-          networkPath ? networkPath.allowed : this.onJourneyPermit(id),
+        permit: (id) => {
+          const permitted = networkPath
+            ? networkPath.allowed
+            : this.onJourneyPermit(id);
+          if (!permitted)
+            this.setJourneyCaption('Blocked · ' + this.journeyCaption);
+          return permitted;
+        },
         onFinish: () => this.onJourneyEnd(),
       },
       this.palette,
@@ -1762,6 +1782,7 @@ export class DiagramScene {
     this.journey.start(starts);
   }
   public stopJourney(): void {
+    this.setJourneyCaption('');
     this.journey?.dispose();
     const playing = this.journey?.playing;
     this.journey = undefined;
@@ -2007,16 +2028,60 @@ export class DiagramScene {
     bottom = Math.min(this.height, Math.ceil(bottom + padding));
     return { left, top, width: right - left, height: bottom - top };
   }
-  public gifFrame(): HTMLCanvasElement {
+  public gifFrame(maxWidth = 640, maxHeight = 480): HTMLCanvasElement {
     this.render();
     const canvas = document.createElement('canvas');
     const source = this.renderer.domElement;
-    const scale = Math.min(1, 640 / source.width, 480 / source.height);
+    const scale = Math.min(
+      1,
+      maxWidth / source.width,
+      maxHeight / source.height,
+    );
     canvas.width = Math.max(1, Math.round(source.width * scale));
     canvas.height = Math.max(1, Math.round(source.height * scale));
-    canvas
-      .getContext('2d')
-      ?.drawImage(source, 0, 0, canvas.width, canvas.height);
+    const context = canvas.getContext('2d');
+    context?.drawImage(source, 0, 0, canvas.width, canvas.height);
+    if (context && this.journeyCaption) {
+      const size = Math.max(12, Math.round(canvas.width / 48));
+      context.font = `${size}px sans-serif`;
+      const lines: string[] = [];
+      for (const paragraph of this.journeyCaption.split('\n')) {
+        let line = '';
+        for (const char of paragraph) {
+          if (
+            context.measureText(line + char).width > canvas.width - 48 &&
+            line
+          ) {
+            lines.push(line);
+            line = '';
+          }
+          line += char;
+        }
+        lines.push(line);
+      }
+      const visible = lines.slice(
+        0,
+        Math.max(1, Math.floor(canvas.height / (size * 3))),
+      );
+      if (visible.length < lines.length) visible[visible.length - 1] += '…';
+      const height = visible.length * size * 1.4 + 16;
+      context.fillStyle = '#111827';
+      context.fillRect(
+        8,
+        canvas.height - height - 8,
+        canvas.width - 16,
+        height,
+      );
+      context.fillStyle = '#ffffff';
+      context.textAlign = 'center';
+      visible.forEach((line, i) => {
+        context.fillText(
+          line,
+          canvas.width / 2,
+          canvas.height - height + size + i * size * 1.4,
+        );
+      });
+    }
     return canvas;
   }
   public png(): Promise<Blob> {

@@ -27,6 +27,7 @@ export interface JourneyHost {
   cancelChoice(): void;
   target(edgeId: string): string | undefined;
   onHop(edgeId: string): void;
+  onVisit?(nodeId: string): void;
   permit(edgeId: string): boolean;
   onFinish(): void;
 }
@@ -109,6 +110,7 @@ export class JourneyPlayer {
     this.walked.clear();
     this.restAt = 0;
     for (const id of this.starts) {
+      this.host.onVisit?.(id);
       this.pulse(id, time);
       this.dwells.push({ node: id, until: time + DWELL });
     }
@@ -123,6 +125,7 @@ export class JourneyPlayer {
         this.travelers.splice(this.travelers.indexOf(traveler), 1);
         const target = this.host.target(traveler.edge);
         if (target) {
+          this.host.onVisit?.(target);
           this.pulse(target, time);
           this.dwells.push({ node: target, until: time + DWELL });
         }
