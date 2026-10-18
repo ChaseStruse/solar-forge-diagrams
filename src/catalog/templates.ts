@@ -1,5 +1,6 @@
 import type { DiagramDocument, DiagramNode } from '../domain/document';
 import { sampleDocument } from '../domain/document';
+import { dataPipelineExample } from './data-pipeline';
 import { kubernetesExample } from './kubernetes';
 import { vpcExample } from './networking';
 import { boundaryColors, findService } from './services';
@@ -51,6 +52,11 @@ function architecture(title: string, ids: readonly string[]): DiagramDocument {
   };
 }
 export const templates: Template[] = [
+  {
+    id: 'data-pipeline',
+    name: 'Data Pipeline Example',
+    create: dataPipelineExample,
+  },
   {
     id: 'kubernetes',
     name: 'Kubernetes · web application',
