@@ -15,6 +15,50 @@ import {
   type Resource,
 } from './types';
 export type ImportFormat = 'auto' | 'terraform' | 'cloudformation' | 'compose';
+/** Terraform arguments that placement, routing or firewall analysis reads. */
+const networkAttributes = new Set([
+  'vpc_id',
+  'subnet_id',
+  'subnet_ids',
+  'subnets',
+  'availability_zone',
+  'cidr_block',
+  'private_ip',
+  'public_ip',
+  'associate_public_ip_address',
+  'map_public_ip_on_launch',
+  'vpc_security_group_ids',
+  'security_groups',
+  'security_group_id',
+  'ingress',
+  'egress',
+  'route',
+  'network_acl_id',
+  'route_table_id',
+  'destination_cidr_block',
+  'gateway_id',
+  'nat_gateway_id',
+  'internet_gateway_id',
+  'instance_id',
+  'network_interface_id',
+  'transit_gateway_id',
+  'vpc_peering_connection_id',
+  'db_subnet_group_name',
+  'type',
+  'protocol',
+  'ip_protocol',
+  'from_port',
+  'to_port',
+  'cidr_blocks',
+  'cidr_ipv4',
+  'self',
+  'source_security_group_id',
+  'referenced_security_group_id',
+  'rule_no',
+  'rule_number',
+  'rule_action',
+  'action',
+]);
 const cfnTypes: Record<string, string> = {
   VPC: 'aws_vpc',
   Subnet: 'aws_subnet',
@@ -401,9 +445,13 @@ export function importInfrastructure(
           return true;
         return Object.values(record).some(complex);
       };
-      if (complex(values))
-        values.__incomplete ??=
-          'Unsupported Terraform expression; import evaluated Terraform JSON';
+      // Only attributes the network model reads can make a resource incomplete;
+      // computed tags, names or descriptions do not affect reachability.
+      const unsupported = Object.keys(values).filter(
+        (key) => networkAttributes.has(key) && complex(values[key]),
+      );
+      if (unsupported.length)
+        values.__incomplete ??= `Unsupported Terraform expression in ${unsupported.join(', ')}; import evaluated Terraform JSON`;
       for (let i = 0; i < count; i++)
         resources.push({
           id: `${type}.${name}${values.count !== undefined && !invalidCount && typeof values.count === 'number' ? `[${i}]` : ''}`,

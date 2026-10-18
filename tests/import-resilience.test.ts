@@ -22,13 +22,18 @@ resource "aws_instance" "list" {
     result.document.nodes.find((n) => n.id === 'resource:aws_vpc.healthy')
       ?.network?.incomplete,
   ).toBeUndefined();
-  for (const id of ['object', 'format', 'list']) {
-    const node = result.document.nodes.find(
-      (n) => n.id === `resource:aws_instance.${id}`,
-    );
-    expect(node).toBeDefined();
-    expect(node?.network?.incomplete?.length).toBeGreaterThan(0);
+  const node = (id: string) =>
+    result.document.nodes.find((n) => n.id === `resource:aws_instance.${id}`);
+  // Computed tags and names are descriptive; they never block analysis.
+  for (const id of ['object', 'format']) {
+    expect(node(id)).toBeDefined();
+    expect(node(id)?.network?.incomplete).toBeUndefined();
   }
+  expect(node('object')?.network?.ip).toBe('10.0.0.10');
+  // A comprehension that decides security groups does.
+  expect(node('list')?.network?.incomplete?.join(' ')).toContain(
+    'security_groups',
+  );
   expect(parseDocument(serializeDocument(result.document))).toEqual(
     result.document,
   );
@@ -127,4 +132,25 @@ resource "aws_instance" "next" { private_ip = "10.0.0.12" }`);
     result.document.nodes.find((n) => n.id === 'resource:aws_instance.next')
       ?.network?.ip,
   ).toBe('10.0.0.12');
+});
+
+test('merged tags on every resource keep reachability decidable', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { checkReachability } = await import('../src/domain/reachability');
+  const tagged = readFileSync('examples/infrastructure/vpc.tf', 'utf8').replace(
+    /^(resource "[^"]+" "[^"]+" \{)/gm,
+    '$1\n  tags = merge(local.common, { Team = "web" })',
+  );
+  const { document, warnings } = hcl(tagged);
+  expect(warnings.some((w) => w.includes('Unsupported Terraform'))).toBe(false);
+  const web = document.nodes.find((n) => n.id === 'resource:aws_instance.web');
+  if (!web) throw Error('Missing web instance');
+  expect(
+    checkReachability(document, 'import:internet', web.id, {
+      protocol: 'tcp',
+      port: 443,
+      sourceIp: '203.0.113.10',
+      direction: 'ingress',
+    }).status,
+  ).toBe('allowed');
 });
