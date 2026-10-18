@@ -52,6 +52,7 @@ import {
 } from '../domain/routing';
 import { defaultTheme, type ScenePalette } from '../themes';
 import { createAnnotation, NOTE_HEIGHT } from './annotations';
+import { AntialiasPass } from './antialias';
 import { createBackdrop } from './backdrop';
 import { JourneyPlayer } from './journey';
 import { LabelAtlas } from './labels';
@@ -151,10 +152,14 @@ export class DiagramScene {
   private get target() {
     return this.view.target;
   }
+  // MSAA is off: the FXAA pass gives similar edges for a fraction of the cost.
   private readonly renderer = new WebGLRenderer({
-    antialias: true,
+    antialias: false,
     alpha: false,
   });
+  private readonly antialias = new AntialiasPass();
+  private motionUntil = 0;
+  private settleTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly content = new Group();
   private readonly geometry = new BoxGeometry(1, 1, 1);
   private readonly shapeGeometries = createFlowGeometries();
@@ -378,6 +383,7 @@ export class DiagramScene {
       })
       .catch((error) => this.onError(String(error)));
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    this.renderer.info.autoReset = false;
     this.renderer.setClearColor('#000000', 0);
     this.scene.fog = this.fog;
     this.renderer.domElement.setAttribute(
@@ -1071,6 +1077,7 @@ export class DiagramScene {
     }
     if (event.pointerId !== this.activePointer) return;
     event.preventDefault();
+    this.inMotion();
     if (this.marquee) {
       const bounds = this.renderer.domElement.getBoundingClientRect();
       this.marquee.end = {
@@ -1496,6 +1503,7 @@ export class DiagramScene {
   }
   private preventNativeDrag = (event: Event): void => event.preventDefault();
   private wheel = (event: WheelEvent): void => {
+    this.inMotion();
     this.fitted = false;
     event.preventDefault();
     const before = this.locate(event)?.clone();
@@ -1718,6 +1726,15 @@ export class DiagramScene {
     this.updatePositions();
     this.invalidate();
   }
+  /** Draw fast while the view moves, then once at full quality when it rests. */
+  private inMotion(): void {
+    this.motionUntil = performance.now() + 200;
+    clearTimeout(this.settleTimer);
+    this.settleTimer = setTimeout(() => {
+      this.settleTimer = undefined;
+      this.invalidate();
+    }, 220);
+  }
   private invalidate(): void {
     if (this.frame || this.disposed) return;
     this.frame = requestAnimationFrame(() => {
@@ -1847,7 +1864,8 @@ export class DiagramScene {
       ((this.flowing && this.hasFlowEdges) || this.animators.size > 0)
     );
   }
-  private render(): void {
+  /** Captures pass `quality` so exports never use the in-motion FXAA path. */
+  private render(quality = false): void {
     const start = performance.now();
     if (this.distancesDirty && this.flowLines) {
       this.flowLines.computeLineDistances();
@@ -1859,7 +1877,14 @@ export class DiagramScene {
     this.syncHandles();
     this.scene.updateMatrixWorld();
     this.labels.sync(this.camera, this.height);
-    this.renderer.render(this.scene, this.camera);
+    // Count the board's draw calls, not only the final screen pass.
+    this.renderer.info.reset();
+    this.antialias.render(
+      this.renderer,
+      this.scene,
+      this.camera,
+      quality || start >= this.motionUntil,
+    );
     this.metrics.textures = this.renderer.info.memory.textures;
     this.metrics.drawCalls = this.renderer.info.render.calls;
     this.metrics.frames++;
@@ -1976,7 +2001,7 @@ export class DiagramScene {
     this.view.setPanelVisible(false);
     this.fit();
     this.renderer.setPixelRatio(Math.min(3, Math.max(2, devicePixelRatio)));
-    this.render();
+    this.render(true);
     const crop = this.contentBounds(28);
     const scale = this.renderer.getPixelRatio();
     const canvas = document.createElement('canvas');
@@ -2058,7 +2083,7 @@ export class DiagramScene {
     return { left, top, width: right - left, height: bottom - top };
   }
   public gifFrame(maxWidth = 640, maxHeight = 480): HTMLCanvasElement {
-    this.render();
+    this.render(true);
     const canvas = document.createElement('canvas');
     const source = this.renderer.domElement;
     const scale = Math.min(
@@ -2114,7 +2139,7 @@ export class DiagramScene {
     return canvas;
   }
   public png(): Promise<Blob> {
-    this.render();
+    this.render(true);
     return new Promise((resolve, reject) =>
       this.renderer.domElement.toBlob(
         (blob) =>
@@ -2127,6 +2152,7 @@ export class DiagramScene {
     this.cancelInteraction();
     this.disposed = true;
     cancelAnimationFrame(this.frame);
+    clearTimeout(this.settleTimer);
     this.observer.disconnect();
     this.releaseContent();
     this.grid.dispose();
@@ -2148,6 +2174,7 @@ export class DiagramScene {
     this.animators.clear();
     this.edgeMaterial.dispose();
     this.backdrop.dispose();
+    this.antialias.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.selectionBox.remove();

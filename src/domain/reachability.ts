@@ -13,11 +13,10 @@ const allow = (reason: string): Check => ({ status: 'allowed', reason });
 const deny = (reason: string): Check => ({ status: 'denied', reason });
 const unknown = (reason: string): Check => ({ status: 'unknown', reason });
 export function ancestor(
-  doc: DiagramDocument,
+  index: ReadonlyMap<string, DiagramNode>,
   node: DiagramNode,
   kind: DiagramNode['boundary'],
 ): DiagramNode | undefined {
-  const index = new Map(doc.nodes.map((n) => [n.id, n]));
   let current: DiagramNode | undefined = node;
   const seen = new Set<string>();
   while (current && !seen.has(current.id)) {
@@ -56,6 +55,9 @@ function matches(
         : undefined;
   return true;
 }
+export const nodeIndex = (
+  doc: DiagramDocument,
+): ReadonlyMap<string, DiagramNode> => new Map(doc.nodes.map((n) => [n.id, n]));
 /** Evaluate a forward connection plus stateless ACL return traffic. SG replies are stateful. */
 export function checkReachability(
   doc: DiagramDocument,
@@ -63,8 +65,9 @@ export function checkReachability(
   targetId: string,
   traffic: JourneyTraffic,
   sourcePort = 49152,
+  /** Callers checking many pairs of an unchanged document can share one index. */
+  nodes: ReadonlyMap<string, DiagramNode> = nodeIndex(doc),
 ): ReachabilityResult {
-  const nodes = new Map(doc.nodes.map((n) => [n.id, n]));
   const source = nodes.get(sourceId),
     target = nodes.get(targetId);
   const checks: string[] = [];
@@ -83,10 +86,10 @@ export function checkReachability(
         'Enable resource networking; diagram arrows alone do not establish reachability',
       ),
     );
-  const sourceVpc = ancestor(doc, source, 'vpc'),
-    targetVpc = ancestor(doc, target, 'vpc');
-  const sourceSubnet = ancestor(doc, source, 'subnet'),
-    targetSubnet = ancestor(doc, target, 'subnet');
+  const sourceVpc = ancestor(nodes, source, 'vpc'),
+    targetVpc = ancestor(nodes, target, 'vpc');
+  const sourceSubnet = ancestor(nodes, source, 'subnet'),
+    targetSubnet = ancestor(nodes, target, 'subnet');
   const sourceIp =
     source.network?.ip ?? (!sourceVpc ? traffic.sourceIp : undefined);
   const targetIp = target.network?.ip ?? target.network?.publicIp;
@@ -212,8 +215,8 @@ export function checkReachability(
     if (visited.has(node.id))
       return { check: deny('Routing loop'), path: [node.id] };
     visited.add(node.id);
-    const vpc = ancestor(doc, node, 'vpc'),
-      subnet = ancestor(doc, node, 'subnet');
+    const vpc = ancestor(nodes, node, 'vpc'),
+      subnet = ancestor(nodes, node, 'subnet');
     if (!ip)
       return {
         check: unknown('Destination IPv4 address is unknown'),
@@ -261,7 +264,7 @@ export function checkReachability(
         path: [node.id, destination.id],
       };
     if (selected.target === 'local') {
-      if (vpc?.id !== ancestor(doc, destination, 'vpc')?.id)
+      if (vpc?.id !== ancestor(nodes, destination, 'vpc')?.id)
         return {
           check: deny('Local route does not reach the destination VPC'),
           path: [node.id, destination.id],
@@ -283,7 +286,7 @@ export function checkReachability(
         path: [node.id, gateway.id, destination.id],
       };
     if (gateway.serviceId === 'component.internet-gateway') {
-      if (ancestor(doc, gateway, 'vpc')?.id !== vpc?.id)
+      if (ancestor(nodes, gateway, 'vpc')?.id !== vpc?.id)
         return {
           check: deny('Internet gateway is not attached to this VPC'),
           path: [node.id, gateway.id, destination.id],

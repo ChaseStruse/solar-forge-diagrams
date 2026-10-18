@@ -6,6 +6,7 @@ import type {
 import { defaultTraffic, parseTraffic } from '../domain/network';
 import {
   checkReachability,
+  nodeIndex,
   type ReachabilityResult,
 } from '../domain/reachability';
 import { defaultScenarios } from '../domain/scenarios';
@@ -152,6 +153,8 @@ export function reachabilityPanel(host: {
         pages = Math.max(1, Math.ceil(all.length / size));
       rowPage = Math.min(rowPage, pages - 1);
       colPage = Math.min(colPage, pages - 1);
+      const doc = host.document(),
+        index = nodeIndex(doc);
       const rows = all.slice(rowPage * size, (rowPage + 1) * size),
         cols = all.slice(colPage * size, (colPage + 1) * size),
         table = el('table'),
@@ -170,11 +173,12 @@ export function reachabilityPanel(host: {
         for (const b of cols) {
           const td = el('td'),
             verdict = checkReachability(
-              host.document(),
+              doc,
               a.id,
               b.id,
               p.traffic,
               p.sourcePort,
+              index,
             ),
             button = el(
               'button',

@@ -59,6 +59,20 @@ export function importAws(
     aliases.set(r.id, r.id);
     if (typeof r.values.id === 'string') aliases.set(r.values.id, r.id);
   }
+  // Attribute references resolve to the longest resource address before a dot.
+  const prefixes = new Map<string, Resource | undefined>();
+  const byPrefix = (raw: string): Resource | undefined => {
+    if (prefixes.has(raw)) return prefixes.get(raw);
+    let found = byId.get(raw);
+    for (
+      let i = raw.lastIndexOf('.');
+      !found && i > 0;
+      i = raw.lastIndexOf('.', i - 1)
+    )
+      found = byId.get(raw.slice(0, i));
+    prefixes.set(raw, found);
+    return found;
+  };
   const ref = (value: unknown): Resource | undefined => {
     if (typeof value === 'string' && aliases.has(value))
       return byId.get(aliases.get(value) ?? '');
@@ -72,10 +86,7 @@ export function importAws(
     if (!raw) return undefined;
     const direct = aliases.get(raw);
     if (direct) return byId.get(direct);
-    const matches = resources.filter(
-      (r) => raw === r.id || raw.startsWith(`${r.id}.`),
-    );
-    return matches.sort((a, b) => b.id.length - a.id.length)[0];
+    return byPrefix(raw);
   };
   const literal = (v: unknown): string | undefined =>
     typeof v === 'string' && !v.includes('${') && !v.includes('%{')
@@ -576,20 +587,21 @@ export function importAws(
       for (const child of Object.values(obj(value))) refs(child, found);
     return found;
   };
+  const nodeIndex = new Map(nodes.map((n) => [n.id, n]));
   for (const r of resources)
     if (nodeByResource.has(r.id))
       for (const dependency of refs(r.values)) {
         if (dependency === r.id || !nodeByResource.has(dependency)) continue;
         const source = nodeId(r),
           target = nodeId(byId.get(dependency) as Resource);
-        let parent = nodes.find((n) => n.id === source)?.parentId;
+        let parent = nodeIndex.get(source)?.parentId;
         let containment = false;
         while (parent) {
           if (parent === target) {
             containment = true;
             break;
           }
-          parent = nodes.find((n) => n.id === parent)?.parentId;
+          parent = nodeIndex.get(parent)?.parentId;
         }
         if (containment) continue;
         edges.push({

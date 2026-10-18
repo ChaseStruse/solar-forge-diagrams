@@ -48,19 +48,29 @@ export function fitText(
   measure: (text: string, size: number) => number,
 ): { size: number; lines: string[] } {
   const w = Math.max(0.01, width),
-    h = Math.max(0.01, height);
-  const layout = (size: number) =>
-    wrapText(text, w, (line) => measure(line, size));
+    h = Math.max(0.01, height),
+    top = Math.max(0.01, preferred);
+  // Advances scale with font size, so each distinct line is measured once.
+  const widths = new Map<string, number>();
+  const at = (line: string, size: number) => {
+    let width = widths.get(line);
+    if (width === undefined) {
+      width = measure(line, top);
+      widths.set(line, width);
+    }
+    return (width * size) / top;
+  };
+  const layout = (size: number) => wrapText(text, w, (line) => at(line, size));
+  const fits = (size: number, lines: string[]) =>
+    lines.length * size * 1.28 <= h &&
+    lines.every((line) => at(line, size) <= w);
+  const preferredLines = layout(top);
+  if (fits(top, preferredLines)) return { size: top, lines: preferredLines };
   let low = 0,
-    high = Math.max(0.01, preferred);
-  for (let i = 0; i < 24; i++) {
+    high = top;
+  for (let i = 0; i < 16; i++) {
     const size = (low + high) / 2;
-    const lines = layout(size);
-    if (
-      lines.length * size * 1.28 <= h &&
-      lines.every((line) => measure(line, size) <= w)
-    )
-      low = size;
+    if (fits(size, layout(size))) low = size;
     else high = size;
   }
   return { size: low, lines: layout(low) };

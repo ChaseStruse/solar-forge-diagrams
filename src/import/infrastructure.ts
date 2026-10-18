@@ -277,16 +277,17 @@ function terraformJson(
       });
   }
   // Plan configuration retains references even when evaluated IDs are unknown.
+  const byAddress = new Map<string, Resource>();
+  for (const resource of resources)
+    if (!byAddress.has(resource.id)) byAddress.set(resource.id, resource);
   const config = (module: unknown, prefix = ''): void => {
     const m = obj(module);
     for (const raw of list(m.resources)) {
       const r = obj(raw),
-        existing = resources.find(
-          (resource) =>
-            resource.id ===
-            (String(r.address).startsWith('module.')
-              ? String(r.address)
-              : prefix + String(r.address)),
+        existing = byAddress.get(
+          String(r.address).startsWith('module.')
+            ? String(r.address)
+            : prefix + String(r.address),
         );
       if (!existing) continue;
       for (const [key, value] of Object.entries(obj(r.expressions)))
