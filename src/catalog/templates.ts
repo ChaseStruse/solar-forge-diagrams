@@ -3,6 +3,7 @@ import { sampleDocument } from '../domain/document';
 import { dataPipelineExample } from './data-pipeline';
 import { kubernetesExample } from './kubernetes';
 import { vpcExample } from './networking';
+import { securityDemo } from './security';
 import { boundaryColors, findService } from './services';
 export interface Template {
   id: string;
@@ -52,6 +53,11 @@ function architecture(title: string, ids: readonly string[]): DiagramDocument {
   };
 }
 export const templates: Template[] = [
+  {
+    id: 'security-demo',
+    name: 'security demo',
+    create: securityDemo,
+  },
   {
     id: 'data-pipeline',
     name: 'Data Pipeline Example',
