@@ -88,3 +88,31 @@ export async function openInfrastructureFiles(): Promise<
     })),
   );
 }
+
+export async function exportVideo(
+  blob: Blob,
+  format: 'webm' | 'mp4',
+): Promise<boolean> {
+  if (isTauri())
+    return invoke<boolean>('export_video', await blob.arrayBuffer());
+  return downloadBlob(blob, `journey.${format}`);
+}
+export async function exportText(
+  content: string,
+  format: 'mmd' | 'puml' | 'drawio',
+): Promise<boolean> {
+  if (isTauri()) return invoke<boolean>('export_text', { content, format });
+  return downloadBlob(
+    new Blob([content], { type: 'text/plain;charset=utf-8' }),
+    `diagram.${format}`,
+  );
+}
+function downloadBlob(blob: Blob, name: string): boolean {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
+}
