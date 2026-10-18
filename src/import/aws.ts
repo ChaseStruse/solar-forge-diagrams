@@ -1,7 +1,12 @@
 import { boundaryColors, findService } from '../catalog/services';
 import type { DiagramNode } from '../domain/document';
 import { layoutDocument } from '../domain/layout';
-import type { FirewallRule, ResourcePolicy } from '../domain/policies';
+import { ipv4 } from '../domain/network';
+import {
+  cidrContains,
+  type FirewallRule,
+  type ResourcePolicy,
+} from '../domain/policies';
 import { type ImportResult, list, obj, type Resource, str } from './types';
 
 const catalog: Record<string, string> = {
@@ -73,7 +78,18 @@ export function importAws(
     return matches.sort((a, b) => b.id.length - a.id.length)[0];
   };
   const literal = (v: unknown): string | undefined =>
-    typeof v === 'string' && !v.includes('${') ? v : undefined;
+    typeof v === 'string' && !v.includes('${') && !v.includes('%{')
+      ? v
+      : undefined;
+  const validCidr = (value: unknown): value is string => {
+    if (!literal(value)) return false;
+    try {
+      cidrContains(String(value), '0.0.0.0');
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const nodes: DiagramNode[] = [],
     nodeByResource = new Map<string, DiagramNode>(),
     regions = new Map<string, string>();
@@ -146,7 +162,14 @@ export function importAws(
     ] as const) {
       const value = literal(r.values[source]);
       if (value) {
-        if (node.network) node.network[key] = value;
+        try {
+          if (key === 'cidr') {
+            if (!validCidr(value)) throw Error('Invalid CIDR');
+          } else ipv4(value);
+          if (node.network) node.network[key] = value;
+        } catch {
+          incomplete(node, `Invalid or unresolved ${source}`);
+        }
       } else if (r.values[source] !== undefined && r.values[source] !== null)
         incomplete(node, `Unresolved ${source}`);
     }
@@ -290,9 +313,10 @@ export function importAws(
       incomplete(owner, `Unsupported IP protocol ${proto}`, true);
       return;
     }
-    const cidrs = list(r.cidr_blocks ?? r.cidr_ipv4 ?? r.cidr_block).filter(
-      (v): v is string => typeof v === 'string',
-    );
+    const rawCidrs = list(r.cidr_blocks ?? r.cidr_ipv4 ?? r.cidr_block);
+    const cidrs = rawCidrs.filter(validCidr);
+    if (cidrs.length !== rawCidrs.length)
+      incomplete(owner, 'Invalid or unresolved firewall CIDR', true);
     const peers = list(
       r.security_groups ??
         r.referenced_security_group_id ??
@@ -326,7 +350,13 @@ export function importAws(
     const from = Number(r.from_port),
       to = Number(r.to_port);
     if (protocol !== 'any' && protocol !== 'icmp') {
-      if (!Number.isFinite(from) || !Number.isFinite(to)) {
+      if (
+        !Number.isInteger(from) ||
+        !Number.isInteger(to) ||
+        from < 0 ||
+        to > 65535 ||
+        from > to
+      ) {
         incomplete(owner, 'Unresolved firewall port range', true);
         return;
       }
@@ -339,7 +369,33 @@ export function importAws(
       r.from_port !== undefined
     )
       incomplete(owner, 'ICMP type/code restrictions are not evaluated', true);
-    if (acl) base.priority = Number(r.rule_no ?? r.rule_number);
+    if (acl) {
+      const priority = Number(r.rule_no ?? r.rule_number);
+      if (!Number.isInteger(priority) || priority < 1 || priority > 32766) {
+        incomplete(owner, 'Invalid or unresolved ACL rule number', true);
+        return;
+      }
+      if (!['allow', 'deny'].includes(String(r.action ?? r.rule_action))) {
+        incomplete(owner, 'Invalid or unresolved ACL rule action', true);
+        return;
+      }
+      if (
+        owner.policy.rules.some(
+          (rule) => rule.priority === priority && rule.direction === direction,
+        ) ||
+        cidrs.length !== 1 ||
+        peers.length ||
+        r.self
+      ) {
+        incomplete(
+          owner,
+          'ACL rule requires a unique priority and one IPv4 CIDR',
+          true,
+        );
+        return;
+      }
+      base.priority = priority;
+    }
     for (const cidr of cidrs) owner.policy.rules.push({ ...base, cidr });
     for (const peer of peers)
       if (
@@ -353,7 +409,7 @@ export function importAws(
     if (owner.policy?.kind !== 'route-table') return;
     const r = obj(raw),
       destination = literal(r.cidr_block ?? r.destination_cidr_block);
-    if (!destination) {
+    if (!validCidr(destination)) {
       incomplete(owner, 'Unresolved or non-IPv4 route destination', true);
       return;
     }
@@ -544,6 +600,24 @@ export function importAws(
           relationship: 'dependency',
         });
       }
+  if (nodes.length) {
+    const internet = findService('actor.internet');
+    nodes.push({
+      id: 'import:internet',
+      kind: 'service',
+      serviceId: 'actor.internet',
+      label: 'Internet',
+      x: 0,
+      z: 0,
+      width: 160,
+      depth: 100,
+      color: internet?.color ?? '#5a6b86',
+      metadata: {
+        notes:
+          'External traffic source/destination for reachability checks. Uses the scenario source IPv4; no connectivity is inferred from this actor.',
+      },
+    });
+  }
   return {
     format,
     warnings: [...new Set(warnings)],

@@ -369,9 +369,14 @@ export function importInfrastructure(
         name = b.labels[1];
       if (!type || !name) throw Error('Terraform resource needs type and name');
       const values = obj(resolve(b.body, parameters));
-      const count = typeof values.count === 'number' ? values.count : 1;
-      if (count < 0 || !Number.isInteger(count) || count > 100)
-        throw Error('Static Terraform count must be 0–100');
+      let count = typeof values.count === 'number' ? values.count : 1;
+      const invalidCount = count < 0 || !Number.isInteger(count) || count > 100;
+      if (invalidCount) {
+        values.__incomplete =
+          'Terraform count is outside the supported 0–100 range; instances were not expanded';
+        warnings.push(`${type}.${name}: ${values.__incomplete}`);
+        count = 1;
+      }
       if (
         values.for_each ||
         (values.count !== undefined && typeof values.count !== 'number')
@@ -380,9 +385,24 @@ export function importInfrastructure(
           'for_each/count is unresolved; import evaluated Terraform JSON';
         warnings.push(`${type}.${name}: instances were not expanded`);
       }
+      const complex = (value: unknown): boolean => {
+        if (typeof value === 'string')
+          return (
+            (value.includes('${') || value.includes('%{')) &&
+            /[({]/.test(value.replace(/\$\{/g, ''))
+          );
+        if (Array.isArray(value)) return value.some(complex);
+        const record = obj(value);
+        if (typeof record.$expr === 'string' && /[({]/.test(record.$expr))
+          return true;
+        return Object.values(record).some(complex);
+      };
+      if (complex(values))
+        values.__incomplete ??=
+          'Unsupported Terraform expression; import evaluated Terraform JSON';
       for (let i = 0; i < count; i++)
         resources.push({
-          id: `${type}.${name}${values.count !== undefined ? `[${i}]` : ''}`,
+          id: `${type}.${name}${values.count !== undefined && !invalidCount && typeof values.count === 'number' ? `[${i}]` : ''}`,
           type,
           values: structuredClone(values),
           ...(typeof resolve(defaultRegion, parameters) === 'string'

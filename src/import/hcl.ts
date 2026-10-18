@@ -8,6 +8,49 @@ interface Token {
   string?: boolean;
   newline?: boolean;
 }
+/** Find the outer closing quote while retaining nested interpolation strings verbatim. */
+function quotedEnd(source: string, start: number, depth = 0): number {
+  if (depth > 128) throw Error('HCL string nesting exceeds 128 levels');
+  let i = start + 1;
+  while (i < source.length) {
+    if (source[i] === '\\') {
+      i += 2;
+      continue;
+    }
+    if (source[i] === '"') return i + 1;
+    if (source.slice(i, i + 3) === '$${' || source.slice(i, i + 3) === '%%{') {
+      i += 3;
+      continue;
+    }
+    if (source.slice(i, i + 2) === '${' || source.slice(i, i + 2) === '%{') {
+      i += 2;
+      let braces = 1;
+      while (i < source.length && braces) {
+        if (source[i] === '"') {
+          i = quotedEnd(source, i, depth + 1);
+          continue;
+        }
+        if (source.slice(i, i + 2) === '/*') {
+          const end = source.indexOf('*/', i + 2);
+          if (end < 0) throw Error('Unterminated HCL comment');
+          i = end + 2;
+          continue;
+        }
+        if (source[i] === '#' || source.slice(i, i + 2) === '//') {
+          while (i < source.length && source[i] !== '\n') i++;
+          continue;
+        }
+        if (source[i] === '{') braces++;
+        if (source[i] === '}') braces--;
+        i++;
+      }
+      if (braces) throw Error('Unterminated HCL interpolation');
+      continue;
+    }
+    i++;
+  }
+  throw Error('Unterminated HCL quoted string');
+}
 /** Static HCL reader. It preserves expressions as references and never evaluates code. */
 export function parseHcl(source: string): HclBlock[] {
   const tokens: Token[] = [];
@@ -34,14 +77,16 @@ export function parseHcl(source: string): HclBlock[] {
       continue;
     }
     if (ch === '"') {
-      const start = i++;
-      while (i < source.length) {
-        if (source[i] === '\\') i += 2;
-        else if (source[i++] === '"') break;
-      }
+      const start = i;
+      i = quotedEnd(source, start);
+      const raw = source.slice(start + 1, i - 1);
       try {
         tokens.push({
-          value: JSON.parse(source.slice(start, i)),
+          // Templates are preserved, never executed or mistaken for literal network values.
+          value:
+            raw.includes('${') || raw.includes('%{')
+              ? raw
+              : JSON.parse(source.slice(start, i)),
           string: true,
         });
       } catch {
@@ -64,13 +109,13 @@ export function parseHcl(source: string): HclBlock[] {
       i = start + end.index + end[0].length;
       continue;
     }
-    if ('{}[]=,()'.includes(ch)) {
+    if ('{}[]=,():'.includes(ch)) {
       tokens.push({ value: ch });
       i++;
       continue;
     }
     const start = i;
-    while (i < source.length && !/[\s{}[\]=,()]/.test(source[i] ?? '')) i++;
+    while (i < source.length && !/[\s{}[\]=,():]/.test(source[i] ?? '')) i++;
     tokens.push({ value: source.slice(start, i) });
   }
   let at = 0,
@@ -91,9 +136,14 @@ export function parseHcl(source: string): HclBlock[] {
       const t = peek();
       if (!t) break;
       if (parts.length && !brackets && tokens[at + 1]?.value === '=') break;
-      if (!brackets && (t.newline || [',', '}', ']'].includes(t.value))) break;
-      if (['(', '[', '{'].includes(t.value)) brackets++;
-      if ([')', ']', '}'].includes(t.value)) brackets--;
+      if (
+        !t.string &&
+        !brackets &&
+        (t.newline || [',', '}', ']'].includes(t.value))
+      )
+        break;
+      if (!t.string && ['(', '[', '{'].includes(t.value)) brackets++;
+      if (!t.string && [')', ']', '}'].includes(t.value)) brackets--;
       parts.push(take());
     }
     if (!parts.length) throw Error('Missing HCL value');
@@ -111,8 +161,15 @@ export function parseHcl(source: string): HclBlock[] {
         .join(''),
     };
   };
+  const comprehension = (): boolean => {
+    let next = at + 1;
+    while (tokens[next]?.newline) next++;
+    return tokens[next]?.value === 'for';
+  };
   const value = (): unknown => {
-    if (peek()?.value === '[') {
+    if (!peek()?.string && peek()?.value === '[' && comprehension())
+      return expression();
+    if (!peek()?.string && peek()?.value === '[') {
       take();
       const values: unknown[] = [];
       separators();
@@ -124,7 +181,9 @@ export function parseHcl(source: string): HclBlock[] {
       take();
       return values;
     }
-    if (peek()?.value === '{') {
+    if (!peek()?.string && peek()?.value === '{' && comprehension())
+      return expression();
+    if (!peek()?.string && peek()?.value === '{') {
       take();
       return body(true).attributes;
     }
@@ -139,7 +198,7 @@ export function parseHcl(source: string): HclBlock[] {
     separators();
     while (peek() && peek()?.value !== '}') {
       const name = take().value;
-      if (peek()?.value === '=') {
+      if (peek()?.value === '=' || peek()?.value === ':') {
         take();
         attributes[name] = value();
       } else {
