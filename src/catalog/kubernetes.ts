@@ -35,7 +35,7 @@ export function kubernetesExample(): DiagramDocument {
       0,
     ),
     width: 1100,
-    depth: 660,
+    depth: 800,
   };
   const client = node('client', 'actor.internet', 'Web clients', -650, 0);
   const ingress = node(
@@ -57,9 +57,9 @@ export function kubernetesExample(): DiagramDocument {
   const deployment = node(
     'deployment',
     'kubernetes.deployment',
-    'Deployment · web (2 replicas)',
+    'Deployment · web',
     260,
-    -200,
+    -260,
     namespace.id,
   );
   const podA = node(
@@ -94,7 +94,7 @@ export function kubernetesExample(): DiagramDocument {
   };
   deployment.metadata = {
     notes:
-      'The Deployment manages Pods through a ReplicaSet (omitted here). Dashed management arrows do not carry application traffic.',
+      'The Deployment manages Pods through a ReplicaSet (omitted here). Management arrows do not carry application traffic.',
   };
   return {
     version: 1,
@@ -133,14 +133,14 @@ export function kubernetesExample(): DiagramDocument {
         id: 'deployment-pod-a',
         source: deployment.id,
         target: podA.id,
-        label: 'Manages via ReplicaSet',
+        label: '',
         relationship: 'dependency',
       },
       {
         id: 'deployment-pod-b',
         source: deployment.id,
         target: podB.id,
-        label: 'Manages via ReplicaSet',
+        label: '',
         relationship: 'dependency',
       },
     ],

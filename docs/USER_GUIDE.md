@@ -108,3 +108,11 @@ Imports operate on the current board. Saving or Save As always saves the whole p
 The file menu and command search offer **Export Mermaid source** (`.mmd`), **Export PlantUML source** (`.puml`), and **Export draw.io project** (`.drawio`). These exports work offline. Mermaid and PlantUML retain nested boundaries, nodes, labeled arrows, and dependency relationships as deterministic text suitable for documentation and git diffs. Hop captions and detail IDs are included as comments. Draw.io produces uncompressed editable XML, preserving box coordinates, hierarchy, colours, and linked detail pages.
 
 These formats describe the architecture; they do not reproduce Solar Forge's resource policies, saved scenarios, animation, artwork, or every manual edge bend. Keep the native JSON project as the editable source of truth for those features. Native projects are also formatted plain text. Exported Mermaid/PlantUML source requires a compatible renderer when embedded in other tools.
+
+### Kubernetes resources
+
+Search **Components** for `Kubernetes`, `k8s`, or a resource name to add **Pod**, **Deployment**, **Service**, **Ingress**, or **Namespace**. The five official resource icons are bundled offline in Kubernetes blue. They appear in the palette, Layers, canvas and self-contained SVG export. Namespace is a resizable group with an icon in its header; place resources inside it using **Inside boundary**, and move/resize/layout it using the existing group tools.
+
+The file menu's **Kubernetes · web application** template shows HTTPS → Ingress → Service → two Pod backends inside a production namespace. Deployment management connections are dependencies and are excluded from traffic journeys; the Deployment's notes explain the omitted ReplicaSet. Each traffic hop has a walkthrough caption. The two Service branches represent possible backends, rather than two requests sent for every HTTP request. Namespace is logical scope, not a network firewall; this example does not simulate Kubernetes NetworkPolicy or an ingress controller.
+
+The artwork's Apache-2.0 license, unmodified upstream README, pinned revision and per-file hashes are in [assets/kubernetes](../assets/kubernetes/NOTICE.md).

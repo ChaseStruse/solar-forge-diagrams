@@ -77,10 +77,15 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
   const groups = positioned
     .filter(({ node }) => node.kind === 'group')
     .sort((a, b) => a.p.level - b.p.level)
-    .map(
-      ({ node, p }) =>
-        `<g><title>${xmlText(node.label)}</title><rect x="${p.x - node.width / 2}" y="${p.z - node.depth / 2}" width="${node.width}" height="${node.depth}" rx="8" fill="#f2f5f8" stroke="${node.color}" stroke-width="2"/><text x="${p.x - node.width / 2 + 14}" y="${p.z - node.depth / 2 + 24}" fill="#43546b" font-size="15">${xmlText(node.label)}</text></g>`,
-    )
+    .map(({ node, p }) => {
+      const asset = findService(node.serviceId ?? node.label)?.asset;
+      const image = asset ? icons.get(asset) : undefined;
+      const headerIcon =
+        image && node.width >= 120
+          ? `<image x="${p.x + node.width / 2 - 42}" y="${p.z - node.depth / 2 + 10}" width="28" height="28" href="${image}"/>`
+          : '';
+      return `<g><title>${xmlText(node.label)}</title><rect x="${p.x - node.width / 2}" y="${p.z - node.depth / 2}" width="${node.width}" height="${node.depth}" rx="8" fill="#f2f5f8" stroke="${node.color}" stroke-width="2"/><text x="${p.x - node.width / 2 + 14}" y="${p.z - node.depth / 2 + 24}" fill="#43546b" font-size="15">${xmlText(node.label)}</text>${headerIcon}</g>`;
+    })
     .join('');
   const edges = routes
     .map(({ edge, points }) => {

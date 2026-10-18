@@ -117,6 +117,7 @@ interface Tile {
   group: Group;
   material: MeshLambertMaterial;
   label: Object3D;
+  headerIcon?: Object3D;
   annotation?: { root: Group; dispose: () => void };
 }
 const isAnnotation = (node: DiagramNode) =>
@@ -552,6 +553,12 @@ export class DiagramScene {
         });
         continue;
       }
+      let headerIcon: Object3D | undefined;
+      const component = findService(node.serviceId ?? node.label);
+      if (node.kind === 'group' && component?.icon) {
+        headerIcon = this.labels.create(component.id, this.camera.zoom, 'icon');
+        group.add(headerIcon);
+      }
       if (node.kind === 'service' && !node.shape) {
         const glyph = this.labels.create(
           findService(node.serviceId ?? node.label)?.id ?? node.label,
@@ -585,7 +592,16 @@ export class DiagramScene {
       );
       group.add(label);
       this.content.add(group);
-      this.tiles.set(node.id, { index, node, group, material, label });
+      const tile: Tile = {
+        index,
+        node,
+        group,
+        material,
+        label,
+        ...(headerIcon ? { headerIcon } : {}),
+      };
+      this.positionHeaderIcon(tile);
+      this.tiles.set(node.id, tile);
     }
     const positions = new Float32Array(document.edges.length * 42);
     this.edgePositions = new BufferAttribute(positions, 3);
@@ -649,11 +665,23 @@ export class DiagramScene {
     this.invalidate();
     this.onSelect(undefined);
   }
+  private positionHeaderIcon(tile: Tile): void {
+    if (!tile.headerIcon) return;
+    const { width, depth } = tile.node;
+    tile.headerIcon.position.set(width / 2 - 28, 6, -depth / 2 + 24);
+    tile.headerIcon.userData.nodeWidth = width >= 120 ? 100 : 0;
+    tile.headerIcon.userData.nodeDepth = 40;
+    // Reserve the right side of the boundary header for its icon.
+    tile.label.userData.nodeWidth = Math.max(30, width - 80);
+    tile.label.position.x =
+      -width / 2 + Math.min(Math.max(30, width - 80) / 2, 150);
+  }
   private updatePositions(): void {
     this.obstacleCache = undefined;
     this.fanCache = undefined;
     for (const tile of this.tiles.values()) {
       const p = worldPosition(tile.node, this.nodeIndex);
+      this.positionHeaderIcon(tile);
       tile.group.position.set(p.x, p.level * 4, p.z);
       this.bodies?.update(
         tile.node,
@@ -1286,6 +1314,7 @@ export class DiagramScene {
           ? 0
           : tile.node.depth / 2 + 16,
     );
+    this.positionHeaderIcon(tile);
     this.invalidate();
   }
   /** Keep selection handles a constant on-screen size around the selected node. */

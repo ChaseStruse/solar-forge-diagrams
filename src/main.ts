@@ -229,7 +229,7 @@ function updateLayers(): void {
       symbol.className = 'layer-symbol';
       symbol.style.color = node.color;
       const service = findService(node.serviceId ?? node.label);
-      if (service?.icon && node.kind === 'service') {
+      if (service?.icon && (node.kind === 'service' || node.kind === 'group')) {
         const image = document.createElement('img');
         image.src = service.icon;
         image.alt = '';
