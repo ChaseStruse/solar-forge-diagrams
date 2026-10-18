@@ -393,7 +393,10 @@ export function importInfrastructure(
           );
         if (Array.isArray(value)) return value.some(complex);
         const record = obj(value);
-        if (typeof record.$expr === 'string' && /[({]/.test(record.$expr))
+        if (
+          typeof record.$expr === 'string' &&
+          (record.$expr.startsWith('[') || /[({]/.test(record.$expr))
+        )
           return true;
         return Object.values(record).some(complex);
       };

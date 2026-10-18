@@ -127,7 +127,7 @@ export function parseHcl(source: string): HclBlock[] {
     return t;
   };
   const separators = () => {
-    while (peek()?.newline || peek()?.value === ',') at++;
+    while (peek()?.newline || (!peek()?.string && peek()?.value === ',')) at++;
   };
   const expression = (): unknown => {
     const parts: Token[] = [];
@@ -164,7 +164,11 @@ export function parseHcl(source: string): HclBlock[] {
   const comprehension = (): boolean => {
     let next = at + 1;
     while (tokens[next]?.newline) next++;
-    return tokens[next]?.value === 'for';
+    return (
+      !tokens[next]?.string &&
+      tokens[next]?.value === 'for' &&
+      !['=', ':'].includes(tokens[next + 1]?.value ?? '')
+    );
   };
   const value = (): unknown => {
     if (!peek()?.string && peek()?.value === '[' && comprehension())
@@ -173,7 +177,7 @@ export function parseHcl(source: string): HclBlock[] {
       take();
       const values: unknown[] = [];
       separators();
-      while (peek()?.value !== ']') {
+      while (peek()?.string || peek()?.value !== ']') {
         if (!peek()) throw Error('Unterminated HCL list');
         values.push(value());
         separators();
@@ -196,7 +200,7 @@ export function parseHcl(source: string): HclBlock[] {
     const attributes: Record<string, unknown> = {},
       blocks: HclBlock[] = [];
     separators();
-    while (peek() && peek()?.value !== '}') {
+    while (peek() && (peek()?.string || peek()?.value !== '}')) {
       const name = take().value;
       if (peek()?.value === '=' || peek()?.value === ':') {
         take();

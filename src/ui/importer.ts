@@ -1,4 +1,5 @@
 import type { DiagramDocument } from '../domain/document';
+import { importInWorker } from '../import/client';
 import type { ImportFormat } from '../import/infrastructure';
 import type { ImportResult, InfrastructureFile } from '../import/types';
 import { openInfrastructureFiles } from '../platform/files';
@@ -29,7 +30,13 @@ export function infrastructureImporter(host: {
   let files: InfrastructureFile[] = [],
     preview: ImportResult | undefined,
     busy = false;
+  let pending: AbortController | undefined;
+  let revision = 0;
   const invalidate = () => {
+    revision++;
+    pending?.abort();
+    pending = undefined;
+    find<HTMLButtonElement>('[data-preview]').disabled = false;
     preview = undefined;
     apply.disabled = true;
     summary.textContent = '';
@@ -47,8 +54,11 @@ export function infrastructureImporter(host: {
   format.onchange = invalidate;
   const prepare = async () => {
     if (busy) return;
-    busy = true;
     invalidate();
+    const controller = new AbortController();
+    pending = controller;
+    const request = revision;
+    find<HTMLButtonElement>('[data-preview]').disabled = true;
     summary.textContent = 'Reading infrastructure…';
     try {
       const chosen = source.value.trim()
@@ -67,9 +77,14 @@ export function infrastructureImporter(host: {
             },
           ]
         : files;
-      const { importInfrastructure } = await import('../import/infrastructure');
-      preview = importInfrastructure(chosen, format.value as ImportFormat);
-      summary.textContent = `${preview.format} · ${preview.document.nodes.filter((n) => n.kind !== 'group').length} resources · ${preview.document.nodes.filter((n) => n.kind === 'group').length} boundaries · ${preview.warnings.length} warnings. Import creates a new, automatically laid out diagram.`;
+      const result = await importInWorker(
+        chosen,
+        format.value as ImportFormat,
+        controller.signal,
+      );
+      if (controller.signal.aborted || request !== revision) return;
+      preview = result;
+      summary.textContent = `${preview.format} · ${preview.document.nodes.filter((n) => n.kind !== 'group').length} resources · ${preview.document.nodes.filter((n) => n.kind === 'group').length} boundaries · ${preview.warnings.length} warnings. Import replaces the current board with an automatically laid out diagram; Undo restores it.`;
       for (const message of preview.warnings.slice(0, 200)) {
         const li = document.createElement('li');
         li.textContent = message;
@@ -82,9 +97,12 @@ export function infrastructureImporter(host: {
       }
       apply.disabled = false;
     } catch (e) {
-      showError(e);
+      if (!controller.signal.aborted && request === revision) showError(e);
     } finally {
-      busy = false;
+      if (pending === controller) {
+        pending = undefined;
+        find<HTMLButtonElement>('[data-preview]').disabled = false;
+      }
     }
   };
   find('[data-files]').onclick = () => {
@@ -121,6 +139,7 @@ export function infrastructureImporter(host: {
   };
   const close = () => {
     if (!busy) {
+      invalidate();
       panel.hidden = true;
       if (app) app.inert = false;
     }

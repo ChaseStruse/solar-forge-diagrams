@@ -111,6 +111,20 @@ test('AWS imports include one unconnected external Internet actor outside bounda
 
 test('unterminated HCL templates still report malformed input', () => {
   expect(() =>
-    hcl('resource "aws_instance" "x" { name = "${format("%s", var.env)" }'),
+    hcl(`resource "aws_instance" "x" { name = "\${format("%s", var.env)" }`),
   ).toThrow();
+});
+
+test('literal braces and nested template arguments do not consume following resources', () => {
+  const result = hcl(`${healthy}
+resource "aws_instance" "labels" {
+  tags = { open = "{" close = "}" "for" = "literal" }
+  labels = ["]", "[", ",", "}"]
+  name = "prefix-\${format("%s-%s", var.env, "\${var.region}")}-suffix"
+}
+resource "aws_instance" "next" { private_ip = "10.0.0.12" }`);
+  expect(
+    result.document.nodes.find((n) => n.id === 'resource:aws_instance.next')
+      ?.network?.ip,
+  ).toBe('10.0.0.12');
 });
