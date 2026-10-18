@@ -52,6 +52,7 @@ import {
 } from '../domain/routing';
 import { defaultTheme, type ScenePalette } from '../themes';
 import { createAnnotation, NOTE_HEIGHT } from './annotations';
+import { AntialiasPass } from './antialias';
 import { createBackdrop } from './backdrop';
 import { JourneyPlayer } from './journey';
 import { LabelAtlas } from './labels';
@@ -117,6 +118,7 @@ interface Tile {
   group: Group;
   material: MeshLambertMaterial;
   label: Object3D;
+  headerIcon?: Object3D;
   annotation?: { root: Group; dispose: () => void };
 }
 const isAnnotation = (node: DiagramNode) =>
@@ -150,10 +152,14 @@ export class DiagramScene {
   private get target() {
     return this.view.target;
   }
+  // MSAA is off: the FXAA pass gives similar edges for a fraction of the cost.
   private readonly renderer = new WebGLRenderer({
-    antialias: true,
+    antialias: false,
     alpha: false,
   });
+  private readonly antialias = new AntialiasPass();
+  private motionUntil = 0;
+  private settleTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly content = new Group();
   private readonly geometry = new BoxGeometry(1, 1, 1);
   private readonly shapeGeometries = createFlowGeometries();
@@ -188,6 +194,7 @@ export class DiagramScene {
   private flowLines: LineSegments2 | undefined;
   private distancesDirty = false;
   private flowing = true;
+  private hasFlowEdges = false;
   private readonly animators = new Set<(time: number) => boolean>();
   private edgeGeometry: LineSegmentsGeometry | undefined;
   /** Flow dashes keep their own copy so inactive routes can go still. */
@@ -257,6 +264,12 @@ export class DiagramScene {
   private edgeColors: Float32Array<ArrayBufferLike> = new Float32Array();
   private edgeColorBuffer: InterleavedBuffer | undefined;
   public onSelectEdge: (id: string | undefined) => void = () => {};
+  private journeyCaption = '';
+  public onJourneyCaption: (caption: string) => void = () => {};
+  private setJourneyCaption(caption: string): void {
+    this.journeyCaption = caption;
+    this.onJourneyCaption(caption);
+  }
   public onJourneyHop: (edgeId: string) => void = () => {};
   public onJourneyEnd: () => void = () => {};
   public onJourneyBranches: (nodeId: string) => {
@@ -370,6 +383,7 @@ export class DiagramScene {
       })
       .catch((error) => this.onError(String(error)));
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    this.renderer.info.autoReset = false;
     this.renderer.setClearColor('#000000', 0);
     this.scene.fog = this.fog;
     this.renderer.domElement.setAttribute(
@@ -545,6 +559,12 @@ export class DiagramScene {
         });
         continue;
       }
+      let headerIcon: Object3D | undefined;
+      const component = findService(node.serviceId ?? node.label);
+      if (node.kind === 'group' && component?.icon) {
+        headerIcon = this.labels.create(component.id, this.camera.zoom, 'icon');
+        group.add(headerIcon);
+      }
       if (node.kind === 'service' && !node.shape) {
         const glyph = this.labels.create(
           findService(node.serviceId ?? node.label)?.id ?? node.label,
@@ -553,14 +573,18 @@ export class DiagramScene {
         );
         glyph.position.y = 28;
         glyph.userData.nodeWidth = node.width;
+        glyph.userData.nodeDepth = node.depth;
         group.add(glyph);
       }
       const label = this.labels.create(
         node.label,
         this.camera.zoom,
         node.kind === 'group' ? 'group' : 'node',
+        { width: node.width, depth: node.depth },
       );
+      label.userData.captionBelow = node.kind === 'service' && !node.shape;
       label.userData.nodeWidth = node.width;
+      label.userData.nodeDepth = node.depth;
       label.position.set(
         node.kind === 'group'
           ? -node.width / 2 + Math.min(node.width / 2, 150)
@@ -570,11 +594,20 @@ export class DiagramScene {
           ? -node.depth / 2 + 22
           : node.shape
             ? 0
-            : node.depth / 2 + 43,
+            : node.depth / 2 + 16,
       );
       group.add(label);
       this.content.add(group);
-      this.tiles.set(node.id, { index, node, group, material, label });
+      const tile: Tile = {
+        index,
+        node,
+        group,
+        material,
+        label,
+        ...(headerIcon ? { headerIcon } : {}),
+      };
+      this.positionHeaderIcon(tile);
+      this.tiles.set(node.id, tile);
     }
     const positions = new Float32Array(document.edges.length * 42);
     this.edgePositions = new BufferAttribute(positions, 3);
@@ -599,6 +632,9 @@ export class DiagramScene {
     const connections = new LineSegments2(this.edgeGeometry, this.edgeMaterial);
     connections.frustumCulled = false;
     this.inactive = inactiveEdges(document);
+    this.hasFlowEdges = document.edges.some(
+      (e) => e.relationship !== 'dependency',
+    );
     this.flowPositions = new Float32Array(document.edges.length * 42);
     this.flowGeometry = new LineSegmentsGeometry().setPositions(
       this.flowPositions,
@@ -635,11 +671,23 @@ export class DiagramScene {
     this.invalidate();
     this.onSelect(undefined);
   }
+  private positionHeaderIcon(tile: Tile): void {
+    if (!tile.headerIcon) return;
+    const { width, depth } = tile.node;
+    tile.headerIcon.position.set(width / 2 - 28, 6, -depth / 2 + 24);
+    tile.headerIcon.userData.nodeWidth = width >= 120 ? 100 : 0;
+    tile.headerIcon.userData.nodeDepth = 40;
+    // Reserve the right side of the boundary header for its icon.
+    tile.label.userData.nodeWidth = Math.max(30, width - 80);
+    tile.label.position.x =
+      -width / 2 + Math.min(Math.max(30, width - 80) / 2, 150);
+  }
   private updatePositions(): void {
     this.obstacleCache = undefined;
     this.fanCache = undefined;
     for (const tile of this.tiles.values()) {
       const p = worldPosition(tile.node, this.nodeIndex);
+      this.positionHeaderIcon(tile);
       tile.group.position.set(p.x, p.level * 4, p.z);
       this.bodies?.update(
         tile.node,
@@ -699,7 +747,7 @@ export class DiagramScene {
     // Inactive routes collapse to a point in the flow copy: no marching dashes.
     const route = this.edgePositions.array;
     const base = index * 42;
-    const still = this.inactive.has(id);
+    const still = this.inactive.has(id) || edge.relationship === 'dependency';
     for (let i = 0; i < 42; i++)
       this.flowPositions[base + i] =
         route[still ? base + (i % 3) : base + i] ?? 0;
@@ -1029,6 +1077,7 @@ export class DiagramScene {
     }
     if (event.pointerId !== this.activePointer) return;
     event.preventDefault();
+    this.inMotion();
     if (this.marquee) {
       const bounds = this.renderer.domElement.getBoundingClientRect();
       this.marquee.end = {
@@ -1202,7 +1251,10 @@ export class DiagramScene {
     const mesh = tile.group.children[0];
     if (mesh instanceof Mesh)
       mesh.scale.set(tile.node.width, pickHeight(tile.node), tile.node.depth);
-    tile.label.userData.nodeWidth = tile.node.width;
+    for (const child of tile.group.children) {
+      child.userData.nodeWidth = tile.node.width;
+      child.userData.nodeDepth = tile.node.depth;
+    }
     // Stretch the drawn annotation live; it is redrawn crisply on commit.
     const root = tile.annotation?.root;
     if (root)
@@ -1267,8 +1319,9 @@ export class DiagramScene {
         ? -tile.node.depth / 2 + 22
         : tile.node.shape
           ? 0
-          : tile.node.depth / 2 + 43,
+          : tile.node.depth / 2 + 16,
     );
+    this.positionHeaderIcon(tile);
     this.invalidate();
   }
   /** Keep selection handles a constant on-screen size around the selected node. */
@@ -1450,6 +1503,7 @@ export class DiagramScene {
   }
   private preventNativeDrag = (event: Event): void => event.preventDefault();
   private wheel = (event: WheelEvent): void => {
+    this.inMotion();
     this.fitted = false;
     event.preventDefault();
     const before = this.locate(event)?.clone();
@@ -1654,7 +1708,8 @@ export class DiagramScene {
     this.scratchColor.set(color);
     // A branch off the active route fades toward the sky.
     if (
-      this.inactive.has(id) &&
+      (this.inactive.has(id) ||
+        this.edgeIndex.get(id)?.relationship === 'dependency') &&
       id !== this.selectedEdge &&
       id !== this.hoveredEdge
     )
@@ -1671,6 +1726,15 @@ export class DiagramScene {
     this.updatePositions();
     this.invalidate();
   }
+  /** Draw fast while the view moves, then once at full quality when it rests. */
+  private inMotion(): void {
+    this.motionUntil = performance.now() + 200;
+    clearTimeout(this.settleTimer);
+    this.settleTimer = setTimeout(() => {
+      this.settleTimer = undefined;
+      this.invalidate();
+    }, 220);
+  }
   private invalidate(): void {
     if (this.frame || this.disposed) return;
     this.frame = requestAnimationFrame(() => {
@@ -1679,7 +1743,25 @@ export class DiagramScene {
     });
   }
   /** Walk a person along the arrows from the given nodes, looping until stopped. */
-  public playJourney(starts: readonly string[]): void {
+  public onJourneyPermit: (edge: string) => boolean = () => true;
+  public playJourney(
+    starts: readonly string[],
+    networkPath?: { path: string[]; allowed: boolean },
+  ): void {
+    const virtual = new Map<string, DiagramEdge>();
+    if (networkPath)
+      for (let i = 1; i < networkPath.path.length; i++) {
+        const source = networkPath.path[i - 1],
+          target = networkPath.path[i];
+        if (source && target)
+          virtual.set(`reachability:${i}`, {
+            id: `reachability:${i}`,
+            source,
+            target,
+            label: '',
+          });
+      }
+    const edgeAt = (id: string) => virtual.get(id) ?? this.edgeIndex.get(id);
     this.journey?.dispose();
     this.journey = new JourneyPlayer(
       {
@@ -1687,7 +1769,7 @@ export class DiagramScene {
         remove: (object) => this.scene.remove(object),
         animate: (step) => this.animate(step),
         route: (id) => {
-          const edge = this.edgeIndex.get(id);
+          const edge = edgeAt(id);
           const source = edge && this.tiles.get(edge.source);
           const target = edge && this.tiles.get(edge.target);
           if (!edge || !source || !target) return;
@@ -1710,11 +1792,35 @@ export class DiagramScene {
             radius: Math.max(tile.node.width, tile.node.depth) * 0.62,
           };
         },
-        branches: (id) => this.onJourneyBranches(id),
+        branches: (id) =>
+          networkPath
+            ? {
+                mode: 'all',
+                edges: [...virtual.values()]
+                  .filter((e) => e.source === id)
+                  .map((e) => e.id),
+              }
+            : this.onJourneyBranches(id),
         choose: (id, edges) => this.onJourneyChoose(id, edges),
         cancelChoice: () => this.onJourneyCancelChoice(),
-        target: (id) => this.edgeIndex.get(id)?.target,
+        target: (id) => edgeAt(id)?.target,
+        onVisit: (id) => {
+          const node = this.nodeIndex.get(id);
+          this.setJourneyCaption(
+            node
+              ? `${node.label}${node.journeyCaption ? `\n${node.journeyCaption}` : ''}`
+              : '',
+          );
+        },
         onHop: (id) => this.onJourneyHop(id),
+        permit: (id) => {
+          const permitted = networkPath
+            ? networkPath.allowed
+            : this.onJourneyPermit(id);
+          if (!permitted)
+            this.setJourneyCaption(`Blocked · ${this.journeyCaption}`);
+          return permitted;
+        },
         onFinish: () => this.onJourneyEnd(),
       },
       this.palette,
@@ -1722,6 +1828,7 @@ export class DiagramScene {
     this.journey.start(starts);
   }
   public stopJourney(): void {
+    this.setJourneyCaption('');
     this.journey?.dispose();
     const playing = this.journey?.playing;
     this.journey = undefined;
@@ -1754,10 +1861,11 @@ export class DiagramScene {
   private get animating(): boolean {
     return (
       this.content.visible &&
-      ((this.flowing && this.edges.size > 0) || this.animators.size > 0)
+      ((this.flowing && this.hasFlowEdges) || this.animators.size > 0)
     );
   }
-  private render(): void {
+  /** Captures pass `quality` so exports never use the in-motion FXAA path. */
+  private render(quality = false): void {
     const start = performance.now();
     if (this.distancesDirty && this.flowLines) {
       this.flowLines.computeLineDistances();
@@ -1769,7 +1877,14 @@ export class DiagramScene {
     this.syncHandles();
     this.scene.updateMatrixWorld();
     this.labels.sync(this.camera, this.height);
-    this.renderer.render(this.scene, this.camera);
+    // Count the board's draw calls, not only the final screen pass.
+    this.renderer.info.reset();
+    this.antialias.render(
+      this.renderer,
+      this.scene,
+      this.camera,
+      quality || start >= this.motionUntil,
+    );
     this.metrics.textures = this.renderer.info.memory.textures;
     this.metrics.drawCalls = this.renderer.info.render.calls;
     this.metrics.frames++;
@@ -1886,7 +2001,7 @@ export class DiagramScene {
     this.view.setPanelVisible(false);
     this.fit();
     this.renderer.setPixelRatio(Math.min(3, Math.max(2, devicePixelRatio)));
-    this.render();
+    this.render(true);
     const crop = this.contentBounds(28);
     const scale = this.renderer.getPixelRatio();
     const canvas = document.createElement('canvas');
@@ -1967,8 +2082,64 @@ export class DiagramScene {
     bottom = Math.min(this.height, Math.ceil(bottom + padding));
     return { left, top, width: right - left, height: bottom - top };
   }
+  public gifFrame(maxWidth = 640, maxHeight = 480): HTMLCanvasElement {
+    this.render(true);
+    const canvas = document.createElement('canvas');
+    const source = this.renderer.domElement;
+    const scale = Math.min(
+      1,
+      maxWidth / source.width,
+      maxHeight / source.height,
+    );
+    canvas.width = Math.max(1, Math.round(source.width * scale));
+    canvas.height = Math.max(1, Math.round(source.height * scale));
+    const context = canvas.getContext('2d');
+    context?.drawImage(source, 0, 0, canvas.width, canvas.height);
+    if (context && this.journeyCaption) {
+      const size = Math.max(12, Math.round(canvas.width / 48));
+      context.font = `${size}px sans-serif`;
+      const lines: string[] = [];
+      for (const paragraph of this.journeyCaption.split('\n')) {
+        let line = '';
+        for (const char of paragraph) {
+          if (
+            context.measureText(line + char).width > canvas.width - 48 &&
+            line
+          ) {
+            lines.push(line);
+            line = '';
+          }
+          line += char;
+        }
+        lines.push(line);
+      }
+      const visible = lines.slice(
+        0,
+        Math.max(1, Math.floor(canvas.height / (size * 3))),
+      );
+      if (visible.length < lines.length) visible[visible.length - 1] += '…';
+      const height = visible.length * size * 1.4 + 16;
+      context.fillStyle = '#111827';
+      context.fillRect(
+        8,
+        canvas.height - height - 8,
+        canvas.width - 16,
+        height,
+      );
+      context.fillStyle = '#ffffff';
+      context.textAlign = 'center';
+      visible.forEach((line, i) => {
+        context.fillText(
+          line,
+          canvas.width / 2,
+          canvas.height - height + size + i * size * 1.4,
+        );
+      });
+    }
+    return canvas;
+  }
   public png(): Promise<Blob> {
-    this.render();
+    this.render(true);
     return new Promise((resolve, reject) =>
       this.renderer.domElement.toBlob(
         (blob) =>
@@ -1981,6 +2152,7 @@ export class DiagramScene {
     this.cancelInteraction();
     this.disposed = true;
     cancelAnimationFrame(this.frame);
+    clearTimeout(this.settleTimer);
     this.observer.disconnect();
     this.releaseContent();
     this.grid.dispose();
@@ -2002,6 +2174,7 @@ export class DiagramScene {
     this.animators.clear();
     this.edgeMaterial.dispose();
     this.backdrop.dispose();
+    this.antialias.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.selectionBox.remove();

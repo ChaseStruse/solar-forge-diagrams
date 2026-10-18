@@ -1065,3 +1065,227 @@ input[type="color"] {
   color: var(--accent-text);
   text-align: center;
 }
+
+#traffic-panel,
+#gif-panel {
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+#traffic-panel label,
+#gif-panel label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+#gif-panel .checkbox-label {
+  display: flex;
+  align-items: center;
+}
+#gif-dither {
+  width: auto;
+}
+.properties input:disabled,
+.properties select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.workspace-dialog {
+  position: fixed;
+  z-index: 40;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(760px, calc(100vw - 40px));
+  max-height: calc(100vh - 70px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 20px 90px #0009;
+}
+.workspace-dialog[hidden] {
+  display: none;
+}
+.dialog-heading,
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dialog-heading h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.workspace-dialog p,
+.workspace-dialog li {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.workspace-dialog label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  margin: 12px 0;
+}
+.workspace-dialog textarea {
+  width: 100%;
+  font: 12px / 1.5 monospace;
+  resize: vertical;
+}
+.workspace-dialog button {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-radius: 8px;
+}
+.network-rule-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  margin: 10px 0;
+}
+.network-rule-row label {
+  margin-top: 8px;
+}
+#resource-network p {
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+#resource-network input[type="checkbox"] {
+  width: auto;
+}
+#resource-network select[multiple] {
+  height: auto;
+  min-height: 80px;
+}
+.reachability-dialog {
+  width: min(1100px, calc(100vw - 40px));
+}
+.reachability-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 14px;
+}
+.matrix-scroll {
+  overflow: auto;
+  max-height: 450px;
+}
+.matrix-scroll table {
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.matrix-scroll th,
+.matrix-scroll td {
+  border: 1px solid var(--border);
+  padding: 5px;
+  min-width: 85px;
+}
+.matrix-scroll th {
+  max-width: 160px;
+  overflow-wrap: anywhere;
+}
+.matrix-scroll button {
+  font-size: 10px;
+  padding: 6px;
+}
+.workspace-dialog .allowed {
+  color: #52d8a0;
+}
+.workspace-dialog .denied {
+  color: #ff7788;
+}
+.workspace-dialog .unknown {
+  color: #e7bc63;
+}
+.reachability-result {
+  padding: 12px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.matrix-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 750px) {
+  .reachability-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.diagram-path {
+  position: absolute;
+  top: 86px;
+  left: 90px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 5;
+  max-width: calc(100% - 430px);
+}
+.diagram-path:empty {
+  display: none;
+}
+.diagram-path button,
+.diagram-path span {
+  background: var(--panel, #20242d);
+  color: var(--text, #e6edf3);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+.diagram-path span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.journey-caption {
+  position: absolute;
+  bottom: 115px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(650px, 65vw);
+  padding: 14px 20px;
+  border-radius: 12px;
+  background: #111827ee;
+  color: #fff;
+  white-space: pre-wrap;
+  text-align: center;
+  pointer-events: none;
+  z-index: 6;
+}
+
+#traffic-panel,
+#gif-panel {
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+}
+#traffic-panel {
+  width: 340px;
+}
+
+.detail-layer-link {
+  font-size: 11px;
+  margin: 0 0 6px 26px;
+  padding: 3px 8px;
+  color: var(--accent-text);
+}
+@media (max-width: 700px) {
+  .diagram-path {
+    left: 72px;
+    max-width: calc(100% - 90px);
+    gap: 4px;
+  }
+  .diagram-path button,
+  .diagram-path span {
+    font-size: 11px;
+    padding: 6px;
+  }
+}

@@ -1,0 +1,19 @@
+services:
+  web:
+    image: nginx:alpine
+    ports: ["8080:80"]
+    depends_on: [api]
+    networks: [frontend]
+  api:
+    image: example/api:latest
+    depends_on:
+      database:
+        condition: service_started
+    networks: [frontend, backend]
+  database:
+    image: postgres:17
+    networks: [backend]
+networks:
+  frontend: {}
+  backend:
+    internal: true

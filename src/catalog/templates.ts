@@ -1,5 +1,7 @@
 import type { DiagramDocument, DiagramNode } from '../domain/document';
 import { sampleDocument } from '../domain/document';
+import { kubernetesExample } from './kubernetes';
+import { vpcExample } from './networking';
 import { boundaryColors, findService } from './services';
 export interface Template {
   id: string;
@@ -29,8 +31,8 @@ function architecture(title: string, ids: readonly string[]): DiagramDocument {
       color: service.color,
       x: (index - (ids.length - 1) / 2) * 260,
       z: 0,
-      width: 150,
-      depth: 96,
+      width: 160,
+      depth: 100,
       parentId: group.id,
     };
   });
@@ -49,6 +51,21 @@ function architecture(title: string, ids: readonly string[]): DiagramDocument {
   };
 }
 export const templates: Template[] = [
+  {
+    id: 'kubernetes',
+    name: 'Kubernetes · web application',
+    create: kubernetesExample,
+  },
+  {
+    id: 'vpc',
+    name: 'VPC · public and private subnets',
+    create: () => vpcExample(),
+  },
+  {
+    id: 'networking',
+    name: 'Networking journey demo',
+    create: () => vpcExample(true),
+  },
   {
     id: 'serverless',
     name: 'Serverless API',
@@ -97,8 +114,8 @@ export const templates: Template[] = [
           label: 'Start',
           x: -260,
           z: 0,
-          width: 150,
-          depth: 90,
+          width: 160,
+          depth: 100,
           color: '#d9b677',
         },
         {
@@ -108,8 +125,8 @@ export const templates: Template[] = [
           label: 'Process',
           x: 0,
           z: 0,
-          width: 150,
-          depth: 96,
+          width: 160,
+          depth: 100,
           color: '#d9b677',
         },
         {
@@ -119,8 +136,8 @@ export const templates: Template[] = [
           label: 'Ready?',
           x: 260,
           z: 0,
-          width: 170,
-          depth: 120,
+          width: 160,
+          depth: 100,
           color: '#d9b677',
         },
       ],

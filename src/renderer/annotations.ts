@@ -9,7 +9,7 @@ import {
   SRGBColorSpace,
 } from 'three';
 import type { DiagramNode } from '../domain/document';
-import { fontSize, wrapText } from '../domain/text';
+import { fitText, fontSize } from '../domain/text';
 import type { ScenePalette } from '../themes';
 
 export const NOTE_HEIGHT = 8;
@@ -55,16 +55,20 @@ export function createAnnotation(
     context.closePath();
     context.fill();
   }
-  const size = fontSize(node);
+  const { size, lines } = fitText(
+    node.label,
+    node.width - padding * 2,
+    node.depth - padding * 2,
+    fontSize(node),
+    (text, size) => {
+      context.font = `${note ? 500 : 600} ${size}px Inter, system-ui, sans-serif`;
+      return context.measureText(text).width;
+    },
+  );
   context.font = `${note ? 500 : 600} ${size}px Inter, system-ui, sans-serif`;
   context.fillStyle = note ? palette.note.text : palette.text;
   context.textBaseline = 'top';
   const lineHeight = size * 1.28;
-  const lines = wrapText(
-    node.label,
-    node.width - padding * 2,
-    (text) => context.measureText(text).width,
-  );
   context.save();
   context.beginPath();
   context.rect(

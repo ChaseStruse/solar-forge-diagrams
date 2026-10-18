@@ -1,0 +1,129 @@
+{
+  "date": "2026-10-17",
+  "scope": "Performance pass: settled 4x MSAA / in-motion FXAA rendering, cached text fitting, linear-time infrastructure reference resolution, shared reachability index",
+  "build": "optimized shell / production frontend / diagnostics feature, run with a private D-Bus session",
+  "gpu": "Intel UHD Graphics (TGL GT1), WebKitGTK 2.52.6",
+  "note": "Before and after runs alternated in the same window size. Exports are pixel-identical to the baseline (SSIM 1.000 isometric and top).",
+  "viewport": [1253, 1376],
+  "baseline": [
+    {
+      "500nodes": {
+        "loadMs": 1059,
+        "panEventToFrameP95Ms": 51,
+        "panRenderSubmissionP95Ms": 20,
+        "cameraChangeToFrameP95Ms": 48,
+        "drawCalls": 26,
+        "textures": 18
+      },
+      "2000nodes": {
+        "loadMs": 3073,
+        "panEventToFrameP95Ms": 85,
+        "panRenderSubmissionP95Ms": 41,
+        "cameraChangeToFrameP95Ms": 82,
+        "drawCalls": 79,
+        "textures": 71
+      }
+    },
+    {
+      "500nodes": {
+        "loadMs": 1014,
+        "panEventToFrameP95Ms": 55,
+        "panRenderSubmissionP95Ms": 20,
+        "cameraChangeToFrameP95Ms": 60,
+        "drawCalls": 26,
+        "textures": 18
+      },
+      "2000nodes": {
+        "loadMs": 3215,
+        "panEventToFrameP95Ms": 78,
+        "panRenderSubmissionP95Ms": 41,
+        "cameraChangeToFrameP95Ms": 80,
+        "drawCalls": 79,
+        "textures": 71
+      }
+    },
+    {
+      "500nodes": {
+        "loadMs": 1139,
+        "panEventToFrameP95Ms": 51,
+        "panRenderSubmissionP95Ms": 22,
+        "cameraChangeToFrameP95Ms": 54,
+        "drawCalls": 26,
+        "textures": 18
+      },
+      "2000nodes": {
+        "loadMs": 3142,
+        "panEventToFrameP95Ms": 86,
+        "panRenderSubmissionP95Ms": 41,
+        "cameraChangeToFrameP95Ms": 82,
+        "drawCalls": 79,
+        "textures": 71
+      }
+    }
+  ],
+  "after": [
+    {
+      "500nodes": {
+        "loadMs": 597,
+        "panEventToFrameP95Ms": 29,
+        "panRenderSubmissionP95Ms": 19,
+        "cameraChangeToFrameP95Ms": 55,
+        "drawCalls": 27,
+        "textures": 20
+      },
+      "2000nodes": {
+        "loadMs": 1771,
+        "panEventToFrameP95Ms": 41,
+        "panRenderSubmissionP95Ms": 37,
+        "cameraChangeToFrameP95Ms": 98,
+        "drawCalls": 80,
+        "textures": 73
+      }
+    },
+    {
+      "500nodes": {
+        "loadMs": 580,
+        "panEventToFrameP95Ms": 23,
+        "panRenderSubmissionP95Ms": 13,
+        "cameraChangeToFrameP95Ms": 52,
+        "drawCalls": 27,
+        "textures": 20
+      },
+      "2000nodes": {
+        "loadMs": 1504,
+        "panEventToFrameP95Ms": 32,
+        "panRenderSubmissionP95Ms": 29,
+        "cameraChangeToFrameP95Ms": 88,
+        "drawCalls": 80,
+        "textures": 73
+      }
+    }
+  ],
+  "fullscreenBaseline2560x1440": {
+    "500nodes": {
+      "loadMs": 921,
+      "panEventToFrameP95Ms": 84,
+      "panRenderSubmissionP95Ms": 16,
+      "cameraChangeToFrameP95Ms": 57,
+      "drawCalls": 26,
+      "textures": 18
+    },
+    "2000nodes": {
+      "loadMs": 3634,
+      "panEventToFrameP95Ms": 113,
+      "panRenderSubmissionP95Ms": 44,
+      "cameraChangeToFrameP95Ms": 160,
+      "drawCalls": 79,
+      "textures": 71
+    }
+  },
+  "headlessChromiumSameGpu": {
+    "500nodesPanMedianMs": [138, 16.4],
+    "2000nodesPanMedianMs": [258, 20.2],
+    "note": "[before, after]; gl.finish per frame"
+  },
+  "import4500InstancesMs": [27025, 771],
+  "reachabilityMatrixPage12x12At4585NodesMs": [4135, 255],
+  "contextLossRecovery": true,
+  "idleFramesOver500ms": 0
+}

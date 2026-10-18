@@ -1,7 +1,18 @@
 import { boundaryColors, findService, legacyColors } from '../catalog/services';
+import { parseNetworkRule, parseTraffic } from './network';
+import {
+  parseResourceNetwork,
+  parseResourcePolicy,
+  type ResourceNetwork,
+  type ResourcePolicy,
+} from './policies';
 
 export type Port = 'north' | 'east' | 'south' | 'west';
 export interface DiagramNode {
+  detailId?: string;
+  journeyCaption?: string;
+  network?: ResourceNetwork;
+  policy?: ResourcePolicy;
   id: string;
   /** Text and notes are annotations: free text, or text on a sticky note. */
   kind: 'service' | 'group' | 'text' | 'note';
@@ -30,7 +41,22 @@ export interface DiagramNode {
     tags?: string;
   };
 }
+export interface JourneyTraffic {
+  protocol: 'tcp' | 'udp' | 'icmp';
+  port: number;
+  sourceIp: string;
+  direction: 'ingress' | 'egress';
+}
+export interface NetworkRule {
+  action: 'allow' | 'deny';
+  protocol: 'any' | JourneyTraffic['protocol'];
+  port?: number;
+  sourceCidr?: string;
+  direction: 'any' | JourneyTraffic['direction'];
+}
 export interface DiagramEdge {
+  relationship?: 'dependency' | 'network';
+  networkRule?: NetworkRule;
   id: string;
   source: string;
   target: string;
@@ -40,8 +66,19 @@ export interface DiagramEdge {
   routing?: 'horizontal' | 'vertical';
   bend?: number;
 }
+export interface TrafficScenario {
+  id: string;
+  name: string;
+  traffic: JourneyTraffic;
+  sourceId?: string;
+  targetId?: string;
+}
 export interface DiagramDocument {
+  /** Flat project library: detail boards can link to other boards by ID. */
+  details?: { id: string; document: DiagramDocument }[];
+  scenarios?: TrafficScenario[];
   version: 1;
+  traffic?: JourneyTraffic;
   title: string;
   nodes: DiagramNode[];
   edges: DiagramEdge[];
@@ -69,6 +106,34 @@ function finite(value: unknown): number {
   return value;
 }
 export function parseDocument(json: string): DiagramDocument {
+  const result = parseBoard(json);
+  const input = record(JSON.parse(json));
+  if (input.details !== undefined) {
+    if (!Array.isArray(input.details) || input.details.length > 100)
+      throw Error('Invalid detail diagram library');
+    const ids = new Set<string>();
+    result.details = input.details.map((value: unknown) => {
+      const entry = record(value);
+      const id = text(entry.id, 'detail ID');
+      if (!id || ids.has(id)) throw Error('Duplicate detail ID');
+      ids.add(id);
+      const board = record(entry.document);
+      if (board.details !== undefined)
+        throw Error('Detail libraries must be flat');
+      return { id, document: parseBoard(JSON.stringify(board)) };
+    });
+  }
+  const ids = new Set(result.details?.map((entry) => entry.id));
+  for (const board of [
+    result,
+    ...(result.details?.map((entry) => entry.document) ?? []),
+  ])
+    for (const node of board.nodes)
+      if (node.detailId && !ids.has(node.detailId))
+        throw Error('Missing detail diagram');
+  return result;
+}
+function parseBoard(json: string): DiagramDocument {
   if (json.length > 10_000_000) throw new Error('Document exceeds 10 MB limit');
   const input = record(JSON.parse(json));
   if (input.version !== 1) throw new Error('Unsupported document version');
@@ -99,6 +164,9 @@ export function parseDocument(json: string): DiagramDocument {
       !/^#[0-9a-f]{6}$/i.test(node.color)
     )
       throw new Error('Invalid node geometry or color');
+    if (n.detailId !== undefined) node.detailId = text(n.detailId, 'detail ID');
+    if (n.journeyCaption !== undefined)
+      node.journeyCaption = text(n.journeyCaption, 'journey caption');
     if (n.parentId !== undefined) node.parentId = text(n.parentId, 'parent ID');
     if (n.serviceId !== undefined)
       node.serviceId = text(n.serviceId, 'service ID');
@@ -138,6 +206,8 @@ export function parseDocument(json: string): DiagramDocument {
         node.journey = { mode: 'fixed', edge: text(journey.edge, 'branch') };
       else throw Error('Invalid journey branch mode');
     }
+    if (n.network !== undefined) node.network = parseResourceNetwork(n.network);
+    if (n.policy !== undefined) node.policy = parseResourcePolicy(n.policy);
     if (n.metadata !== undefined) {
       const metadata = record(n.metadata);
       node.metadata = {};
@@ -166,6 +236,27 @@ export function parseDocument(json: string): DiagramDocument {
         throw new Error('Invalid parent group');
       parent = group.parentId;
     }
+  }
+  for (const node of nodes) {
+    const requirePolicy = (id: string, kind?: ResourcePolicy['kind']) => {
+      const target = byId.get(id);
+      if (!target || (kind && target.policy?.kind !== kind))
+        throw Error(`Invalid network resource reference: ${id}`);
+    };
+    for (const id of node.network?.securityGroupIds ?? [])
+      requirePolicy(id, 'security-group');
+    for (const id of node.network?.networkIds ?? []) requirePolicy(id);
+    if (node.network?.routeTableId)
+      requirePolicy(node.network.routeTableId, 'route-table');
+    if (node.network?.networkAclId)
+      requirePolicy(node.network.networkAclId, 'network-acl');
+    if (node.policy?.kind === 'route-table')
+      for (const r of node.policy.routes) {
+        if (!['local', 'blackhole'].includes(r.target)) requirePolicy(r.target);
+      }
+    else
+      for (const r of node.policy?.rules ?? [])
+        if (r.peerGroupId) requirePolicy(r.peerGroupId, 'security-group');
   }
   const edgeIds = new Set<string>();
   const edges = input.edges.map((value: unknown): DiagramEdge => {
@@ -196,16 +287,55 @@ export function parseDocument(json: string): DiagramDocument {
         edge[key] = value;
       }
     }
+    if (e.relationship !== undefined) {
+      if (e.relationship !== 'network' && e.relationship !== 'dependency')
+        throw Error('Invalid relationship');
+      edge.relationship = e.relationship;
+    }
     if (e.routing !== undefined) {
       if (e.routing !== 'horizontal' && e.routing !== 'vertical')
         throw Error('Invalid routing');
       edge.routing = e.routing;
     }
     if (e.bend !== undefined) edge.bend = finite(e.bend);
+    if (e.networkRule !== undefined)
+      edge.networkRule = parseNetworkRule(e.networkRule);
     edgeIds.add(edge.id);
     return edge;
   });
-  return { version: 1, title: text(input.title, 'title'), nodes, edges };
+  let scenarios: TrafficScenario[] | undefined;
+  if (input.scenarios !== undefined) {
+    if (!Array.isArray(input.scenarios) || input.scenarios.length > 100)
+      throw Error('Invalid scenarios');
+    const ids = new Set<string>();
+    scenarios = input.scenarios.map((value: unknown) => {
+      const scenario = record(value);
+      const id = text(scenario.id, 'scenario ID');
+      const name = text(scenario.name, 'scenario name');
+      if (!id || !name.trim() || ids.has(id))
+        throw Error('Invalid or duplicate scenario');
+      ids.add(id);
+      const result: TrafficScenario = {
+        id,
+        name,
+        traffic: parseTraffic(scenario.traffic),
+      };
+      for (const key of ['sourceId', 'targetId'] as const) {
+        if (scenario[key] !== undefined) result[key] = text(scenario[key], key);
+      }
+      return result;
+    });
+  }
+  return {
+    version: 1,
+    title: text(input.title, 'title'),
+    ...(scenarios ? { scenarios } : {}),
+    nodes,
+    edges,
+    ...(input.traffic !== undefined
+      ? { traffic: parseTraffic(input.traffic) }
+      : {}),
+  };
 }
 export function serializeDocument(document: DiagramDocument): string {
   return `${JSON.stringify(document, null, 2)}\n`;
@@ -263,8 +393,8 @@ export function sampleDocument(): DiagramDocument {
         serviceId: 'aws.api-gateway',
         x: -280,
         z: -110,
-        width: 150,
-        depth: 96,
+        width: 160,
+        depth: 100,
         color: '#8c4fff',
         parentId: 'region',
       },
@@ -275,8 +405,8 @@ export function sampleDocument(): DiagramDocument {
         serviceId: 'aws.lambda',
         x: -40,
         z: -80,
-        width: 150,
-        depth: 96,
+        width: 160,
+        depth: 100,
         color: '#ed7100',
         parentId: 'vpc',
       },
@@ -287,8 +417,8 @@ export function sampleDocument(): DiagramDocument {
         serviceId: 'aws.dynamodb',
         x: 190,
         z: -80,
-        width: 150,
-        depth: 96,
+        width: 160,
+        depth: 100,
         color: '#c925d1',
         parentId: 'vpc',
       },
@@ -299,8 +429,8 @@ export function sampleDocument(): DiagramDocument {
         serviceId: 'aws.sqs',
         x: -40,
         z: 310,
-        width: 150,
-        depth: 96,
+        width: 160,
+        depth: 100,
         color: '#e7157b',
         parentId: 'vpc',
       },
@@ -311,8 +441,8 @@ export function sampleDocument(): DiagramDocument {
         serviceId: 'aws.s3',
         x: 190,
         z: 310,
-        width: 150,
-        depth: 96,
+        width: 160,
+        depth: 100,
         color: '#7aa116',
         parentId: 'vpc',
       },
@@ -339,8 +469,8 @@ export function starterDocument(): DiagramDocument {
         label: 'Lambda',
         x: -300,
         z: 0,
-        width: 180,
-        depth: 150,
+        width: 160,
+        depth: 100,
         color: '#ed7100',
       },
       {
@@ -350,8 +480,8 @@ export function starterDocument(): DiagramDocument {
         label: 'DynamoDB',
         x: 300,
         z: 0,
-        width: 180,
-        depth: 150,
+        width: 160,
+        depth: 100,
         color: '#c925d1',
       },
     ],

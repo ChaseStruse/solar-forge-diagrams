@@ -1,0 +1,32 @@
+[
+  {
+    "file": "pod.svg",
+    "source": "https://raw.githubusercontent.com/kubernetes/community/70a4bb2d8cc35bb0672f221bad9bc60c27a6f94b/icons/svg/resources/unlabeled/pod.svg",
+    "revision": "70a4bb2d8cc35bb0672f221bad9bc60c27a6f94b",
+    "sha256": "3356f7ca970f811da2b1aa34a0f13e846255378727809ab6629837a842db0a2d"
+  },
+  {
+    "file": "deployment.svg",
+    "source": "https://raw.githubusercontent.com/kubernetes/community/70a4bb2d8cc35bb0672f221bad9bc60c27a6f94b/icons/svg/resources/unlabeled/deploy.svg",
+    "revision": "70a4bb2d8cc35bb0672f221bad9bc60c27a6f94b",
+    "sha256": "d96f6e93a0f57ca9583b2120e3ddb4453afb5a29aa6d8c1360e8eb8e458489f7"
+  },
+  {
+    "file": "service.svg",
+    "source": "https://raw.githubusercontent.com/kubernetes/community/70a4bb2d8cc35bb0672f221bad9bc60c27a6f94b/icons/svg/resources/unlabeled/svc.svg",
+    "revision": "70a4bb2d8cc35bb0672f221bad9bc60c27a6f94b",
+    "sha256": "a86fad881253c4d7abbe7413c0efbca2e7dde7e54a55774f79349494bd823990"
+  },
+  {
+    "file": "ingress.svg",
+    "source": "https://raw.githubusercontent.com/kubernetes/community/70a4bb2d8cc35bb0672f221bad9bc60c27a6f94b/icons/svg/resources/unlabeled/ing.svg",
+    "revision": "70a4bb2d8cc35bb0672f221bad9bc60c27a6f94b",
+    "sha256": "66ac75442eff83ef51a8d1ef01edd858cc621b0f43ff60e2170f1d10c4d49813"
+  },
+  {
+    "file": "namespace.svg",
+    "source": "https://raw.githubusercontent.com/kubernetes/community/70a4bb2d8cc35bb0672f221bad9bc60c27a6f94b/icons/svg/resources/unlabeled/ns.svg",
+    "revision": "70a4bb2d8cc35bb0672f221bad9bc60c27a6f94b",
+    "sha256": "6539e288ca6f5ce9c88aedf8520301618d0b1e0115783483104096b0c5a8ad19"
+  }
+]

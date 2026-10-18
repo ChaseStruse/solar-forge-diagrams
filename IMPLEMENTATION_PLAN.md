@@ -28,7 +28,7 @@ The latest user decision is authoritative: **the application runs natively**. Do
 | Desktop shell | Tauri 2 with a small Rust integration layer |
 | Document storage | Versioned application-owned JSON and native filesystem operations |
 | UI state | Small typed stores; add Nanostores only if it simplifies actual code |
-| Automatic layout | Evaluate lazy-loaded ELK.js after manual editing works |
+| Automatic layout | Implemented after alpha: deterministic nested layered packing; see docs/USER_GUIDE.md |
 | Integration testing | Browser automation for portable UI logic plus real Tauri/Linux smoke tests |
 
 Do not introduce React, Next.js, React Three Fiber, Electron, a server framework, an ORM, or a database without a demonstrated requirement and an explicit architecture decision. Bun is development tooling, not a required installed-app runtime. Use compatible, pinned toolchain versions and frozen lockfile installs.
@@ -187,7 +187,7 @@ Implementation rules:
 - Support optional region, environment, resource name, tags, and notes; no AWS credentials are required.
 - Add templates for a serverless API, three-tier application, event pipeline, and container service.
 - Validate document structure without pretending to validate deployment correctness.
-- Defer live AWS discovery, Terraform import, deployment, collaboration, accounts, AI generation, and cloud synchronization.
+- Defer live AWS discovery, deployment, collaboration, accounts, AI generation, and cloud synchronization. Offline infrastructure import was subsequently authorized and implemented; see docs/decisions/0004-infrastructure-import.md.
 
 ## 10. Milestones and exit criteria
 

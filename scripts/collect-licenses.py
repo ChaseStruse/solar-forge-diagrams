@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Collect unmodified dependency license files for a local binary package."""
 import os
+import json
 from pathlib import Path
 import re
 import shutil
@@ -42,11 +43,16 @@ for name, version in packages:
 three = out / 'three-0.183.2'
 three.mkdir(exist_ok=True)
 shutil.copyfile(root / 'node_modules/three/LICENSE', three / 'LICENSE')
+yaml_metadata = json.loads((root / 'node_modules/yaml/package.json').read_text())
+yaml_notice = out / f"yaml-{yaml_metadata['version']}"
+yaml_notice.mkdir(exist_ok=True)
+shutil.copyfile(root / 'node_modules/yaml/LICENSE', yaml_notice / 'LICENSE')
 for filename in ['SOURCE_LICENSE.md', 'THIRD_PARTY_NOTICES.md']:
     shutil.copyfile(root / filename, out / filename)
 shutil.copytree(root / 'assets/aws', out / 'aws-architecture-icons', dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.svg'))
+shutil.copytree(root / 'assets/kubernetes', out / 'kubernetes-icons', dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.svg'))
 (out / 'LICENSE-REVIEW.txt').write_text('\n'.join(missing) + '\n' if missing else 'All normal-target package license texts collected.\n')
-print(f'Collected notices for {len(packages)} Rust packages and Three.js into {out}')
+print(f'Collected notices for {len(packages)} Rust packages, Three.js, and yaml into {out}')
 if missing:
     print('\n'.join(missing))
     sys.exit(1)

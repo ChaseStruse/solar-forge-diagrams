@@ -15,6 +15,7 @@ import {
 } from 'three';
 import { serviceImages } from '../catalog/images';
 import { serviceGlyph } from '../catalog/services';
+import { serviceCaption } from '../domain/text';
 import type { ScenePalette } from '../themes';
 
 type LabelKind = 'node' | 'edge' | 'icon' | 'group';
@@ -64,12 +65,18 @@ export class LabelAtlas {
     text: string,
     _zoom: number,
     kind: LabelKind = 'node',
+    bounds = { width: 160, depth: 100 },
   ): Object3D {
     if (kind === 'icon' && !serviceImages.has(text)) text = serviceGlyph(text);
-    const key = `${kind}:${text}`;
+    const resolution = Math.min(2, 800 / Math.max(bounds.width, bounds.depth));
+    const key = `${kind}:${text}:${kind === 'node' ? `${bounds.width}:${bounds.depth}` : ''}`;
     const cached = this.regions.get(key);
     if (cached) {
       const object = new Object3D();
+      if (kind === 'node') {
+        object.userData.captionResolution = resolution;
+        object.userData.captionBounds = bounds;
+      }
       cached.page.entries.push({
         object,
         x: cached.x,
@@ -90,9 +97,36 @@ export class LabelAtlas {
             ? '500 26px system-ui'
             : '600 34px system-ui';
     page.context.font = font;
-    const height = kind === 'icon' ? 92 : 56;
-    const width =
-      kind === 'icon'
+    const caption =
+      kind === 'node'
+        ? serviceCaption({ label: text, ...bounds }, (line, size) => {
+            page.context.font = `600 ${size * resolution}px system-ui`;
+            return page.context.measureText(line).width / resolution;
+          })
+        : undefined;
+    const captionFont = caption
+      ? `600 ${caption.size * resolution}px system-ui`
+      : font;
+    page.context.font = captionFont;
+    const padding = caption ? 8 * resolution : 15;
+    const height = caption
+      ? Math.ceil(
+          (caption.lines.length * caption.size * 1.28 + 16) * resolution,
+        )
+      : kind === 'icon'
+        ? 92
+        : 56;
+    const width = caption
+      ? Math.ceil(
+          Math.max(
+            1,
+            ...caption.lines.map(
+              (line) => page.context.measureText(line).width,
+            ),
+          ) +
+            padding * 2,
+        )
+      : kind === 'icon'
         ? 92
         : Math.min(520, Math.ceil(page.context.measureText(text).width) + 30);
     if (page.x + width > SIZE) {
@@ -102,7 +136,7 @@ export class LabelAtlas {
     }
     if (page.y + height > SIZE) {
       page = this.page();
-      page.context.font = font;
+      page.context.font = captionFont;
     }
     const { x, y, context } = page;
     const palette = this.palette;
@@ -130,8 +164,20 @@ export class LabelAtlas {
             : palette.nodeLabel.text;
     const image = kind === 'icon' ? serviceImages.get(text) : undefined;
     if (image) context.drawImage(image, x + 8, y + 8, width - 16, height - 16);
-    else context.fillText(text, x + width / 2, y + height / 2, width - 20);
+    else if (caption) {
+      context.font = captionFont;
+      for (const [index, line] of caption.lines.entries())
+        context.fillText(
+          line,
+          x + width / 2,
+          y + padding + (index + 0.5) * caption.size * resolution * 1.28,
+        );
+    } else context.fillText(text, x + width / 2, y + height / 2, width - 20);
     const object = new Object3D();
+    if (caption) {
+      object.userData.captionResolution = resolution;
+      object.userData.captionBounds = bounds;
+    }
     page.entries.push({ object, x, y, width, height, kind });
     this.regions.set(key, { page, x, y, width, height, kind });
     page.x += width + 4;
@@ -241,12 +287,35 @@ export class LabelAtlas {
         }
         const width: unknown = entry.object.userData.nodeWidth;
         const tilePixels = typeof width === 'number' ? width / pixel : 120;
+        const nodeDepth: unknown = entry.object.userData.nodeDepth;
+        const depthPixels =
+          typeof nodeDepth === 'number' ? nodeDepth / pixel : 100;
+        const captionBounds = entry.object.userData.captionBounds as
+          | { width: number; depth: number }
+          | undefined;
+        const resizing =
+          captionBounds &&
+          typeof width === 'number' &&
+          typeof nodeDepth === 'number'
+            ? Math.min(
+                width / captionBounds.width,
+                nodeDepth / captionBounds.depth,
+              )
+            : 1;
         const factor =
           entry.kind === 'icon'
-            ? Math.min(58, Math.max(25, tilePixels * 0.28)) / 64
+            ? Math.min(58, tilePixels * 0.28, depthPixels * 0.7) / 64
             : entry.kind === 'node'
-              ? Math.min(24, Math.max(14, tilePixels * 0.13)) / 34
-              : 0.5;
+              ? resizing /
+                (Number(entry.object.userData.captionResolution) * pixel)
+              : entry.kind === 'group'
+                ? Math.min(0.5, (tilePixels * 0.9) / entry.width)
+                : 0.5;
+        if (entry.kind === 'node' && entry.object.userData.captionBelow)
+          this.position.addScaledVector(
+            this.up,
+            (-entry.height * factor * pixel) / 2,
+          );
         this.scale.set(
           entry.width * factor * pixel,
           entry.height * factor * pixel,

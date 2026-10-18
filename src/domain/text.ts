@@ -38,3 +38,67 @@ export function wrapText(
   }
   return lines;
 }
+
+/** Fit every line in both dimensions, using a caller's actual font metrics. */
+export function fitText(
+  text: string,
+  width: number,
+  height: number,
+  preferred: number,
+  measure: (text: string, size: number) => number,
+): { size: number; lines: string[] } {
+  const w = Math.max(0.01, width),
+    h = Math.max(0.01, height),
+    top = Math.max(0.01, preferred);
+  // Advances scale with font size, so each distinct line is measured once.
+  const widths = new Map<string, number>();
+  const at = (line: string, size: number) => {
+    let width = widths.get(line);
+    if (width === undefined) {
+      width = measure(line, top);
+      widths.set(line, width);
+    }
+    return (width * size) / top;
+  };
+  const layout = (size: number) => wrapText(text, w, (line) => at(line, size));
+  const fits = (size: number, lines: string[]) =>
+    lines.length * size * 1.28 <= h &&
+    lines.every((line) => at(line, size) <= w);
+  const preferredLines = layout(top);
+  if (fits(top, preferredLines)) return { size: top, lines: preferredLines };
+  let low = 0,
+    high = top;
+  for (let i = 0; i < 16; i++) {
+    const size = (low + high) / 2;
+    if (fits(size, layout(size))) low = size;
+    else high = size;
+  }
+  return { size: low, lines: layout(low) };
+}
+export function resizedFont(
+  node: DiagramNode,
+  from: { width: number; depth: number },
+  to: { width: number; depth: number },
+): number {
+  return Math.max(
+    4,
+    Math.min(
+      400,
+      fontSize(node) * Math.min(to.width / from.width, to.depth / from.depth),
+    ),
+  );
+}
+
+/** Shared readable, multiline service caption layout for canvas and SVG. */
+export function serviceCaption(
+  node: Pick<DiagramNode, 'label' | 'width' | 'depth'>,
+  measure: (text: string, size: number) => number,
+): { size: number; lines: string[] } {
+  return fitText(
+    node.label,
+    node.width * 0.82,
+    node.depth * 0.75,
+    Math.min(node.width * 0.13, node.depth * 0.25),
+    measure,
+  );
+}

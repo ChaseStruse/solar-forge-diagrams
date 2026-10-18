@@ -27,6 +27,8 @@ export interface JourneyHost {
   cancelChoice(): void;
   target(edgeId: string): string | undefined;
   onHop(edgeId: string): void;
+  onVisit?(nodeId: string): void;
+  permit(edgeId: string): boolean;
   onFinish(): void;
 }
 interface Traveler {
@@ -108,6 +110,7 @@ export class JourneyPlayer {
     this.walked.clear();
     this.restAt = 0;
     for (const id of this.starts) {
+      this.host.onVisit?.(id);
       this.pulse(id, time);
       this.dwells.push({ node: id, until: time + DWELL });
     }
@@ -122,6 +125,7 @@ export class JourneyPlayer {
         this.travelers.splice(this.travelers.indexOf(traveler), 1);
         const target = this.host.target(traveler.edge);
         if (target) {
+          this.host.onVisit?.(target);
           this.pulse(target, time);
           this.dwells.push({ node: target, until: time + DWELL });
         }
@@ -188,6 +192,26 @@ export class JourneyPlayer {
     return true;
   }
   private depart(edge: string): void {
+    if (!this.host.permit(edge)) {
+      // Stop before crossing the connection and show a red denial ring.
+      const target = this.host.route(edge)?.[0];
+      if (target) {
+        const mesh = new Mesh(
+          this.ring,
+          new MeshBasicMaterial({
+            color: '#ff4d5e',
+            transparent: true,
+            depthTest: false,
+          }),
+        );
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.position.copy(target);
+        mesh.renderOrder = 22;
+        this.host.add(mesh);
+        this.pulses.push({ mesh, born: this.last, radius: 100 });
+      }
+      return;
+    }
     const points = this.host.route(edge);
     if (!points || points.length < 2) return;
     const lengths = [0];

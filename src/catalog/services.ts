@@ -12,6 +12,7 @@ export interface ComponentDefinition {
   boundary?: DiagramNode['boundary'];
   icon?: string;
   asset?: string;
+  policyKind?: NonNullable<DiagramNode['policy']>['kind'];
 }
 const aws: readonly (readonly [
   string,
@@ -172,6 +173,19 @@ export const legacyColors: ReadonlySet<string> = new Set([
   '#79a950',
   '#d9a15f',
 ]);
+export const componentColors: Record<string, string> = {
+  'network-acl': '#d9534f',
+  docker: '#2496ed',
+  container: '#326ce5',
+  'container-image': '#0d9488',
+  'github-actions': '#24292f',
+  git: '#f05032',
+  pipeline: '#7c3aed',
+  'internet-gateway': '#8c4fff',
+  'nat-gateway': '#c084fc',
+  firewall: '#d97706',
+  'route-table': '#059669',
+};
 export const services: ComponentDefinition[] = [
   ...(['process', 'decision', 'terminal'] as const).map((shape) => ({
     id: `flow.${shape}`,
@@ -193,6 +207,101 @@ export const services: ComponentDefinition[] = [
     aliases: 'flow chart shape',
     kind: 'service' as const,
     shape,
+  })),
+  ...(
+    [
+      ['docker', 'Docker', 'Containers', 'docker engine whale runtime'],
+      ['container', 'Container', 'Containers', 'running container workload'],
+      [
+        'container-image',
+        'Container image',
+        'Containers',
+        'oci image artifact registry',
+      ],
+      [
+        'github-actions',
+        'GitHub Actions',
+        'DevOps',
+        'github actions workflow ci cd automation',
+      ],
+      ['git', 'Git repository', 'DevOps', 'git source code version control'],
+      ['pipeline', 'CI/CD pipeline', 'DevOps', 'build test deploy delivery'],
+      [
+        'internet-gateway',
+        'Internet gateway',
+        'Networking',
+        'vpc igw inbound outbound internet',
+      ],
+      [
+        'nat-gateway',
+        'NAT gateway',
+        'Networking',
+        'vpc nat private egress outbound',
+      ],
+      [
+        'firewall',
+        'Security group',
+        'Networking',
+        'firewall security ingress egress allow deny',
+      ],
+      [
+        'network-acl',
+        'Network ACL',
+        'Networking',
+        'nacl network access control list subnet firewall',
+      ],
+      [
+        'route-table',
+        'Route table',
+        'Networking',
+        'routes routing subnet gateway',
+      ],
+    ] as const
+  ).map(([id, label, category, aliases]) => ({
+    id: `component.${id}`,
+    label,
+    category,
+    aliases,
+    color: componentColors[id] ?? '#4c9aff',
+    glyph: '◇',
+    description: `${category} · ${label}`,
+    kind: 'service' as const,
+    ...(id === 'firewall'
+      ? { policyKind: 'security-group' as const }
+      : id === 'network-acl'
+        ? { policyKind: 'network-acl' as const }
+        : id === 'route-table'
+          ? { policyKind: 'route-table' as const }
+          : {}),
+    asset: `components/${id}.svg`,
+    icon: new URL(`../../assets/components/${id}.svg`, import.meta.url).href,
+  })),
+  ...(
+    [
+      ['pod', 'Pod', 'pod pods workload containers'],
+      [
+        'deployment',
+        'Deployment',
+        'deployment deploy replicas rollout controller',
+      ],
+      ['service', 'Service', 'service svc clusterip discovery load balancing'],
+      ['ingress', 'Ingress', 'ingress ing http https routing controller'],
+      ['namespace', 'Namespace', 'namespace ns group boundary scope'],
+    ] as const
+  ).map(([id, label, aliases]) => ({
+    id: `kubernetes.${id}`,
+    label,
+    color: '#326ce5',
+    glyph: id === 'namespace' ? '▱' : '⬡',
+    description:
+      id === 'namespace'
+        ? 'Kubernetes · namespace boundary'
+        : `Kubernetes · ${label}`,
+    category: 'Kubernetes',
+    aliases: `kubernetes k8s kube ${aliases}`,
+    kind: id === 'namespace' ? ('group' as const) : ('service' as const),
+    asset: `kubernetes/${id}.svg`,
+    icon: new URL(`../../assets/kubernetes/${id}.svg`, import.meta.url).href,
   })),
   ...aws.map(([id, label, file, category, aliases, color]) => ({
     id: `aws.${id}`,

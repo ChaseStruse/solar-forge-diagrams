@@ -200,3 +200,61 @@ User reported that dragging to select moved the native window. Rectangle selecti
 Rectangle-selection delivery: source committed as `eab4757`. Normal non-diagnostic Omarchy 0.1.0-3 package builds successfully from the checksum-verified source archive. Its build passes frontend verification (22 tests / 138 assertions, 183,135-byte initial JS gzip) and both native atomic-write tests. The updated Omarchy install bundle extracts and passes all checksums, package identity and `install.sh --check`. Bundle: `artifacts/omarchy/solar-forge-diagrams-0.1.0-3-omarchy-x86_64.tar.gz`. Package checksums and delivery status are recorded in `benchmarks/results/2026-10-16-marquee-package.json`.
 
 Host upgrade was started with authenticated pacman and is waiting on the operating system's authentication prompt. At the last check the installed package remains 0.1.0-2; do not claim the fix is loaded in the running editor. After authentication completes, save and reopen the application to load 0.1.0-3. The current user session was deliberately left open throughout testing. Original alpha performance exceptions remain unchanged.
+
+## Networking and journey update (2026-10-17)
+
+- Fitting text and notes in both dimensions, proportional resize sizing, tile-width captions, and common 160 × 100 component defaults.
+- Ten offline container, DevOps, and networking pictograms, plus two-zone VPC and networking journey templates.
+- Persisted traffic parameters and editable per-connection rules with IPv4/CIDR validation, undo/redo, and visible denial feedback.
+- Offline GIF89a journey recording, browser download/native atomic save, bounded frame count and dimensions, and cancellation.
+- Validation: 39 Bun tests, lint, TypeScript, production build, bundle budget, and headless Chromium checks of templates and denial feedback. GIF decoding checked independently using FFmpeg. Native Rust compilation/save-dialog validation requires a machine with the Rust/Tauri toolchain.
+
+## Networking review follow-up (2026-10-17)
+
+- Confirmed both templates in Chromium; widened the VPC to reserve a left margin for the internet gateway, route table, and security group outside the AZ footprints. Geometry regression checks cover containment and AZ separation.
+- Wrapped service captions in the canvas atlas and SVG export; assigned individual component colours to both catalog tiles and SVG artwork. Deny/Unrestricted disable ignored traffic fields.
+- Replaced RGB332 with an image-adaptive median-cut palette and optional Floyd–Steinberg dithering; reused the palette/cache during worker encoding to keep colours stable and playback responsive.
+- Added remembered 2–120 second recording settings, binary native IPC, and a 12-bit LZW EOF limit with independent decoder regression tests for a dictionary that fills at the final pixel.
+- Validation: 48 tests, lint, TypeScript, production build, bundle budget; browser checks for templates, rules, longer recordings and cancellation; FFmpeg decoding of exported GIFs. Native Rust compilation and save-dialog checks remain unavailable without the Rust/Tauri toolchain.
+
+## Infrastructure import and resource reachability (2026-10-17)
+
+- `8cbe0d7`: deterministic layered layout, nested containment and spacing, editor command, and undo/redo.
+- `a23ced0`: offline Terraform HCL/show JSON, CloudFormation YAML/JSON, and Compose import; previews, warnings, file selection, sample infrastructure, validated network policy schema, and evaluator foundation.
+- `0f886cd`: resource policy/attachment editor, paged reachability matrix, decision details, virtual gateway journey paths, dependency-edge separation, and reference-safe copying/deletion.
+- Follow-up hardening: plan-reference recovery, conditional/partial data remains Unknown, missing ACL references cannot broaden access, static dependency rendering, and GIF export of matrix-selected journeys. Updated scope, dependency review and redistributable YAML notice.
+- Verification: 70 tests plus lint, strict TypeScript, production build and bundle budget. Browser smoke checks exercise import, resource attachments, PostgreSQL allow/SSH deny, matrix tracing, policy edits and undo, Compose isolation, CloudFormation file selection and checked-path GIF export. Native compilation/dialog validation remains unavailable without Rust/Tauri tooling.
+
+### 2026-10-17 — Saved scenarios, recorded walkthroughs, detail boards and interchange
+
+Added per-board named traffic profiles with optional source/destination resources, reusable example profiles and a scenario picker in the reachability matrix. Resource walkthrough captions appear live and are composited into GIF/video frames. Scenarios, captions and detail links are validated and serialized in version-1 project documents.
+
+Linked detail boards live in a flat embedded project library. Resources can create/open/reuse links; canvas double-click, Layers links, Back and project navigation open them. One history records edits across boards, while Save/Save As and recovery serialize the entire project. Infrastructure imports now replace the current board as an undoable graph transaction, preserving other detail boards.
+
+Added offline MediaRecorder WebM/MP4 recording with runtime codec detection, configurable 2–120 second duration, up to 1280 × 720 / 30 fps, captions, cancellation and a 100 MB cap. Native video payloads use binary IPC. Added deterministic Mermaid and PlantUML exports for the active board and uncompressed multi-page draw.io project export with internal detail-page links. These architecture exports do not carry resource-policy simulation or saved scenarios; native JSON remains the complete project format.
+
+Validation: `bun run verify` passes (79 tests, TypeScript, Biome, production build and bundle budget; initial JS 223,706 bytes gzip / 358,400). Local headless Chromium exercised profile save/apply, detail creation/navigation, cross-board undo/redo, project serialization, import-in-detail and undo, live captions, MP4/WebM recording and Esc cancellation. `ffprobe` independently identified VP9 WebM and H.264 MP4 output. The actual Mermaid 11.15 parser/renderer accepted all seven built-in templates. DOMParser accepted draw.io XML and all generated detail links resolved to exported page IDs. Live captions were visually inspected. Unit tests cover malformed project data, stable text exports/escaping, recording cleanup/duration and raw native video transfer. Native Rust compilation/dialogs and PlantUML rendering were not exercised in this environment; no Rust or Java runtime is installed. Existing installer bundles were not rebuilt.
+
+### 2026-10-17 — Kubernetes resource catalog
+
+Added Pod, Deployment, Service, Ingress and Namespace using five unmodified official Kubernetes community SVGs under Apache-2.0. The assets include the unmodified license/README, a pinned upstream revision and SHA-256 manifest; packaging notice collection includes this new artwork. All resources are searchable through Kubernetes/k8s aliases. Namespace is a group, with its icon in the canvas header, Layers and self-contained SVG export. Existing document hierarchy, layout, resizing and drill-down controls apply.
+
+Added the Kubernetes web application template: external clients → Ingress → Service → two Pods in a namespace. Deployment management edges are dependencies and do not enter traffic journeys; notes identify the omitted ReplicaSet and the logical namespace scope. Traffic hops have walkthrough captions. Azure/GCP catalog expansion remains deferred to audience demand.
+
+Validation: `bun run verify` passes (81 tests, TypeScript, Biome, production build and size checks). New catalog tests validate all pinned SVG hashes, namespace grouping, containment, document roundtrips, and exclusion of management dependencies from journeys. Local Chromium loaded all five icons, displayed the template in Plan and 2.5D views, played its narrated journey, roundtripped its document, ran automatic layout and generated valid self-contained SVG with all seven resource images including the namespace header. Screenshots were visually inspected and management captions were removed to prevent overlap. The license collection script passes Python syntax validation. No native code changed; existing installer bundles were not rebuilt.
+
+### 2026-10-17 — Performance pass
+
+Profiling on the target Intel UHD (TGL GT1) GPU showed 4× MSAA dominated frame time, not draw calls. The context is now created without MSAA. While the view moves (pan, zoom, drag) the board renders through one FXAA pass; 200 ms after motion stops, and for every PNG/clipboard/GIF/video capture, it renders once with 4× MSAA into an sRGB-encoded target. Settled views and exports are pixel-identical to the previous renderer (SSIM 1.000). Caption fitting measured every candidate line at every step of a 24-step size search; it now measures each distinct line once and returns immediately when the preferred size fits. Infrastructure import resolved attribute references with a linear scan per reference; it now uses address lookups. Reachability checks share one node index instead of rebuilding it for every ancestor lookup.
+
+Native diagnostics, alternating builds in the same 1253 × 1376 window: 500-node pan p95 51–55 → 23–29 ms, 2000-node 78–86 → 32–41 ms; board load roughly halves (500: ~1050 → ~590 ms, 2000: ~3100 → ~1600 ms). Camera view switches render settled frames and are unchanged. Import of 4,500 Terraform instances 27 s → 0.8 s; a 12 × 12 reachability matrix page over 4,585 nodes 4.1 s → 0.26 s. Results: `benchmarks/results/2026-10-17-performance-pass.json`. Continuous flow animation still renders settled-quality frames, so its GPU cost is unchanged. Memory (RSS/PSS) was not re-measured.
+
+Validation: `bun run verify` passes (83 tests including new text-fitting and reference-resolution regression tests). Native diagnostics (context-loss recovery, editor workflows, idle invalidation) pass on the rebuilt binary. Installer bundles were not rebuilt.
+
+### 2026-10-17 — Resilient Terraform previews and worker imports
+
+Fixed HCL object/list comprehensions, nested quoted interpolation arguments, and quoted structural characters. Unsupported expressions remain opaque and mark affected resources incomplete; malformed/unterminated syntax still reports an input error. Imported IPv4 values, firewall CIDRs/ports, route destinations and ACL priorities are validated before portable document validation. Invalid rules are omitted with an incomplete-policy warning; valid siblings survive. Oversized/invalid literal counts produce one incomplete, unexpanded resource placeholder instead of aborting the import. AWS imports include one Internet actor outside boundaries without inventing traffic arrows or permissions.
+
+Preview parsing, normalization, validation and automatic layout now run in a disposable module worker. Editing inputs, changing formats or closing the importer cancels the worker and invalidates its result. Completion, worker errors, decoding errors and post failures all release the worker. Import application continues to use the existing undoable current-board replacement.
+
+Validation: `bun run verify` passes with 91 tests in the current workspace, including existing uncommitted performance work. New tests cover every reported Terraform reproduction, malformed syntax, valid sibling preservation, placeholder counts, portable document roundtrips, the external actor, quoted delimiters, and worker termination/error/cancellation paths. In local Chromium a real worker imported 2,500 instances while a UI timer continued running; close/reopen cancelled the old preview and only the new preview applied. The emitted production worker loaded and returned a preview under the native CSP with no browser exceptions. Native WebKit execution and installer rebuilding were not performed. Existing uncommitted performance changes were preserved and excluded from these commits.

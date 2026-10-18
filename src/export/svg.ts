@@ -2,7 +2,7 @@ import { findService } from '../catalog/services';
 import type { DiagramDocument } from '../domain/document';
 import { worldPosition } from '../domain/document';
 import { fansOf, obstaclesOf, routeEdge } from '../domain/routing';
-import { fontSize, wrapText } from '../domain/text';
+import { fitText, fontSize, serviceCaption } from '../domain/text';
 
 const xmlText = (text: string) =>
   text.replace(
@@ -17,6 +17,12 @@ const xmlText = (text: string) =>
       })[c] ?? c,
   );
 export async function exportSvg(doc: DiagramDocument): Promise<string> {
+  const context = document.createElement('canvas').getContext('2d');
+  if (!context) throw Error('Text canvas unavailable');
+  const measure = (text: string, size: number, weight = 600) => {
+    context.font = `${weight} ${size}px system-ui, sans-serif`;
+    return context.measureText(text).width;
+  };
   const nodes = new Map(doc.nodes.map((n) => [n.id, n]));
   const positioned = doc.nodes.map((node) => ({
     node,
@@ -38,7 +44,7 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
   const zs = [
     ...positioned.flatMap(({ node, p }) => [
       p.z - node.depth / 2 - 30,
-      p.z + node.depth / 2 + 60,
+      p.z + node.depth / 2 + (node.kind === 'service' ? node.depth + 40 : 60),
     ]),
     ...routes.flatMap((r) => r.points.map((p) => p.z)),
   ];
@@ -71,10 +77,15 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
   const groups = positioned
     .filter(({ node }) => node.kind === 'group')
     .sort((a, b) => a.p.level - b.p.level)
-    .map(
-      ({ node, p }) =>
-        `<g><title>${xmlText(node.label)}</title><rect x="${p.x - node.width / 2}" y="${p.z - node.depth / 2}" width="${node.width}" height="${node.depth}" rx="8" fill="#f2f5f8" stroke="${node.color}" stroke-width="2"/><text x="${p.x - node.width / 2 + 14}" y="${p.z - node.depth / 2 + 24}" fill="#43546b" font-size="15">${xmlText(node.label)}</text></g>`,
-    )
+    .map(({ node, p }) => {
+      const asset = findService(node.serviceId ?? node.label)?.asset;
+      const image = asset ? icons.get(asset) : undefined;
+      const headerIcon =
+        image && node.width >= 120
+          ? `<image x="${p.x + node.width / 2 - 42}" y="${p.z - node.depth / 2 + 10}" width="28" height="28" href="${image}"/>`
+          : '';
+      return `<g><title>${xmlText(node.label)}</title><rect x="${p.x - node.width / 2}" y="${p.z - node.depth / 2}" width="${node.width}" height="${node.depth}" rx="8" fill="#f2f5f8" stroke="${node.color}" stroke-width="2"/><text x="${p.x - node.width / 2 + 14}" y="${p.z - node.depth / 2 + 24}" fill="#43546b" font-size="15">${xmlText(node.label)}</text>${headerIcon}</g>`;
+    })
     .join('');
   const edges = routes
     .map(({ edge, points }) => {
@@ -89,11 +100,21 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
         z = p.z - node.depth / 2;
       const service = findService(node.serviceId ?? node.label);
       const image = service?.asset ? icons.get(service.asset) : undefined;
+      const caption = serviceCaption(node, measure);
+      const captionTop = node.shape
+        ? p.z - (caption.lines.length * caption.size * 1.28) / 2
+        : z + node.depth + 12;
+      const captionText = caption.lines
+        .map(
+          (line, i) =>
+            `<tspan x="${p.x}" y="${captionTop + (i + 0.85) * caption.size * 1.28}">${xmlText(line)}</tspan>`,
+        )
+        .join('');
       const shape =
         node.shape === 'decision'
           ? `<polygon points="${p.x},${z} ${x + node.width},${p.z} ${p.x},${z + node.depth} ${x},${p.z}"`
           : `<rect x="${x}" y="${z}" width="${node.width}" height="${node.depth}" rx="${node.shape === 'terminal' ? node.depth / 2 : 8}"`;
-      return `<g><title>${xmlText(node.label)}</title>${shape} fill="#fff" stroke="${node.color}" stroke-width="2"/>${image && !node.shape ? `<image href="${image}" x="${p.x - 26}" y="${p.z - 26}" width="52" height="52"/>` : ''}<text x="${p.x}" y="${node.shape ? p.z + 5 : z + node.depth + 26}" text-anchor="middle" font-size="16" fill="#172c43">${xmlText(node.label)}</text></g>`;
+      return `<g><title>${xmlText(node.label)}</title>${shape} fill="#fff" stroke="${node.color}" stroke-width="2"/>${image && !node.shape ? `<image href="${image}" x="${p.x - 26}" y="${p.z - 26}" width="52" height="52"/>` : ''}<text text-anchor="middle" font-size="${caption.size}" fill="#172c43">${captionText}</text></g>`;
     })
     .join('');
   const annotations = positioned
@@ -102,16 +123,13 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
       const note = node.kind === 'note';
       const x = p.x - node.width / 2,
         z = p.z - node.depth / 2;
-      const size = fontSize(node);
       const padding = note ? 14 : 4;
-      // Approximate glyph width; SVG has no layout engine to wrap for us.
-      const lines = wrapText(
+      const { size, lines } = fitText(
         node.label,
         node.width - padding * 2,
-        (text) => text.length * size * 0.56,
-      ).slice(
-        0,
-        Math.max(1, Math.floor((node.depth - padding) / (size * 1.28))),
+        node.depth - padding * 2,
+        fontSize(node),
+        (text, size) => measure(text, size, note ? 500 : 600),
       );
       const text = lines
         .map(
