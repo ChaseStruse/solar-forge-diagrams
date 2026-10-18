@@ -276,6 +276,33 @@ export const services: ComponentDefinition[] = [
     asset: `components/${id}.svg`,
     icon: new URL(`../../assets/components/${id}.svg`, import.meta.url).href,
   })),
+  ...(
+    [
+      ['pod', 'Pod', 'pod pods workload containers'],
+      [
+        'deployment',
+        'Deployment',
+        'deployment deploy replicas rollout controller',
+      ],
+      ['service', 'Service', 'service svc clusterip discovery load balancing'],
+      ['ingress', 'Ingress', 'ingress ing http https routing controller'],
+      ['namespace', 'Namespace', 'namespace ns group boundary scope'],
+    ] as const
+  ).map(([id, label, aliases]) => ({
+    id: `kubernetes.${id}`,
+    label,
+    color: '#326ce5',
+    glyph: id === 'namespace' ? '▱' : '⬡',
+    description:
+      id === 'namespace'
+        ? 'Kubernetes · namespace boundary'
+        : `Kubernetes · ${label}`,
+    category: 'Kubernetes',
+    aliases: `kubernetes k8s kube ${aliases}`,
+    kind: id === 'namespace' ? ('group' as const) : ('service' as const),
+    asset: `kubernetes/${id}.svg`,
+    icon: new URL(`../../assets/kubernetes/${id}.svg`, import.meta.url).href,
+  })),
   ...aws.map(([id, label, file, category, aliases, color]) => ({
     id: `aws.${id}`,
     label,

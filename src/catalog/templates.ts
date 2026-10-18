@@ -1,5 +1,6 @@
 import type { DiagramDocument, DiagramNode } from '../domain/document';
 import { sampleDocument } from '../domain/document';
+import { kubernetesExample } from './kubernetes';
 import { vpcExample } from './networking';
 import { boundaryColors, findService } from './services';
 export interface Template {
@@ -50,6 +51,11 @@ function architecture(title: string, ids: readonly string[]): DiagramDocument {
   };
 }
 export const templates: Template[] = [
+  {
+    id: 'kubernetes',
+    name: 'Kubernetes · web application',
+    create: kubernetesExample,
+  },
   {
     id: 'vpc',
     name: 'VPC · public and private subnets',

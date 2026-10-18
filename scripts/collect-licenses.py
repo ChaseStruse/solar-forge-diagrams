@@ -50,6 +50,7 @@ shutil.copyfile(root / 'node_modules/yaml/LICENSE', yaml_notice / 'LICENSE')
 for filename in ['SOURCE_LICENSE.md', 'THIRD_PARTY_NOTICES.md']:
     shutil.copyfile(root / filename, out / filename)
 shutil.copytree(root / 'assets/aws', out / 'aws-architecture-icons', dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.svg'))
+shutil.copytree(root / 'assets/kubernetes', out / 'kubernetes-icons', dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.svg'))
 (out / 'LICENSE-REVIEW.txt').write_text('\n'.join(missing) + '\n' if missing else 'All normal-target package license texts collected.\n')
 print(f'Collected notices for {len(packages)} Rust packages, Three.js, and yaml into {out}')
 if missing:
