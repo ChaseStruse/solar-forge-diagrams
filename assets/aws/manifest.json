@@ -108,5 +108,15 @@
     "file": "amazon-sagemaker-ai-model.svg",
     "sourcePath": "Resource-Icons_07312026/Res_Artificial-Intelligence/Res_Amazon-SageMaker-AI_Model_48.svg",
     "sha256": "7636d8ac74a8bc84bec92ec7beaa471a7f4a8f0c65474f4ea190ba89c3147b7d"
+  },
+  {
+    "file": "aws-identity-and-access-management.svg",
+    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Security-Identity/64/Arch_AWS-Identity-and-Access-Management_64.svg",
+    "sha256": "3135793557c065d0481a3985ccc0574b36278d56a2e2c5d59107d0d28f51b827"
+  },
+  {
+    "file": "aws-iam-role.svg",
+    "sourcePath": "Resource-Icons_07312026/Res_Security-Identity/Res_AWS-Identity-Access-Management_Role_48.svg",
+    "sha256": "e47256f0e788e6bda40d17b0da4cf9abab170a29dfc7a22f579e13f4891407da"
   }
 ]

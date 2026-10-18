@@ -198,6 +198,22 @@ const aws: readonly (readonly [
     'ml model inference real time recommendations',
     '#01a88d',
   ],
+  [
+    'iam',
+    'IAM',
+    'AWS-Identity-and-Access-Management',
+    'Security',
+    'identity access management users groups permissions policies security',
+    '#dd344c',
+  ],
+  [
+    'iam-role',
+    'IAM role',
+    'AWS-IAM-Role',
+    'Security',
+    'identity access role assume sts temporary credentials instance profile',
+    '#dd344c',
+  ],
 ];
 /** Official AWS architecture group colours. */
 export const boundaryColors = {
