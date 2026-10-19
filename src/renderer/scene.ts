@@ -15,7 +15,6 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
-  MeshLambertMaterial,
   type Object3D,
   PerspectiveCamera,
   Plane,
@@ -117,7 +116,6 @@ interface Tile {
   index: number;
   node: DiagramNode;
   group: Group;
-  material: MeshLambertMaterial;
   label: Object3D;
   headerIcon?: Object3D;
   annotation?: { root: Group; dispose: () => void };
@@ -175,6 +173,8 @@ export class DiagramScene {
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly content = new Group();
   private readonly geometry = new BoxGeometry(1, 1, 1);
+  /** Picking boxes are never drawn, so they all share one material. */
+  private readonly pickMaterial = new MeshBasicMaterial();
   private readonly shapeGeometries = createFlowGeometries();
   private readonly tileOutline = new EdgesGeometry(this.geometry);
   private details: TileDetails | undefined;
@@ -493,10 +493,7 @@ export class DiagramScene {
     else this.selectMany(ids);
   }
   private releaseContent(): void {
-    for (const tile of this.tiles.values()) {
-      tile.material.dispose();
-      tile.annotation?.dispose();
-    }
+    for (const tile of this.tiles.values()) tile.annotation?.dispose();
     this.bodies?.dispose();
     this.bodies = undefined;
     this.details?.dispose();
@@ -553,15 +550,9 @@ export class DiagramScene {
     for (const [index, node] of document.nodes.entries()) {
       this.nodeIndex.set(node.id, node);
       const group = new Group();
-      const material = new MeshLambertMaterial({
-        color: node.kind === 'group' ? '#172c3a' : '#172b3a',
-        transparent: node.kind === 'group',
-        opacity: node.kind === 'group' ? 0.12 : 1,
-        depthWrite: node.kind !== 'group',
-      });
       const mesh = new Mesh(
         node.shape ? this.shapeGeometries[node.shape] : this.geometry,
-        material,
+        this.pickMaterial,
       );
       mesh.scale.set(node.width, pickHeight(node), node.depth);
       mesh.userData.nodeId = node.id;
@@ -577,7 +568,6 @@ export class DiagramScene {
           index,
           node,
           group,
-          material,
           label: new Group(),
           annotation,
         });
@@ -591,7 +581,7 @@ export class DiagramScene {
       }
       if (node.kind === 'service' && !node.shape) {
         const glyph = this.labels.create(
-          findService(node.serviceId ?? node.label)?.id ?? node.label,
+          component?.id ?? node.label,
           this.camera.zoom,
           'icon',
         );
@@ -616,7 +606,6 @@ export class DiagramScene {
         index,
         node,
         group,
-        material,
         label,
         ...(headerIcon ? { headerIcon } : {}),
       };
@@ -2204,6 +2193,7 @@ export class DiagramScene {
     this.handleGeometry.dispose();
     this.handleMaterial.dispose();
     this.geometry.dispose();
+    this.pickMaterial.dispose();
     this.tileOutline.dispose();
     this.haloMaterial.dispose();
     this.flowMaterial.dispose();
