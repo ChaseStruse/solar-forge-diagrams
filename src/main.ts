@@ -13,12 +13,11 @@ import { defaultScenarios } from './domain/scenarios';
 import {
   defaultRecordingOptions,
   validateRecordingOptions,
-} from './export/gif';
+} from './export/recording-options';
 import { RecoveryWriter } from './persistence/recovery';
 import type { OpenedFile } from './platform/files';
 import { exportGif, exportText, exportVideo } from './platform/files';
 import { choose, commandPalette, promptText } from './ui/dialogs';
-import { chooseExample } from './ui/examples';
 import { infrastructureImporter } from './ui/importer';
 import { renderNetworkProperties } from './ui/network-properties';
 import { reachabilityPanel } from './ui/reachability';
@@ -335,6 +334,7 @@ for (const id of ['examples', 'browse-examples']) {
     void action(async () => {
       element('file-menu').hidden = true;
       element('menu').setAttribute('aria-expanded', 'false');
+      const { chooseExample } = await import('./ui/examples');
       const template = await chooseExample();
       if (!template || !(await canReplace())) return;
       replaceDocument(template.create());
