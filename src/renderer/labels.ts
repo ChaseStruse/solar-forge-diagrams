@@ -54,6 +54,23 @@ export class LabelAtlas {
       kind: LabelKind;
     }
   >();
+  /** Text advances by font and string; they survive reloads (system fonts). */
+  private readonly widths = new Map<string, number>();
+  private measure(
+    context: CanvasRenderingContext2D,
+    font: string,
+    text: string,
+  ): number {
+    const key = `${font}\n${text}`;
+    let width = this.widths.get(key);
+    if (width === undefined) {
+      if (this.widths.size > 50_000) this.widths.clear();
+      context.font = font;
+      width = context.measureText(text).width;
+      this.widths.set(key, width);
+    }
+    return width;
+  }
   private readonly matrix = new Matrix4();
   private readonly position = new Vector3();
   private readonly depth = new Vector3();
@@ -96,13 +113,17 @@ export class LabelAtlas {
           : kind === 'edge'
             ? '500 26px system-ui'
             : '600 34px system-ui';
-    page.context.font = font;
     const caption =
       kind === 'node'
-        ? serviceCaption({ label: text, ...bounds }, (line, size) => {
-            page.context.font = `600 ${size * resolution}px system-ui`;
-            return page.context.measureText(line).width / resolution;
-          })
+        ? serviceCaption(
+            { label: text, ...bounds },
+            (line, size) =>
+              this.measure(
+                page.context,
+                `600 ${size * resolution}px system-ui`,
+                line,
+              ) / resolution,
+          )
         : undefined;
     const captionFont = caption
       ? `600 ${caption.size * resolution}px system-ui`
@@ -120,15 +141,18 @@ export class LabelAtlas {
       ? Math.ceil(
           Math.max(
             1,
-            ...caption.lines.map(
-              (line) => page.context.measureText(line).width,
+            ...caption.lines.map((line) =>
+              this.measure(page.context, captionFont, line),
             ),
           ) +
             padding * 2,
         )
       : kind === 'icon'
         ? 92
-        : Math.min(520, Math.ceil(page.context.measureText(text).width) + 30);
+        : Math.min(
+            520,
+            Math.ceil(this.measure(page.context, captionFont, text)) + 30,
+          );
     if (page.x + width > SIZE) {
       page.x = 0;
       page.y += page.rowHeight;
