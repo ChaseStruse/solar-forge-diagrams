@@ -645,19 +645,32 @@ function inspect(): void {
   );
   updateLayers();
 }
+/**
+ * Loading and reselecting fires the selection callbacks several times in a
+ * row; batched updates keep the selection state but inspect once at the end.
+ */
+let inspectDeferred = false;
+function deferInspect(task: () => void): void {
+  inspectDeferred = true;
+  try {
+    task();
+  } finally {
+    inspectDeferred = false;
+  }
+}
 scene.onSelect = (node) => {
   checkedJourney = undefined;
   selected = node?.id;
   selectedIds = new Set(scene.selection);
   selectedEdge = undefined;
-  inspect();
+  if (!inspectDeferred) inspect();
 };
 scene.onSelectEdge = (id) => {
   checkedJourney = undefined;
   selected = undefined;
   selectedIds = new Set();
   selectedEdge = id;
-  inspect();
+  if (!inspectDeferred) inspect();
 };
 scene.onMove = (id, from, to) => {
   history.execute({ type: 'move', id, from, to });
@@ -679,7 +692,7 @@ function replaceDocument(next: typeof current): void {
   history = new DocumentHistory(current);
   selected = undefined;
   dirty = false;
-  scene.load(current);
+  deferInspect(() => scene.load(current));
   scene.fit();
   inspect();
   updateHeader();
@@ -995,23 +1008,28 @@ function travelHistory(redo: boolean): void {
   scene.finishInteraction();
   const edit = redo ? history.redo() : history.undo();
   if (!edit) return;
-  if (current !== history.document) {
-    current = history.document;
-    diagramTrail = current === project ? [] : [project];
-    scene.load(current);
-    scene.fit();
-  }
-  const selection = [...selectedIds];
-  const edge = selectedEdge;
-  if (edit.type === 'move') scene.refreshPosition(edit.id);
-  else {
-    scene.load(current);
-    scene.selectMany(
-      selection.filter((id) => current.nodes.some((node) => node.id === id)),
-    );
-    if (edge && current.edges.some((e) => e.id === edge))
-      scene.selectEdge(edge);
-  }
+  const switched = current !== history.document;
+  deferInspect(() => {
+    if (switched) {
+      current = history.document;
+      diagramTrail = current === project ? [] : [project];
+      scene.load(current);
+      scene.fit();
+    }
+    const selection = [...selectedIds];
+    const edge = selectedEdge;
+    if (edit.type === 'move') {
+      if (!switched) scene.refreshPosition(edit.id);
+    } else {
+      // A board switch has just loaded this exact document.
+      if (!switched) scene.load(current);
+      scene.selectMany(
+        selection.filter((id) => current.nodes.some((node) => node.id === id)),
+      );
+      if (edge && current.edges.some((e) => e.id === edge))
+        scene.selectEdge(edge);
+    }
+  });
   updateHeader();
   inspect();
   notify(`${redo ? 'Redid' : 'Undid'} ${edit.type}`);
@@ -1019,36 +1037,43 @@ function travelHistory(redo: boolean): void {
 element('undo').onclick = () => travelHistory(false);
 element('redo').onclick = () => travelHistory(true);
 
+/** Palette rows are built once; searching only filters and re-orders them. */
+const serviceRows = services.map((service) => ({
+  service,
+  search:
+    `${service.label} ${service.category} ${service.aliases}`.toLowerCase(),
+  button: undefined as HTMLButtonElement | undefined,
+}));
+function serviceButton(service: (typeof services)[number]): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.className = 'service';
+  const symbol = document.createElement('span');
+  symbol.className = 'service-symbol';
+  symbol.style.color = service.color;
+  if (service.icon) {
+    const image = document.createElement('img');
+    image.src = service.icon;
+    image.alt = '';
+    symbol.append(image);
+  } else symbol.textContent = service.glyph;
+  const text = document.createElement('span');
+  const name = document.createElement('strong');
+  name.textContent = service.label;
+  const detail = document.createElement('small');
+  detail.textContent = service.description;
+  text.append(name, detail);
+  button.append(symbol, text);
+  button.onclick = () => addService(service);
+  return button;
+}
 function populateServices(query = ''): void {
   const list = element('services');
+  const needle = query.toLowerCase();
   list.replaceChildren();
-  for (const service of services) {
-    if (
-      !`${service.label} ${service.category} ${service.aliases}`
-        .toLowerCase()
-        .includes(query.toLowerCase())
-    )
-      continue;
-    const button = document.createElement('button');
-    button.className = 'service';
-    const symbol = document.createElement('span');
-    symbol.className = 'service-symbol';
-    symbol.style.color = service.color;
-    if (service.icon) {
-      const image = document.createElement('img');
-      image.src = service.icon;
-      image.alt = '';
-      symbol.append(image);
-    } else symbol.textContent = service.glyph;
-    const text = document.createElement('span');
-    const name = document.createElement('strong');
-    name.textContent = service.label;
-    const detail = document.createElement('small');
-    detail.textContent = service.description;
-    text.append(name, detail);
-    button.append(symbol, text);
-    button.onclick = () => addService(service);
-    list.append(button);
+  for (const row of serviceRows) {
+    if (!row.search.includes(needle)) continue;
+    row.button ??= serviceButton(row.service);
+    list.append(row.button);
   }
   if (!list.childElementCount) {
     const empty = document.createElement('p');
@@ -1092,7 +1117,7 @@ function addService(service: (typeof services)[number]): void {
       color: service.color,
     },
   });
-  scene.load(current);
+  deferInspect(() => scene.load(current));
   scene.select(id);
   scene.reveal(id);
   updateHeader();
@@ -1130,7 +1155,7 @@ function placeAnnotation(kind: 'text' | 'note', x: number, z: number): void {
       color: service.color,
     },
   });
-  scene.load(current);
+  deferInspect(() => scene.load(current));
   scene.select(id);
   updateHeader();
   selectTool('select');
@@ -1347,10 +1372,12 @@ function commit(edit: Edit, ids: readonly string[] = [...selectedIds]): void {
   scene.finishInteraction();
   const edge = selectedEdge;
   if (!history.execute(edit)) return;
-  scene.load(current);
-  scene.selectMany(ids);
-  if (!ids.length && edge && current.edges.some((e) => e.id === edge))
-    scene.selectEdge(edge);
+  deferInspect(() => {
+    scene.load(current);
+    scene.selectMany(ids);
+    if (!ids.length && edge && current.edges.some((e) => e.id === edge))
+      scene.selectEdge(edge);
+  });
   updateHeader();
   inspect();
   notify(edit.type === 'graph' ? edit.label : `Updated ${edit.type}`);
@@ -1461,7 +1488,7 @@ function navigateDiagram(board: typeof current, returning = false): void {
   selectedEdge = undefined;
   selectedIds.clear();
   checkedJourney = undefined;
-  scene.load(current);
+  deferInspect(() => scene.load(current));
   scene.fit();
   updateHeader();
   inspect();
