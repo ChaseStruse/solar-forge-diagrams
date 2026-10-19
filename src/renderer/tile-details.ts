@@ -44,12 +44,20 @@ export class TileDetails {
   );
   private readonly position = new Vector3();
   private readonly scale = new Vector3();
+  /** Unit-box outline vertices, copied once out of the shared geometry. */
+  private readonly template: Float32Array;
 
   constructor(
     count: number,
-    private readonly source: BufferAttribute | InterleavedBufferAttribute,
+    source: BufferAttribute | InterleavedBufferAttribute,
     private readonly palette: ScenePalette,
   ) {
+    this.template = new Float32Array(source.count * 3);
+    for (let vertex = 0; vertex < source.count; vertex++) {
+      this.template[vertex * 3] = source.getX(vertex);
+      this.template[vertex * 3 + 1] = source.getY(vertex);
+      this.template[vertex * 3 + 2] = source.getZ(vertex);
+    }
     this.shadowMaterial = new MeshBasicMaterial({
       color: palette.shadow,
       transparent: true,
@@ -111,43 +119,39 @@ export class TileDetails {
       this.faces.setMatrixAt(index, this.matrix);
       this.shadows.setMatrixAt(index, this.matrix);
     }
-    for (const mesh of [this.faces, this.shadows]) {
-      mesh.instanceMatrix.addUpdateRange(index * 16, 16);
-      mesh.instanceMatrix.needsUpdate = true;
-    }
+    this.faces.instanceMatrix.addUpdateRange(index * 16, 16);
+    this.faces.instanceMatrix.needsUpdate = true;
+    this.shadows.instanceMatrix.addUpdateRange(index * 16, 16);
+    this.shadows.instanceMatrix.needsUpdate = true;
     tinted(
       this.color,
       this.palette.outline,
       node.color,
       node.kind === 'group' ? 0.85 : this.palette.outlineTint,
     );
-    for (let vertex = 0; vertex < this.source.count; vertex++)
-      this.colors.setXYZ(
-        index * this.source.count + vertex,
-        this.color.r,
-        this.color.g,
-        this.color.b,
-      );
-    this.colors.addUpdateRange(
-      index * this.source.count * 3,
-      this.source.count * 3,
-    );
+    const template = this.template;
+    const start = index * template.length;
+    const colors = this.colors.array;
+    const { r, g, b } = this.color;
+    for (let i = start, end = start + template.length; i < end; i += 3) {
+      colors[i] = r;
+      colors[i + 1] = g;
+      colors[i + 2] = b;
+    }
+    this.colors.addUpdateRange(start, template.length);
     this.colors.needsUpdate = true;
     // Shapes and annotations draw their own outline (or none).
     const flat = !!node.shape || node.kind === 'text' || node.kind === 'note';
-    for (let vertex = 0; vertex < this.source.count; vertex++)
-      this.positions.setXYZ(
-        index * this.source.count + vertex,
-        world.x + this.source.getX(vertex) * (flat ? 0 : node.width),
-        world.y +
-          this.source.getY(vertex) *
-            (flat ? 0 : node.kind === 'group' ? 2 : 24),
-        world.z + this.source.getZ(vertex) * (flat ? 0 : node.depth),
-      );
-    this.positions.addUpdateRange(
-      index * this.source.count * 3,
-      this.source.count * 3,
-    );
+    const sx = flat ? 0 : node.width;
+    const sy = flat ? 0 : node.kind === 'group' ? 2 : 24;
+    const sz = flat ? 0 : node.depth;
+    const positions = this.positions.array;
+    for (let i = 0; i < template.length; i += 3) {
+      positions[start + i] = world.x + (template[i] ?? 0) * sx;
+      positions[start + i + 1] = world.y + (template[i + 1] ?? 0) * sy;
+      positions[start + i + 2] = world.z + (template[i + 2] ?? 0) * sz;
+    }
+    this.positions.addUpdateRange(start, template.length);
     this.positions.needsUpdate = true;
   }
   public dispose(): void {
