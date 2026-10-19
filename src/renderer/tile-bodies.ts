@@ -109,7 +109,13 @@ export class TileBodies {
         node.color,
         palette.monochrome ? 0 : 0.35,
       );
-    else tinted(this.color, palette.tile, node.color, palette.tileTint);
+    else
+      tinted(
+        this.color,
+        palette.tile,
+        node.color,
+        palette.monochrome ? 0 : palette.tileTint,
+      );
     if (selected) this.color.lerp(parsed(palette.selected), 0.12);
     return this.color;
   }

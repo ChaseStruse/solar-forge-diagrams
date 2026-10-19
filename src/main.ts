@@ -135,7 +135,8 @@ let themeEffects = (() => {
 function applyThemeChrome(): void {
   applyThemeCss(theme);
   document.documentElement.dataset.fx = themeEffects ? 'on' : 'off';
-  element('forge-mark').textContent = theme.mark;
+  if (theme.markSvg) element('forge-mark').innerHTML = theme.markSvg;
+  else element('forge-mark').textContent = theme.mark;
   renderAmbient(element('theme-fx'), themeEffects ? theme.ambient : undefined);
 }
 applyThemeChrome();
@@ -170,7 +171,7 @@ function setTheme(id: string): void {
   try {
     localStorage.setItem('solar-forge-theme', theme.id);
   } catch {}
-  notify(`${theme.mark} ${theme.name} · ${theme.tagline}`);
+  notify(`${theme.name} · ${theme.tagline}`);
 }
 for (const [index, option] of themes.entries()) {
   if (option.group !== themes[index - 1]?.group) {
@@ -186,7 +187,8 @@ for (const [index, option] of themes.entries()) {
   swatch.className = 'theme-swatch';
   swatch.style.background = `linear-gradient(135deg, ${option.css.bg} 0 45%, ${option.css.accent} 45% 72%, ${option.css.hot} 72%)`;
   swatch.style.color = option.css.text ?? '';
-  swatch.textContent = option.mark;
+  if (option.markSvg) swatch.innerHTML = option.markSvg;
+  else swatch.textContent = option.mark;
   const text = document.createElement('span');
   text.className = 'theme-text';
   const name = document.createElement('strong');

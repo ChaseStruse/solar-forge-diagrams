@@ -178,21 +178,21 @@ const decorations: Record<Backdrop, Painter> = {
     for (const side of [-1, 1]) {
       context.beginPath();
       for (let t = 0; t <= 1; t += 0.01) {
-        const angle = -Math.PI / 2 + t * Math.PI * 2.6;
-        const r = 92 * Math.exp(-1.15 * t);
-        const x = cx + side * (64 + Math.cos(angle) * r);
-        const y = cy - 40 + Math.sin(angle) * r;
+        const angle = -Math.PI / 2 + t * Math.PI * 2.4;
+        const r = 46 * Math.exp(-1.2 * t);
+        const x = cx + side * (52 + Math.cos(angle) * r);
+        const y = cy - 50 + Math.sin(angle) * r;
         if (t === 0) context.moveTo(x, y);
         else context.lineTo(x, y);
       }
-      context.strokeStyle = `${palette.edge}aa`;
-      context.lineWidth = 9;
+      context.strokeStyle = `${palette.edge}66`;
+      context.lineWidth = 6;
       context.lineCap = 'round';
       context.shadowColor = palette.edgeSelected;
       context.shadowBlur = 24;
       context.stroke();
-      context.strokeStyle = `${palette.selected}cc`;
-      context.lineWidth = 2;
+      context.strokeStyle = `${palette.selected}88`;
+      context.lineWidth = 1.5;
       context.stroke();
     }
     context.shadowBlur = 0;
@@ -241,26 +241,35 @@ const decorations: Record<Backdrop, Painter> = {
     context.beginPath();
     context.ellipse(390, 436, 24, 10, -0.1, 0, Math.PI * 2);
     context.fill();
-    // Ensō: one brush stroke that thins and leaves its gap.
+    // Ensō: one tapering brush stroke that leaves its gap.
     const cx = 256,
-      cy = 150,
-      radius = 92;
+      cy = 165,
+      radius = 62;
     const start = -Math.PI * 0.35;
-    const sweep = Math.PI * 1.82;
-    for (let i = 0; i <= 120; i++) {
-      const t = i / 120;
-      const angle = start + t * sweep;
-      const width = 16 * Math.sin(Math.PI * Math.min(1, t * 1.1)) + 2;
-      context.fillStyle = `rgba(43,42,38,${0.82 - t * 0.25})`;
+    const sweep = Math.PI * 1.8;
+    context.lineCap = 'round';
+    for (let i = 0; i < 160; i++) {
+      const t0 = i / 160,
+        t1 = (i + 1) / 160;
+      context.strokeStyle = `rgba(43,42,38,${0.6 - t0 * 0.3})`;
+      context.lineWidth = 9 * Math.sin(Math.PI * Math.min(1, t0 * 1.08)) + 1;
+      context.beginPath();
+      context.arc(cx, cy, radius, start + t0 * sweep, start + t1 * sweep);
+      context.stroke();
+    }
+    // Dry-brush streaks along the stroke.
+    context.lineWidth = 0.6;
+    for (let i = 0; i < 6; i++) {
+      context.strokeStyle = `rgba(43,42,38,${0.15 + random() * 0.2})`;
       context.beginPath();
       context.arc(
-        cx + Math.cos(angle) * (radius + random() * 2),
-        cy + Math.sin(angle) * (radius + random() * 2),
-        width / 2,
-        0,
-        Math.PI * 2,
+        cx,
+        cy,
+        radius + (random() - 0.5) * 8,
+        start + 0.2,
+        start + sweep * (0.6 + random() * 0.35),
       );
-      context.fill();
+      context.stroke();
     }
     // Hanko seal in the corner.
     context.fillStyle = palette.edgeSelected;

@@ -101,7 +101,7 @@ export class TileDetails {
           this.color,
           this.palette.face,
           node.color,
-          this.palette.faceTint,
+          this.palette.monochrome ? 0 : this.palette.faceTint,
         ),
       );
       if (this.faces.instanceColor) {

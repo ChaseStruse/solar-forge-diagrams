@@ -57,8 +57,10 @@ export interface Theme {
   dark: boolean;
   /** Short line shown in the theme menu and when the theme is chosen. */
   tagline: string;
-  /** Glyph shown beside the brand in the top bar. */
+  /** Glyph shown beside the brand in the top bar and in the theme menu. */
   mark: string;
+  /** Optional inline SVG drawn instead of `mark` where a font may lack it. */
+  markSvg?: string;
   /** Menu section: loud showpiece themes or calm everyday ones. */
   group: 'Over the top' | 'Classic';
   ambient?: Ambient;
@@ -436,6 +438,7 @@ const hacker: Theme = {
       '"JetBrains Mono", "Fira Code", "DejaVu Sans Mono", ui-monospace, monospace',
     iconFilter:
       'grayscale(1) sepia(1) hue-rotate(70deg) saturate(5) brightness(0.95)',
+    monochrome: true,
     edgeWidth: 1.4,
     flowStyle: { width: 2.4, dash: 6, gap: 14, speed: 160 },
   },
@@ -447,6 +450,9 @@ const solarRam: Theme = {
   dark: true,
   tagline: 'Forged in sunfire. Horns down, charge ahead.',
   mark: '♈',
+  // Many fonts only have ♈ as a colour emoji, so draw the horns ourselves.
+  markSvg:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21V10.5"/><path d="M12 10.5C12 5.5 9.4 3 6.6 3 3.9 3 2 5 2 7.6s2 4.4 4.4 4.4c2.2 0 3.6-1.5 3.6-3.4 0-1.7-1.2-2.9-2.8-2.9"/><path d="M12 10.5C12 5.5 14.6 3 17.4 3 20.1 3 22 5 22 7.6S20 12 17.6 12c-2.2 0-3.6-1.5-3.6-3.4 0-1.7 1.2-2.9 2.8-2.9"/></svg>',
   group: 'Over the top',
   ambient: 'embers',
   css: {

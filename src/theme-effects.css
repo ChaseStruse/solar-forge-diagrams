@@ -410,11 +410,13 @@
   vertical-align: middle;
 }
 :root[data-theme="solar-ram"] .forge-mark {
-  font-size: 30px;
+  display: inline-flex;
   color: var(--accent);
-  text-shadow:
-    0 0 10px var(--hot),
-    0 0 26px var(--hot);
+  filter: drop-shadow(0 0 6px var(--hot)) drop-shadow(0 0 14px var(--hot));
+}
+:root[data-theme="solar-ram"] .forge-mark svg {
+  width: 28px;
+  height: 28px;
 }
 :root[data-theme="solar-ram"]:not([data-fx="off"]) .forge-mark {
   animation: sr-pulse 2.4s ease-in-out infinite;
@@ -422,9 +424,7 @@
 @keyframes sr-pulse {
   50% {
     transform: scale(1.12) rotate(-6deg);
-    text-shadow:
-      0 0 14px var(--hot),
-      0 0 40px var(--accent);
+    filter: drop-shadow(0 0 10px var(--hot)) drop-shadow(0 0 26px var(--accent));
   }
 }
 :root[data-theme="solar-ram"]
@@ -540,7 +540,9 @@
   font-weight: 900;
   letter-spacing: 1px;
 }
-:root[data-theme="monochrome"] :is(.tool.active, button[aria-pressed="true"]) {
+:root[data-theme="monochrome"]
+  #app
+  :is(.tool.active, button[aria-pressed="true"]) {
   background: #000;
   color: #fff;
 }

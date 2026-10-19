@@ -1169,6 +1169,10 @@ textarea:focus-visible {
   background: var(--accent-soft);
   color: var(--accent-text);
 }
+.theme-swatch svg {
+  width: 18px;
+  height: 18px;
+}
 .theme-swatch {
   width: 30px;
   height: 30px;
