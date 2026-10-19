@@ -200,6 +200,15 @@ const CELL = 256;
 const grids = new WeakMap<readonly Obstacle[], ObstacleGrid>();
 const cellKey = (ix: number, iz: number) =>
   ((ix & 0xffff) << 16) | (iz & 0xffff);
+function addToCell(
+  cells: Map<number, number[]>,
+  key: number,
+  index: number,
+): void {
+  const bucket = cells.get(key);
+  if (bucket) bucket.push(index);
+  else cells.set(key, [index]);
+}
 function gridOf(all: readonly Obstacle[]): ObstacleGrid {
   let grid = grids.get(all);
   if (grid) return grid;
@@ -213,18 +222,12 @@ function gridOf(all: readonly Obstacle[]): ObstacleGrid {
       z1 = Math.floor(box.maxZ / CELL);
     // Degenerate or absurdly large boxes go in one shared bucket.
     if (!(x1 - x0 <= 64 && z1 - z0 <= 64)) {
-      let wide = cells.get(-1);
-      if (!wide) cells.set(-1, (wide = []));
-      wide.push(index);
+      addToCell(cells, -1, index);
       continue;
     }
     for (let ix = x0; ix <= x1; ix++)
-      for (let iz = z0; iz <= z1; iz++) {
-        const key = cellKey(ix, iz);
-        let bucket = cells.get(key);
-        if (!bucket) cells.set(key, (bucket = []));
-        bucket.push(index);
-      }
+      for (let iz = z0; iz <= z1; iz++)
+        addToCell(cells, cellKey(ix, iz), index);
   }
   grid = { cells, seen: new Uint32Array(all.length), query: 0 };
   grids.set(all, grid);
