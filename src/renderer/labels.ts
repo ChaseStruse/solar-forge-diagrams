@@ -327,18 +327,28 @@ export class LabelAtlas {
       batch.instanceMatrix.needsUpdate = true;
     }
   }
-  public dispose(): void {
-    for (const page of this.pages) {
-      if (page.batch) {
-        page.batch.dispose();
-        page.batch.geometry.dispose();
-        if (!Array.isArray(page.batch.material)) page.batch.material.dispose();
-      }
-      page.texture.dispose();
-      page.canvas.width = 0;
-      page.canvas.height = 0;
-    }
-    this.pages.length = 0;
+  /**
+   * Start a fresh atlas now; the returned callback frees the old pages. The
+   * caller runs it after the next frame so new pages reuse the compiled shader.
+   */
+  public retire(): () => void {
+    const pages = this.pages.splice(0);
     this.regions.clear();
+    return () => {
+      for (const page of pages) {
+        if (page.batch) {
+          page.batch.dispose();
+          page.batch.geometry.dispose();
+          if (!Array.isArray(page.batch.material))
+            page.batch.material.dispose();
+        }
+        page.texture.dispose();
+        page.canvas.width = 0;
+        page.canvas.height = 0;
+      }
+    };
+  }
+  public dispose(): void {
+    this.retire()();
   }
 }

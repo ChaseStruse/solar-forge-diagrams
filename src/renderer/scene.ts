@@ -372,6 +372,11 @@ export class DiagramScene {
     | undefined;
   private selected: string | undefined;
   private disposed = false;
+  /** Disposers for detached boards, run once the next frame is drawn. */
+  private retired: (() => void)[] = [];
+  private flushRetired(): void {
+    for (const dispose of this.retired.splice(0)) dispose();
+  }
   private fitted = false;
   public onSelect: (node: DiagramNode | undefined) => void = () => {};
   public onMove: (
@@ -492,19 +497,32 @@ export class DiagramScene {
     if (edge) this.selectEdge(edge);
     else this.selectMany(ids);
   }
+  /**
+   * Detach the current board. Its GPU resources are freed after the next
+   * frame: three drops a shader program as soon as its last material is
+   * disposed, so freeing them first would recompile every board shader on
+   * each load. The replacement materials pick up the still-live programs.
+   */
   private releaseContent(): void {
-    for (const tile of this.tiles.values()) tile.annotation?.dispose();
-    this.bodies?.dispose();
+    const annotations = [...this.tiles.values()].flatMap((tile) =>
+      tile.annotation ? [tile.annotation] : [],
+    );
+    const { bodies, details, edgeGeometry, flowGeometry } = this;
+    const labels = this.labels.retire();
+    this.retired.push(() => {
+      for (const annotation of annotations) annotation.dispose();
+      bodies?.dispose();
+      details?.dispose();
+      edgeGeometry?.dispose();
+      flowGeometry?.dispose();
+      labels();
+    });
     this.bodies = undefined;
-    this.details?.dispose();
     this.details = undefined;
-    this.edgeGeometry?.dispose();
     this.edgeGeometry = undefined;
-    this.flowGeometry?.dispose();
     this.flowGeometry = undefined;
     this.flowBuffer = undefined;
     this.edgeBuffer = undefined;
-    this.labels.dispose();
     this.content.clear();
     this.tiles.clear();
     this.pickables = [];
@@ -1913,6 +1931,7 @@ export class DiagramScene {
       this.camera,
       quality || start >= this.motionUntil,
     );
+    this.flushRetired();
     this.metrics.textures = this.renderer.info.memory.textures;
     this.metrics.drawCalls = this.renderer.info.render.calls;
     this.metrics.frames++;
@@ -2183,6 +2202,7 @@ export class DiagramScene {
     clearTimeout(this.settleTimer);
     this.observer.disconnect();
     this.releaseContent();
+    this.flushRetired();
     this.grid.dispose();
     for (const geometry of Object.values(this.shapeGeometries))
       geometry.dispose();
