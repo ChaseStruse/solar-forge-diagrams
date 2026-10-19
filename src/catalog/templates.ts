@@ -1,11 +1,22 @@
 import type { DiagramDocument, DiagramNode } from '../domain/document';
-import { sampleDocument } from '../domain/document';
+import { sampleDocument, starterDocument } from '../domain/document';
+import { dataPipelineExample } from './data-pipeline';
 import { kubernetesExample } from './kubernetes';
+import {
+  approvalExample,
+  containerDeliveryExample,
+  internalKubernetesExample,
+  privateWorkerExample,
+} from './more-examples';
 import { vpcExample } from './networking';
+import { securityDemo } from './security';
 import { boundaryColors, findService } from './services';
 export interface Template {
   id: string;
   name: string;
+  category: string;
+  subcategory: string;
+  description: string;
   create: () => DiagramDocument;
 }
 function architecture(title: string, ids: readonly string[]): DiagramDocument {
@@ -52,22 +63,101 @@ function architecture(title: string, ids: readonly string[]): DiagramDocument {
 }
 export const templates: Template[] = [
   {
+    id: 'private-worker',
+    name: 'Private worker egress',
+    category: 'AWS',
+    subcategory: 'Security',
+    description:
+      'Compare allowed outbound HTTPS through a NAT gateway with blocked SSH and unsolicited inbound traffic.',
+    create: privateWorkerExample,
+  },
+  {
+    id: 'container-delivery',
+    name: 'Container image delivery',
+    category: 'AWS',
+    subcategory: 'Containers',
+    description:
+      'See a CI pipeline publish an image to ECR and deploy an ECS service behind a load balancer.',
+    create: containerDeliveryExample,
+  },
+  {
+    id: 'kubernetes-internal',
+    name: 'Internal service communication',
+    category: 'Kubernetes',
+    subcategory: 'Applications',
+    description:
+      'Follow frontend Pods through an internal API Service to backend Pods inside one namespace.',
+    create: internalKubernetesExample,
+  },
+  {
+    id: 'approval',
+    name: 'Approval workflow',
+    category: 'General',
+    subcategory: 'Flowcharts',
+    description:
+      'Explore an approval decision with separate approve and revise branches, including a revision loop.',
+    create: approvalExample,
+  },
+  {
+    id: 'starter',
+    name: 'Two-service starter',
+    category: 'AWS',
+    subcategory: 'Applications',
+    description:
+      'Start small with a Lambda function reading and writing DynamoDB.',
+    create: starterDocument,
+  },
+  {
+    id: 'security-demo',
+    category: 'AWS',
+    subcategory: 'Security',
+    description:
+      'Explore IAM membership, application roles, and security groups with six allowed and denied traffic scenarios.',
+    name: 'security demo',
+    create: securityDemo,
+  },
+  {
+    id: 'data-pipeline',
+    category: 'AWS',
+    subcategory: 'Data pipelines',
+    description:
+      'Stream e-commerce changes through Kinesis, Firehose, and Lambda to S3, Athena, and SageMaker AI.',
+    name: 'Data Pipeline Example',
+    create: dataPipelineExample,
+  },
+  {
     id: 'kubernetes',
+    category: 'Kubernetes',
+    subcategory: 'Applications',
+    description:
+      'Follow a public request through Ingress and Service to replicated Pods; see how a Deployment manages them.',
     name: 'Kubernetes · web application',
     create: kubernetesExample,
   },
   {
     id: 'vpc',
+    category: 'AWS',
+    subcategory: 'Networking',
+    description:
+      'Explore public and private subnets across two availability zones, with an internet gateway and database tiers.',
     name: 'VPC · public and private subnets',
     create: () => vpcExample(),
   },
   {
     id: 'networking',
+    category: 'AWS',
+    subcategory: 'Networking',
+    description:
+      'Walk through HTTPS ingress, blocked database access, and private egress through NAT gateways.',
     name: 'Networking journey demo',
     create: () => vpcExample(true),
   },
   {
     id: 'serverless',
+    category: 'AWS',
+    subcategory: 'Applications',
+    description:
+      'Connect API Gateway, Lambda, DynamoDB, SQS, and S3 in a small serverless application.',
     name: 'Serverless API',
     create: () => {
       const doc = sampleDocument();
@@ -80,11 +170,19 @@ export const templates: Template[] = [
   },
   {
     id: 'three-tier',
+    category: 'AWS',
+    subcategory: 'Applications',
+    description:
+      'Trace the request path from a load balancer through EC2 to a relational database.',
     name: 'Three-tier application',
     create: () => architecture('Three-tier application', ['elb', 'ec2', 'rds']),
   },
   {
     id: 'events',
+    category: 'AWS',
+    subcategory: 'Data pipelines',
+    description:
+      'Queue EventBridge events for Lambda processing and store the results in DynamoDB.',
     name: 'Event pipeline',
     create: () =>
       architecture('Event pipeline', [
@@ -96,12 +194,20 @@ export const templates: Template[] = [
   },
   {
     id: 'containers',
+    category: 'AWS',
+    subcategory: 'Containers',
+    description:
+      'Follow DNS and load balancing to an ECS application backed by a relational database.',
     name: 'Container service',
     create: () =>
       architecture('Container service', ['route53', 'elb', 'ecs', 'rds']),
   },
   {
     id: 'flowchart',
+    category: 'General',
+    subcategory: 'Flowcharts',
+    description:
+      'Learn the basic start, process, and decision shapes in a small editable flow.',
     name: 'Simple flowchart',
     create: () => ({
       version: 1,
