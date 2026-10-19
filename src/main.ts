@@ -22,6 +22,7 @@ import { infrastructureImporter } from './ui/importer';
 import { renderNetworkProperties } from './ui/network-properties';
 import { reachabilityPanel } from './ui/reachability';
 import './style.css';
+import './theme-effects.css';
 import { findService, services } from './catalog/services';
 import type { DiagramEdge, DiagramNode, Port } from './domain/document';
 import {
@@ -55,17 +56,18 @@ import {
 import { DiagramScene, type EditTarget, type Tool } from './renderer/scene';
 import { applyThemeCss, findTheme, themes } from './themes';
 import { icon } from './ui/icons';
+import { renderAmbient } from './ui/theme-fx';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('Application root is missing');
 root.innerHTML = `
-  <main class="workspace" aria-label="Diagram workspace"><div id="canvas"></div><nav id="diagram-path" class="diagram-path" aria-label="Diagram navigation"></nav><div id="journey-caption" class="journey-caption" hidden role="status"></div></main>
+  <main class="workspace" aria-label="Diagram workspace"><div id="canvas"></div><nav id="diagram-path" class="diagram-path" aria-label="Diagram navigation"></nav><div id="journey-caption" class="journey-caption" hidden role="status"></div></main><div id="theme-fx" aria-hidden="true"></div>
   <header class="topbar">
-    <div class="board-heading"><button id="menu" class="icon-button" aria-label="File menu" aria-expanded="false" title="File menu">${icon('menu')}</button><span class="forge-mark" aria-hidden="true">✦</span><span class="brand">Solar Forge</span><span class="heading-divider"></span><button id="title" class="document-title" title="Rename diagram"></button><span id="save-state" class="save-state">Unchanged</span></div>
+    <div class="board-heading"><button id="menu" class="icon-button" aria-label="File menu" aria-expanded="false" title="File menu">${icon('menu')}</button><span id="forge-mark" class="forge-mark" aria-hidden="true">✦</span><span class="brand">Solar Forge</span><span class="heading-divider"></span><button id="title" class="document-title" title="Rename diagram"></button><span id="save-state" class="save-state">Unchanged</span></div>
     <div class="top-actions"><button id="examples" class="quiet-button" title="Browse examples">${icon('layers')}<span>Examples</span></button><button id="components" class="quiet-button" title="Components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="copy-image" class="quiet-button" title="Copy diagram image to clipboard (Ctrl+Shift+C)">${icon('camera')}<span>Copy image</span></button><button id="theme" class="icon-button" aria-label="Theme" aria-expanded="false" title="Theme">${icon('palette')}</button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
   </header>
   <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="browse-examples">Browse examples…</button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="import-infrastructure">Import infrastructure…</button><button id="reachability">Reachability matrix…</button><button id="auto-layout">Automatic layout</button><button id="export">Export PNG ${icon('arrow')}</button><button id="export-gif">Export journey GIF</button><button id="export-video">Export journey video…</button><button id="export-mermaid">Export Mermaid source</button><button id="export-plantuml">Export PlantUML source</button><button id="export-drawio">Export draw.io project</button><button id="export-svg">Export SVG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">RECENT DIAGRAMS</p><div id="recent-files"></div></section>
-  <section id="theme-menu" class="popover theme-menu" aria-label="Themes" hidden><p class="popover-caption">THEME</p><div id="theme-list"></div></section>
+  <section id="theme-menu" class="popover theme-menu" aria-label="Themes" hidden><div id="theme-list"></div><label class="fx-toggle"><input id="theme-fx-toggle" type="checkbox"> Ambient effects</label></section>
   <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add component" title="Add component (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-text" class="tool" aria-label="Text" aria-pressed="false" title="Text: click the board (T)">${icon('text')}<kbd>T</kbd></button><button id="tool-note" class="tool" aria-label="Sticky note" aria-pressed="false" title="Sticky note: click the board (N)">${icon('note')}<kbd>N</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
   <section id="component-palette" class="popover component-palette" aria-label="Components" hidden><div class="popover-heading"><h2>Components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a component to add it to your board.</p></section>
   <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label id="node-branch-row">Journey at this fork<select id="node-branch"></select></label><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><label>Walkthrough caption<textarea id="node-caption" maxlength="1000" rows="3" placeholder="Explain what happens at this hop"></textarea></label><details id="detail-controls"><summary>Detail diagram</summary><label>Linked diagram<select id="node-detail"></select></label><button id="detail-open">Open detail ↗</button><button id="detail-create">Create detail diagram</button><p class="muted">Double-click a linked resource to open it. Use Label to rename it.</p></details><div id="resource-network"></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><div class="property-actions"><button id="edge-active">Make active route</button><button id="edge-all-routes">Show all routes</button></div><details><summary>Journey traffic rule</summary><label>Action<select id="rule-action"><option value="none">Unrestricted</option><option value="allow">Allow matching traffic</option><option value="deny">Deny all traffic</option></select></label><label>Protocol<select id="rule-protocol"><option value="any">Any</option><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Port (blank = any)<input id="rule-port" type="number" min="1" max="65535"></label><label>Source CIDR (blank = any)<input id="rule-source" placeholder="0.0.0.0/0"></label><label>Direction<select id="rule-direction"><option value="any">Any</option><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="rule-apply">Apply rule</button><p id="rule-result" class="muted" role="status"></p></details><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
@@ -122,7 +124,21 @@ let theme = findTheme(
     }
   })(),
 );
-applyThemeCss(theme);
+/** Ambient theme effects: on by default unless the system asks for less motion. */
+let themeEffects = (() => {
+  try {
+    const saved = localStorage.getItem('solar-forge-theme-fx');
+    if (saved) return saved === 'on';
+  } catch {}
+  return !matchMedia('(prefers-reduced-motion: reduce)').matches;
+})();
+function applyThemeChrome(): void {
+  applyThemeCss(theme);
+  document.documentElement.dataset.fx = themeEffects ? 'on' : 'off';
+  element('forge-mark').textContent = theme.mark;
+  renderAmbient(element('theme-fx'), themeEffects ? theme.ambient : undefined);
+}
+applyThemeChrome();
 let scene: DiagramScene;
 try {
   scene = new DiagramScene(element('canvas'), current, theme.scene);
@@ -144,7 +160,7 @@ function showComponents(show: boolean): void {
 }
 function setTheme(id: string): void {
   theme = findTheme(id);
-  applyThemeCss(theme);
+  applyThemeChrome();
   scene.setPalette(theme.scene);
   for (const button of element('theme-list').querySelectorAll('button'))
     button.setAttribute(
@@ -154,18 +170,31 @@ function setTheme(id: string): void {
   try {
     localStorage.setItem('solar-forge-theme', theme.id);
   } catch {}
-  notify(`${theme.name} theme`);
+  notify(`${theme.mark} ${theme.name} · ${theme.tagline}`);
 }
-for (const option of themes) {
+for (const [index, option] of themes.entries()) {
+  if (option.group !== themes[index - 1]?.group) {
+    const caption = document.createElement('p');
+    caption.className = 'popover-caption';
+    caption.textContent = option.group.toUpperCase();
+    element('theme-list').append(caption);
+  }
   const button = document.createElement('button');
   button.dataset.theme = option.id;
   button.setAttribute('aria-pressed', String(option.id === theme.id));
   const swatch = document.createElement('span');
   swatch.className = 'theme-swatch';
   swatch.style.background = `linear-gradient(135deg, ${option.css.bg} 0 45%, ${option.css.accent} 45% 72%, ${option.css.hot} 72%)`;
-  const name = document.createElement('span');
+  swatch.style.color = option.css.text ?? '';
+  swatch.textContent = option.mark;
+  const text = document.createElement('span');
+  text.className = 'theme-text';
+  const name = document.createElement('strong');
   name.textContent = option.name;
-  button.append(swatch, name);
+  const tagline = document.createElement('small');
+  tagline.textContent = option.tagline;
+  text.append(name, tagline);
+  button.append(swatch, text);
   button.onclick = () => {
     setTheme(option.id);
     element('theme-menu').hidden = true;
@@ -173,6 +202,15 @@ for (const option of themes) {
   };
   element('theme-list').append(button);
 }
+inputElement('theme-fx-toggle').checked = themeEffects;
+inputElement('theme-fx-toggle').onchange = () => {
+  themeEffects = inputElement('theme-fx-toggle').checked;
+  applyThemeChrome();
+  try {
+    localStorage.setItem('solar-forge-theme-fx', themeEffects ? 'on' : 'off');
+  } catch {}
+  notify(`Ambient effects ${themeEffects ? 'on' : 'off'}`);
+};
 element('theme').onclick = () => {
   const menu = element('theme-menu');
   menu.hidden = !menu.hidden;

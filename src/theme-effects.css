@@ -1,0 +1,553 @@
+/*
+ * Showpiece theme chrome and ambient effects. Everything animated is gated by
+ * the "Ambient effects" toggle (data-fx) and prefers-reduced-motion, and the
+ * effects layer never takes pointer events or appears in exports.
+ */
+
+/* ---------- Ambient layer ---------- */
+#theme-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+:root[data-fx="off"] #theme-fx {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #theme-fx {
+    display: none;
+  }
+  :root :is(.brand, .forge-mark, #app),
+  :root :is(.brand, #app)::after {
+    animation: none;
+  }
+}
+.fx-rain {
+  position: absolute;
+  top: 0;
+  white-space: pre;
+  line-height: 1.15;
+  font-family: "JetBrains Mono", "DejaVu Sans Mono", ui-monospace, monospace;
+  color: var(--accent);
+  opacity: var(--fx-opacity);
+  text-shadow: 0 0 6px var(--accent);
+  mask-image: linear-gradient(to top, #000 0, #000 12%, transparent 100%);
+  animation: fx-fall var(--fx-duration) linear var(--fx-delay) infinite;
+  will-change: transform;
+}
+@keyframes fx-fall {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(100dvh);
+  }
+}
+.fx-ember {
+  position: absolute;
+  bottom: -10px;
+  width: var(--fx-size);
+  height: var(--fx-size);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    #fff6c8 0,
+    var(--accent) 40%,
+    var(--hot) 75%,
+    transparent 100%
+  );
+  box-shadow: 0 0 10px var(--hot);
+  animation: fx-rise var(--fx-duration) ease-in var(--fx-delay) infinite;
+  will-change: transform, opacity;
+}
+@keyframes fx-rise {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.9;
+  }
+  60% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(var(--fx-drift), -105dvh) scale(0.3);
+    opacity: 0;
+  }
+}
+.fx-petal {
+  position: absolute;
+  top: -30px;
+  animation: fx-drift var(--fx-duration) linear var(--fx-delay) infinite;
+  will-change: transform;
+}
+.fx-petal i {
+  display: block;
+  width: var(--fx-size);
+  height: calc(var(--fx-size) * 0.72);
+  border-radius: 100% 0 100% 0;
+  background: linear-gradient(135deg, #ffe4ea, #f2a7b8 70%, #e98ca2);
+  opacity: 0.85;
+  box-shadow: 0 1px 2px #8a5a6433;
+  animation: fx-tumble 4.5s ease-in-out infinite alternate;
+}
+@keyframes fx-drift {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(var(--fx-drift), 105dvh);
+  }
+}
+@keyframes fx-tumble {
+  from {
+    transform: rotate(-30deg) rotateX(0deg);
+  }
+  to {
+    transform: rotate(220deg) rotateX(70deg);
+  }
+}
+.fx-scanbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--accent) 9%, transparent),
+    transparent
+  );
+  animation: fx-scan 7s linear infinite;
+  will-change: transform;
+}
+@keyframes fx-scan {
+  from {
+    transform: translateY(-120px);
+  }
+  to {
+    transform: translateY(100dvh);
+  }
+}
+.fx-streak {
+  position: absolute;
+  left: 0;
+  width: var(--fx-length);
+  height: 2px;
+  background: linear-gradient(to right, transparent, var(--hot), #fff);
+  box-shadow: 0 0 8px var(--hot);
+  opacity: 0.55;
+  animation: fx-zip var(--fx-duration) cubic-bezier(0.7, 0, 0.3, 1)
+    var(--fx-delay) infinite;
+  will-change: transform;
+}
+@keyframes fx-zip {
+  0%,
+  70% {
+    transform: translateX(-300px);
+  }
+  100% {
+    transform: translateX(110vw);
+  }
+}
+.fx-grain {
+  position: absolute;
+  inset: -50%;
+  opacity: 0.09;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: fx-jitter 0.6s steps(4) infinite;
+}
+@keyframes fx-jitter {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-3%, 2%);
+  }
+  50% {
+    transform: translate(2%, -4%);
+  }
+  75% {
+    transform: translate(-4%, -1%);
+  }
+}
+
+/* ---------- Cyberpunk: neon, chamfers, glitch ---------- */
+:root[data-theme="cyberpunk"] .brand {
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow:
+    0 0 6px var(--accent),
+    0 0 18px var(--hot);
+}
+:root[data-theme="cyberpunk"]:not([data-fx="off"]) .brand {
+  animation: cp-glitch 4.2s steps(1) infinite;
+}
+@keyframes cp-glitch {
+  0%,
+  86%,
+  100% {
+    transform: none;
+    text-shadow:
+      0 0 6px var(--accent),
+      0 0 18px var(--hot);
+  }
+  88% {
+    transform: translate(2px, -1px) skewX(-12deg);
+    text-shadow:
+      -3px 0 var(--hot),
+      3px 0 var(--accent);
+  }
+  90% {
+    transform: translate(-3px, 1px);
+    text-shadow:
+      3px 0 var(--hot),
+      -3px 0 #fcee0a;
+  }
+  92% {
+    transform: translate(1px, 0) skewX(8deg);
+    text-shadow:
+      -2px 0 var(--accent),
+      2px 0 var(--hot);
+  }
+}
+:root[data-theme="cyberpunk"] .forge-mark {
+  color: #fcee0a;
+  text-shadow: 0 0 12px #fcee0a;
+}
+:root[data-theme="cyberpunk"]
+  :is(
+    .icon-button,
+    .quiet-button,
+    .export-button,
+    .floating-dock,
+    .tool-rail,
+    .layers-panel,
+    .popover
+  ) {
+  border-radius: 0;
+  clip-path: polygon(
+    0 0,
+    calc(100% - 10px) 0,
+    100% 10px,
+    100% 100%,
+    10px 100%,
+    0 calc(100% - 10px)
+  );
+}
+:root[data-theme="cyberpunk"]
+  :is(.floating-dock, .tool-rail, .layers-panel, .popover) {
+  border-color: var(--accent-border);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent),
+    inset 0 0 28px color-mix(in srgb, var(--hot) 14%, transparent);
+}
+:root[data-theme="cyberpunk"] .export-button {
+  background: linear-gradient(90deg, #fcee0a, var(--accent));
+  border: 0;
+  color: #04000f;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+:root[data-theme="cyberpunk"] .topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -9px;
+  height: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    #fcee0a 0 8px,
+    #04000f 8px 16px
+  );
+  opacity: 0.85;
+  pointer-events: none;
+}
+:root[data-theme="cyberpunk"] :is(.tool.active, button[aria-pressed="true"]) {
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+:root[data-theme="cyberpunk"]
+  :is(
+    .panel-heading h2,
+    .popover-heading h2,
+    .section-label,
+    .popover-caption
+  ) {
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--accent);
+}
+
+/* ---------- Hacker: phosphor terminal ---------- */
+:root[data-theme="hacker"] {
+  font-family:
+    "JetBrains Mono", "Fira Code", "DejaVu Sans Mono", ui-monospace, monospace;
+}
+:root[data-theme="hacker"] :is(button, input, select, textarea, kbd) {
+  font-family: inherit;
+}
+:root[data-theme="hacker"] #app {
+  text-shadow: 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+:root[data-theme="hacker"] #app::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    #00000000 0 2px,
+    #00000038 2px 3px
+  );
+}
+:root[data-theme="hacker"]:not([data-fx="off"]) #app::after {
+  animation: hk-flicker 5s steps(1) infinite;
+}
+@keyframes hk-flicker {
+  0%,
+  94%,
+  100% {
+    opacity: 1;
+  }
+  95% {
+    opacity: 0.6;
+  }
+  97% {
+    opacity: 0.9;
+  }
+}
+:root[data-theme="hacker"]
+  :is(
+    .icon-button,
+    .quiet-button,
+    .export-button,
+    .floating-dock,
+    .tool-rail,
+    .layers-panel,
+    .popover,
+    button,
+    input,
+    select,
+    textarea
+  ) {
+  border-radius: 0;
+}
+:root[data-theme="hacker"] .brand::before {
+  content: "root@";
+  color: var(--accent-dim);
+}
+:root[data-theme="hacker"] .brand::after {
+  content: "_";
+  color: var(--accent);
+  margin-left: 2px;
+}
+:root[data-theme="hacker"]:not([data-fx="off"]) .brand::after {
+  animation: hk-blink 1s steps(1) infinite;
+}
+@keyframes hk-blink {
+  50% {
+    opacity: 0;
+  }
+}
+:root[data-theme="hacker"] .status::before {
+  content: "> ";
+  color: var(--accent);
+}
+:root[data-theme="hacker"] .export-button {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 40%, transparent) inset;
+}
+:root[data-theme="hacker"] .export-button::before {
+  content: "$ ";
+}
+:root[data-theme="hacker"] :is(.panel-heading h2, .popover-heading h2)::before {
+  content: "// ";
+  color: var(--accent-dim);
+}
+:root[data-theme="hacker"] img {
+  filter: grayscale(1) sepia(1) hue-rotate(70deg) saturate(5) brightness(0.95);
+}
+
+/* ---------- Solar Ram Studios: molten gold and sunfire ---------- */
+:root[data-theme="solar-ram"] .brand {
+  font-weight: 800;
+  letter-spacing: 1px;
+  background: linear-gradient(
+    100deg,
+    #fff3c4 0%,
+    var(--accent) 35%,
+    var(--hot) 65%,
+    #fff3c4 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--hot) 60%, transparent));
+}
+:root[data-theme="solar-ram"]:not([data-fx="off"]) .brand {
+  animation: sr-molten 5s ease-in-out infinite alternate;
+}
+@keyframes sr-molten {
+  to {
+    background-position: 100% 0;
+  }
+}
+:root[data-theme="solar-ram"] .brand::after {
+  content: " · RAM STUDIOS";
+  font-size: 9px;
+  letter-spacing: 3px;
+  vertical-align: middle;
+}
+:root[data-theme="solar-ram"] .forge-mark {
+  font-size: 30px;
+  color: var(--accent);
+  text-shadow:
+    0 0 10px var(--hot),
+    0 0 26px var(--hot);
+}
+:root[data-theme="solar-ram"]:not([data-fx="off"]) .forge-mark {
+  animation: sr-pulse 2.4s ease-in-out infinite;
+}
+@keyframes sr-pulse {
+  50% {
+    transform: scale(1.12) rotate(-6deg);
+    text-shadow:
+      0 0 14px var(--hot),
+      0 0 40px var(--accent);
+  }
+}
+:root[data-theme="solar-ram"]
+  :is(.floating-dock, .tool-rail, .layers-panel, .popover) {
+  border-image: linear-gradient(160deg, var(--accent), var(--hot) 50%, #5a2208)
+    1;
+  border-radius: 0;
+  box-shadow:
+    0 0 30px color-mix(in srgb, var(--hot) 22%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 35%, transparent);
+}
+:root[data-theme="solar-ram"] .export-button {
+  background: linear-gradient(135deg, #ffd36b, var(--accent) 45%, var(--hot));
+  border: 0;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--hot) 55%, transparent);
+  font-weight: 800;
+}
+:root[data-theme="solar-ram"] .forge-wordmark::after {
+  content: " × SOLAR RAM";
+}
+
+/* ---------- Zen Garden: paper, ink and patience ---------- */
+:root[data-theme="zen-garden"] #app {
+  background:
+    radial-gradient(ellipse at 48% 15%, var(--bg-glow) 0, transparent 55%),
+    repeating-radial-gradient(
+      ellipse at 85% 110%,
+      transparent 0 7px,
+      #ffffff55 7px 8px
+    ),
+    linear-gradient(
+      to bottom,
+      var(--bg-top),
+      var(--bg-mid) 58%,
+      var(--bg-bottom)
+    );
+}
+:root[data-theme="zen-garden"]
+  :is(.brand, .panel-heading h2, .popover-heading h2, h2, h3) {
+  font-family: "Noto Serif", "Noto Serif JP", Georgia, "Times New Roman", serif;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+}
+:root[data-theme="zen-garden"]
+  :is(.floating-dock, .tool-rail, .layers-panel, .popover) {
+  border-radius: 22px;
+  box-shadow: 0 14px 40px #6b604a26;
+}
+:root[data-theme="zen-garden"]
+  :is(.icon-button, .quiet-button, .export-button) {
+  border-radius: 999px;
+}
+:root[data-theme="zen-garden"] .forge-mark {
+  color: var(--text);
+  font-weight: 200;
+}
+:root[data-theme="zen-garden"]:not([data-fx="off"]) .forge-mark {
+  animation: zen-breathe 8s ease-in-out infinite;
+}
+@keyframes zen-breathe {
+  50% {
+    transform: scale(1.18);
+    opacity: 0.55;
+  }
+}
+:root[data-theme="zen-garden"] .export-button {
+  background: var(--hot);
+  border-color: var(--hot);
+  color: #fff;
+}
+
+/* ---------- Black & White: ink, halftone, brutal shadows ---------- */
+:root[data-theme="monochrome"] {
+  font-family: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+}
+:root[data-theme="monochrome"]
+  :is(
+    .icon-button,
+    .quiet-button,
+    .export-button,
+    .floating-dock,
+    .tool-rail,
+    .layers-panel,
+    .popover
+  ) {
+  border: 2px solid #000;
+  border-radius: 0;
+  box-shadow: 5px 5px 0 #000;
+}
+:root[data-theme="monochrome"]
+  :is(.icon-button, .quiet-button, .export-button):active {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 #000;
+}
+:root[data-theme="monochrome"] .brand {
+  text-transform: uppercase;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  font-size: 15px;
+  background: #000;
+  color: #fff;
+  padding: 2px 8px;
+  transform: rotate(-2deg);
+}
+:root[data-theme="monochrome"]
+  :is(
+    .panel-heading h2,
+    .popover-heading h2,
+    .section-label,
+    .popover-caption
+  ) {
+  text-transform: uppercase;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+:root[data-theme="monochrome"] :is(.tool.active, button[aria-pressed="true"]) {
+  background: #000;
+  color: #fff;
+}
+:root[data-theme="monochrome"] img {
+  filter: grayscale(1) contrast(1.3);
+}
+:root[data-theme="monochrome"] .status {
+  color: #000;
+  font-weight: 700;
+}

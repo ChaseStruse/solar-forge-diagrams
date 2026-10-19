@@ -127,7 +127,11 @@ export class TileDetails {
       this.color,
       this.palette.outline,
       node.color,
-      node.kind === 'group' ? 0.85 : this.palette.outlineTint,
+      node.kind === 'group'
+        ? this.palette.monochrome
+          ? 0
+          : 0.85
+        : this.palette.outlineTint,
     );
     const template = this.template;
     const start = index * template.length;

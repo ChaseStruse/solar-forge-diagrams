@@ -103,7 +103,12 @@ export class TileBodies {
   private paint(node: DiagramNode, selected: boolean): Color {
     const palette = this.palette;
     if (node.kind === 'group')
-      tinted(this.color, palette.group, node.color, 0.35);
+      tinted(
+        this.color,
+        palette.group,
+        node.color,
+        palette.monochrome ? 0 : 0.35,
+      );
     else tinted(this.color, palette.tile, node.color, palette.tileTint);
     if (selected) this.color.lerp(parsed(palette.selected), 0.12);
     return this.color;

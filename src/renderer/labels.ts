@@ -105,14 +105,15 @@ export class LabelAtlas {
       return object;
     }
     let page = this.pages[this.pages.length - 1] ?? this.page();
+    const family = this.palette.labelFont ?? 'system-ui';
     const font =
       kind === 'icon'
-        ? '500 64px system-ui'
+        ? `500 64px ${family}`
         : kind === 'group'
-          ? '500 24px system-ui'
+          ? `500 24px ${family}`
           : kind === 'edge'
-            ? '500 26px system-ui'
-            : '600 34px system-ui';
+            ? `500 26px ${family}`
+            : `600 34px ${family}`;
     const caption =
       kind === 'node'
         ? serviceCaption(
@@ -120,13 +121,13 @@ export class LabelAtlas {
             (line, size) =>
               this.measure(
                 page.context,
-                `600 ${size * resolution}px system-ui`,
+                `600 ${size * resolution}px ${family}`,
                 line,
               ) / resolution,
           )
         : undefined;
     const captionFont = caption
-      ? `600 ${caption.size * resolution}px system-ui`
+      ? `600 ${caption.size * resolution}px ${family}`
       : font;
     page.context.font = captionFont;
     const padding = caption ? 8 * resolution : 15;
@@ -187,8 +188,11 @@ export class LabelAtlas {
             ? palette.edgeLabel.text
             : palette.nodeLabel.text;
     const image = kind === 'icon' ? serviceImages.get(text) : undefined;
-    if (image) context.drawImage(image, x + 8, y + 8, width - 16, height - 16);
-    else if (caption) {
+    if (image) {
+      if (palette.iconFilter) context.filter = palette.iconFilter;
+      context.drawImage(image, x + 8, y + 8, width - 16, height - 16);
+      context.filter = 'none';
+    } else if (caption) {
       context.font = captionFont;
       for (const [index, line] of caption.lines.entries())
         context.fillText(

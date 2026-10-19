@@ -67,6 +67,9 @@ import { BoardView, type ViewMode } from './view';
 
 export type { ViewMode } from './view';
 
+/** Marching-dash defaults; themes may override them via flowStyle. */
+const DEFAULT_FLOW = { width: 3.6, dash: 12, gap: 38, speed: 80 };
+
 interface Rect {
   minX: number;
   maxX: number;
@@ -487,6 +490,31 @@ export class DiagramScene {
     this.flowMaterial.color.set(palette.flow);
     this.guideMaterial.color.set(palette.guide);
     this.haloMaterial.opacity = palette.haloOpacity;
+    const width = palette.edgeWidth ?? 1.6;
+    this.edgeMaterial.linewidth = width;
+    this.haloMaterial.linewidth = width * 5;
+    const flow = palette.flowStyle ?? DEFAULT_FLOW;
+    this.flowMaterial.linewidth = flow.width;
+    this.flowMaterial.dashSize = flow.dash;
+    this.flowMaterial.gapSize = flow.gap;
+    this.fitBackdrop();
+  }
+  /** Crop decorated skies to the viewport so circles stay round. */
+  private fitBackdrop(): void {
+    const texture = this.backdrop;
+    if (!this.palette.backdrop) {
+      texture.repeat.set(1, 1);
+      texture.offset.set(0, 0);
+      return;
+    }
+    const aspect = this.width / this.height;
+    if (aspect >= 1) {
+      texture.repeat.set(1, 1 / aspect);
+      texture.offset.set(0, (1 - 1 / aspect) / 2);
+    } else {
+      texture.repeat.set(aspect, 1);
+      texture.offset.set((1 - aspect) / 2, 0);
+    }
   }
   /** Repaint the whole board in a new theme, keeping the current selection. */
   public setPalette(palette: ScenePalette): void {
@@ -870,6 +898,7 @@ export class DiagramScene {
     this.height = Math.max(this.host.clientHeight, 1);
     this.renderer.setSize(this.width, this.height);
     this.view.resize(this.width, this.height);
+    this.fitBackdrop();
     if (this.fitted) this.fit();
     else this.invalidate();
   }
@@ -1912,7 +1941,9 @@ export class DiagramScene {
       this.flowLines.computeLineDistances();
       this.distancesDirty = false;
     }
-    this.flowMaterial.dashOffset = -((start / 1000) * 80) % 50;
+    const flow = this.palette.flowStyle ?? DEFAULT_FLOW;
+    this.flowMaterial.dashOffset =
+      -((start / 1000) * flow.speed) % (flow.dash + flow.gap);
     const changed = this.dirty || quality;
     this.dirty = false;
     const stepping = this.animators.size > 0;
