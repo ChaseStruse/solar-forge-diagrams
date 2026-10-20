@@ -83,7 +83,6 @@ test('showpiece themes ship their extras and unknown ids fall back', () => {
     expect(theme.id).toBe(id);
     expect(theme.group).toBe('Over the top');
     expect(theme.ambient).toBeDefined();
-    expect(theme.scene.backdrop).toBeDefined();
     const flow = theme.scene.flowStyle;
     expect(flow && flow.dash > 0 && flow.gap > 0 && flow.speed > 0).toBe(true);
   }

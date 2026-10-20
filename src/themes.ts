@@ -35,8 +35,6 @@ export interface ScenePalette {
   note: { paper: string; text: string };
   text: string;
   ambient: number;
-  /** Decoration painted into the static sky (also visible in PNG exports). */
-  backdrop?: Backdrop;
   /** Font family for board captions; defaults to system-ui. */
   labelFont?: string;
   /** Canvas filter for service icons drawn on the board, e.g. grayscale. */
@@ -48,7 +46,6 @@ export interface ScenePalette {
   /** Marching data-flow dashes: pixel sizes and speed in world units/s. */
   flowStyle?: { width: number; dash: number; gap: number; speed: number };
 }
-export type Backdrop = 'synthwave' | 'matrix' | 'solar' | 'zen' | 'halftone';
 /** Animated layer behind the editor chrome; off with reduced motion or the toggle. */
 export type Ambient = 'neon' | 'rain' | 'embers' | 'petals' | 'grain';
 export interface Theme {
@@ -139,7 +136,6 @@ const cyberpunk: Theme = {
     note: { paper: '#fcee0a', text: '#150a2a' },
     text: '#eef6ff',
     ambient: 2,
-    backdrop: 'synthwave',
     labelFont:
       'Orbitron, Rajdhani, "Share Tech", "Segoe UI", system-ui, sans-serif',
     edgeWidth: 2.2,
@@ -433,7 +429,6 @@ const hacker: Theme = {
     note: { paper: '#33ff66', text: '#001a06' },
     text: '#b6ffc8',
     ambient: 2,
-    backdrop: 'matrix',
     labelFont:
       '"JetBrains Mono", "Fira Code", "DejaVu Sans Mono", ui-monospace, monospace',
     iconFilter:
@@ -517,7 +512,6 @@ const solarRam: Theme = {
     note: { paper: '#ffb000', text: '#1a0c00' },
     text: '#fff1dc',
     ambient: 2.2,
-    backdrop: 'solar',
     labelFont: 'Montserrat, Poppins, "Segoe UI", system-ui, sans-serif',
     edgeWidth: 2,
     flowStyle: { width: 4.2, dash: 18, gap: 30, speed: 120 },
@@ -594,7 +588,6 @@ const zenGarden: Theme = {
     note: { paper: '#f2d7d0', text: '#2b2a26' },
     text: '#2b2a26',
     ambient: 2.6,
-    backdrop: 'zen',
     labelFont:
       '"Noto Serif", "Noto Serif JP", Georgia, "Times New Roman", serif',
     edgeWidth: 1.3,
@@ -672,7 +665,6 @@ const monochrome: Theme = {
     note: { paper: '#ffffff', text: '#000000' },
     text: '#000000',
     ambient: 3,
-    backdrop: 'halftone',
     labelFont: '"Helvetica Neue", Helvetica, Arial, system-ui, sans-serif',
     iconFilter: 'grayscale(1) contrast(1.3)',
     monochrome: true,

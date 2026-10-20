@@ -497,24 +497,6 @@ export class DiagramScene {
     this.flowMaterial.linewidth = flow.width;
     this.flowMaterial.dashSize = flow.dash;
     this.flowMaterial.gapSize = flow.gap;
-    this.fitBackdrop();
-  }
-  /** Crop decorated skies to the viewport so circles stay round. */
-  private fitBackdrop(): void {
-    const texture = this.backdrop;
-    if (!this.palette.backdrop) {
-      texture.repeat.set(1, 1);
-      texture.offset.set(0, 0);
-      return;
-    }
-    const aspect = this.width / this.height;
-    if (aspect >= 1) {
-      texture.repeat.set(1, 1 / aspect);
-      texture.offset.set(0, (1 - 1 / aspect) / 2);
-    } else {
-      texture.repeat.set(aspect, 1);
-      texture.offset.set((1 - aspect) / 2, 0);
-    }
   }
   /** Repaint the whole board in a new theme, keeping the current selection. */
   public setPalette(palette: ScenePalette): void {
@@ -898,7 +880,6 @@ export class DiagramScene {
     this.height = Math.max(this.host.clientHeight, 1);
     this.renderer.setSize(this.width, this.height);
     this.view.resize(this.width, this.height);
-    this.fitBackdrop();
     if (this.fitted) this.fit();
     else this.invalidate();
   }

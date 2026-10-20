@@ -447,21 +447,6 @@
 }
 
 /* ---------- Zen Garden: paper, ink and patience ---------- */
-:root[data-theme="zen-garden"] #app {
-  background:
-    radial-gradient(ellipse at 48% 15%, var(--bg-glow) 0, transparent 55%),
-    repeating-radial-gradient(
-      ellipse at 85% 110%,
-      transparent 0 7px,
-      #ffffff55 7px 8px
-    ),
-    linear-gradient(
-      to bottom,
-      var(--bg-top),
-      var(--bg-mid) 58%,
-      var(--bg-bottom)
-    );
-}
 :root[data-theme="zen-garden"]
   :is(.brand, .panel-heading h2, .popover-heading h2, h2, h3) {
   font-family: "Noto Serif", "Noto Serif JP", Georgia, "Times New Roman", serif;
