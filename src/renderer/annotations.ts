@@ -35,10 +35,11 @@ export function createAnnotation(
   if (!context) throw Error('Annotation canvas unavailable');
   context.scale(resolution, resolution);
   const padding = note ? 14 : 4;
+  const family = palette.labelFont ?? 'Inter, system-ui, sans-serif';
   if (note) {
     // Paper with a folded corner.
     const fold = Math.min(22, node.width / 5, node.depth / 5);
-    context.fillStyle = node.color;
+    context.fillStyle = palette.monochrome ? palette.note.paper : node.color;
     context.beginPath();
     context.moveTo(0, 0);
     context.lineTo(node.width, 0);
@@ -47,6 +48,12 @@ export function createAnnotation(
     context.lineTo(0, node.depth);
     context.closePath();
     context.fill();
+    if (palette.monochrome) {
+      // Inked comic-panel edge instead of a coloured sheet.
+      context.lineWidth = 3;
+      context.strokeStyle = palette.note.text;
+      context.stroke();
+    }
     context.fillStyle = '#00000022';
     context.beginPath();
     context.moveTo(node.width, node.depth - fold);
@@ -61,11 +68,11 @@ export function createAnnotation(
     node.depth - padding * 2,
     fontSize(node),
     (text, size) => {
-      context.font = `${note ? 500 : 600} ${size}px Inter, system-ui, sans-serif`;
+      context.font = `${note ? 500 : 600} ${size}px ${family}`;
       return context.measureText(text).width;
     },
   );
-  context.font = `${note ? 500 : 600} ${size}px Inter, system-ui, sans-serif`;
+  context.font = `${note ? 500 : 600} ${size}px ${family}`;
   context.fillStyle = note ? palette.note.text : palette.text;
   context.textBaseline = 'top';
   const lineHeight = size * 1.28;

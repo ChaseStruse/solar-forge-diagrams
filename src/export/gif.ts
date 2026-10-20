@@ -3,6 +3,17 @@ import {
   type PaletteMapper,
   quantizeFrame,
 } from './palette';
+import {
+  defaultRecordingOptions,
+  type RecordingOptions,
+  validateRecordingOptions,
+} from './recording-options';
+
+export {
+  defaultRecordingOptions,
+  type RecordingOptions,
+  validateRecordingOptions,
+} from './recording-options';
 /** Small offline GIF89a encoder: adaptive palettes and dithering with bounded 12-bit LZW compression. */
 export class GifEncoder {
   private parts: Uint8Array<ArrayBuffer>[] = [];
@@ -159,26 +170,6 @@ export function encodeLzw(indices: Uint8Array): {
   return { bytes, bitLength };
 }
 
-export interface RecordingOptions {
-  duration: number;
-  dither: boolean;
-}
-export const defaultRecordingOptions: RecordingOptions = {
-  duration: 12,
-  dither: true,
-};
-export function validateRecordingOptions(
-  options: RecordingOptions,
-): RecordingOptions {
-  if (
-    !Number.isInteger(options.duration) ||
-    options.duration < 2 ||
-    options.duration > 120 ||
-    typeof options.dither !== 'boolean'
-  )
-    throw Error('GIF duration must be a whole number from 2 to 120 seconds');
-  return { ...options };
-}
 function word(value: number): number[] {
   return [value & 255, (value >> 8) & 255];
 }

@@ -54,6 +54,23 @@ export class LabelAtlas {
       kind: LabelKind;
     }
   >();
+  /** Text advances by font and string; they survive reloads (system fonts). */
+  private readonly widths = new Map<string, number>();
+  private measure(
+    context: CanvasRenderingContext2D,
+    font: string,
+    text: string,
+  ): number {
+    const key = `${font}\n${text}`;
+    let width = this.widths.get(key);
+    if (width === undefined) {
+      if (this.widths.size > 50_000) this.widths.clear();
+      context.font = font;
+      width = context.measureText(text).width;
+      this.widths.set(key, width);
+    }
+    return width;
+  }
   private readonly matrix = new Matrix4();
   private readonly position = new Vector3();
   private readonly depth = new Vector3();
@@ -88,24 +105,29 @@ export class LabelAtlas {
       return object;
     }
     let page = this.pages[this.pages.length - 1] ?? this.page();
+    const family = this.palette.labelFont ?? 'system-ui';
     const font =
       kind === 'icon'
-        ? '500 64px system-ui'
+        ? `500 64px ${family}`
         : kind === 'group'
-          ? '500 24px system-ui'
+          ? `500 24px ${family}`
           : kind === 'edge'
-            ? '500 26px system-ui'
-            : '600 34px system-ui';
-    page.context.font = font;
+            ? `500 26px ${family}`
+            : `600 34px ${family}`;
     const caption =
       kind === 'node'
-        ? serviceCaption({ label: text, ...bounds }, (line, size) => {
-            page.context.font = `600 ${size * resolution}px system-ui`;
-            return page.context.measureText(line).width / resolution;
-          })
+        ? serviceCaption(
+            { label: text, ...bounds },
+            (line, size) =>
+              this.measure(
+                page.context,
+                `600 ${size * resolution}px ${family}`,
+                line,
+              ) / resolution,
+          )
         : undefined;
     const captionFont = caption
-      ? `600 ${caption.size * resolution}px system-ui`
+      ? `600 ${caption.size * resolution}px ${family}`
       : font;
     page.context.font = captionFont;
     const padding = caption ? 8 * resolution : 15;
@@ -120,15 +142,18 @@ export class LabelAtlas {
       ? Math.ceil(
           Math.max(
             1,
-            ...caption.lines.map(
-              (line) => page.context.measureText(line).width,
+            ...caption.lines.map((line) =>
+              this.measure(page.context, captionFont, line),
             ),
           ) +
             padding * 2,
         )
       : kind === 'icon'
         ? 92
-        : Math.min(520, Math.ceil(page.context.measureText(text).width) + 30);
+        : Math.min(
+            520,
+            Math.ceil(this.measure(page.context, captionFont, text)) + 30,
+          );
     if (page.x + width > SIZE) {
       page.x = 0;
       page.y += page.rowHeight;
@@ -163,8 +188,11 @@ export class LabelAtlas {
             ? palette.edgeLabel.text
             : palette.nodeLabel.text;
     const image = kind === 'icon' ? serviceImages.get(text) : undefined;
-    if (image) context.drawImage(image, x + 8, y + 8, width - 16, height - 16);
-    else if (caption) {
+    if (image) {
+      if (palette.iconFilter) context.filter = palette.iconFilter;
+      context.drawImage(image, x + 8, y + 8, width - 16, height - 16);
+      context.filter = 'none';
+    } else if (caption) {
       context.font = captionFont;
       for (const [index, line] of caption.lines.entries())
         context.fillText(
@@ -327,18 +355,28 @@ export class LabelAtlas {
       batch.instanceMatrix.needsUpdate = true;
     }
   }
-  public dispose(): void {
-    for (const page of this.pages) {
-      if (page.batch) {
-        page.batch.dispose();
-        page.batch.geometry.dispose();
-        if (!Array.isArray(page.batch.material)) page.batch.material.dispose();
-      }
-      page.texture.dispose();
-      page.canvas.width = 0;
-      page.canvas.height = 0;
-    }
-    this.pages.length = 0;
+  /**
+   * Start a fresh atlas now; the returned callback frees the old pages. The
+   * caller runs it after the next frame so new pages reuse the compiled shader.
+   */
+  public retire(): () => void {
+    const pages = this.pages.splice(0);
     this.regions.clear();
+    return () => {
+      for (const page of pages) {
+        if (page.batch) {
+          page.batch.dispose();
+          page.batch.geometry.dispose();
+          if (!Array.isArray(page.batch.material))
+            page.batch.material.dispose();
+        }
+        page.texture.dispose();
+        page.canvas.width = 0;
+        page.canvas.height = 0;
+      }
+    };
+  }
+  public dispose(): void {
+    this.retire()();
   }
 }

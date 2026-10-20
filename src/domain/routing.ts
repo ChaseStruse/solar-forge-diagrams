@@ -173,15 +173,131 @@ function rect(
     maxZ: p.z + node.depth / 2,
   };
 }
+const PAD = 6;
 /** Axis-aligned segment against a box, with a small clearance. */
 function crosses(a: Point, b: Point, box: Rect): boolean {
-  const pad = 6;
+  const pad = PAD;
   return (
     Math.max(a.x, b.x) > box.minX - pad &&
     Math.min(a.x, b.x) < box.maxX + pad &&
     Math.max(a.z, b.z) > box.minZ - pad &&
     Math.min(a.z, b.z) < box.maxZ + pad
   );
+}
+/**
+ * Uniform grid over an obstacle list so a segment only tests nearby tiles.
+ * Built once per list (lists are rebuilt, never mutated, when tiles move).
+ * Cell keys may collide far from the origin; that only adds candidates,
+ * since every candidate still gets the exact `crosses` test.
+ */
+interface ObstacleGrid {
+  cells: Map<number, number[]>;
+  /** Per-obstacle query stamp, so a box spanning several cells counts once. */
+  seen: Uint32Array;
+  query: number;
+}
+const CELL = 256;
+const grids = new WeakMap<readonly Obstacle[], ObstacleGrid>();
+const cellKey = (ix: number, iz: number) =>
+  ((ix & 0xffff) << 16) | (iz & 0xffff);
+function addToCell(
+  cells: Map<number, number[]>,
+  key: number,
+  index: number,
+): void {
+  const bucket = cells.get(key);
+  if (bucket) bucket.push(index);
+  else cells.set(key, [index]);
+}
+function gridOf(all: readonly Obstacle[]): ObstacleGrid {
+  let grid = grids.get(all);
+  if (grid) return grid;
+  const cells = new Map<number, number[]>();
+  for (let index = 0; index < all.length; index++) {
+    const box = all[index];
+    if (!box) continue;
+    const x0 = Math.floor(box.minX / CELL),
+      x1 = Math.floor(box.maxX / CELL);
+    const z0 = Math.floor(box.minZ / CELL),
+      z1 = Math.floor(box.maxZ / CELL);
+    // Degenerate or absurdly large boxes go in one shared bucket.
+    if (!(x1 - x0 <= 64 && z1 - z0 <= 64)) {
+      addToCell(cells, -1, index);
+      continue;
+    }
+    for (let ix = x0; ix <= x1; ix++)
+      for (let iz = z0; iz <= z1; iz++)
+        addToCell(cells, cellKey(ix, iz), index);
+  }
+  grid = { cells, seen: new Uint32Array(all.length), query: 0 };
+  grids.set(all, grid);
+  return grid;
+}
+/** Obstacles a segment passes through, excluding the two endpoint tiles. */
+function countCrossings(
+  a: Point,
+  b: Point,
+  all: readonly Obstacle[],
+  grid: ObstacleGrid,
+  sourceId: string,
+  targetId: string,
+): number {
+  if (++grid.query === 0xffffffff) {
+    grid.seen.fill(0);
+    grid.query = 1;
+  }
+  const x0 = Math.floor((Math.min(a.x, b.x) - PAD) / CELL),
+    x1 = Math.floor((Math.max(a.x, b.x) + PAD) / CELL);
+  const z0 = Math.floor((Math.min(a.z, b.z) - PAD) / CELL),
+    z1 = Math.floor((Math.max(a.z, b.z) + PAD) / CELL);
+  let count = countBucket(
+    grid.cells.get(-1),
+    a,
+    b,
+    all,
+    grid,
+    sourceId,
+    targetId,
+  );
+  if (x1 - x0 > 0xffff || z1 - z0 > 0xffff) {
+    // Unbounded segment: fall back to every bucket.
+    for (const [key, bucket] of grid.cells)
+      if (key !== -1)
+        count += countBucket(bucket, a, b, all, grid, sourceId, targetId);
+    return count;
+  }
+  for (let ix = x0; ix <= x1; ix++)
+    for (let iz = z0; iz <= z1; iz++)
+      count += countBucket(
+        grid.cells.get(cellKey(ix, iz)),
+        a,
+        b,
+        all,
+        grid,
+        sourceId,
+        targetId,
+      );
+  return count;
+}
+function countBucket(
+  bucket: readonly number[] | undefined,
+  a: Point,
+  b: Point,
+  all: readonly Obstacle[],
+  grid: ObstacleGrid,
+  sourceId: string,
+  targetId: string,
+): number {
+  if (!bucket) return 0;
+  let count = 0;
+  for (const index of bucket) {
+    if (grid.seen[index] === grid.query) continue;
+    grid.seen[index] = grid.query;
+    const box = all[index];
+    if (box && box.id !== sourceId && box.id !== targetId && crosses(a, b, box))
+      count++;
+  }
+  return count;
 }
 /**
  * Orthogonal routing between two port stubs: try a handful of three-segment
@@ -206,25 +322,8 @@ function bestPath(
   const maxX = Math.max(...ends.map((r) => r.maxX)) + 30;
   const minZ = Math.min(...ends.map((r) => r.minZ)) - 30;
   const maxZ = Math.max(...ends.map((r) => r.maxZ)) + 30;
-  // Only tiles inside the area any candidate can reach are worth testing.
-  const reach = Math.abs(bend) + 10;
-  const area = {
-    minX: Math.min(minX, first.x, last.x) - reach,
-    maxX: Math.max(maxX, first.x, last.x) + reach,
-    minZ: Math.min(minZ, first.z, last.z) - reach,
-    maxZ: Math.max(maxZ, first.z, last.z) + reach,
-  };
-  const obstacles: Rect[] = [...ends];
-  for (const box of all)
-    if (
-      box.id !== source.id &&
-      box.id !== target.id &&
-      box.maxX > area.minX &&
-      box.minX < area.maxX &&
-      box.maxZ > area.minZ &&
-      box.minZ < area.maxZ
-    )
-      obstacles.push(box);
+  // The endpoint tiles always count; other tiles come from the spatial grid.
+  const grid = gridOf(all);
   const candidates: Point[][] = [];
   // Where the cross segment sits: halfway, or at a shared node so branches
   // visibly fork from (or merge into) it.
@@ -257,7 +356,8 @@ function bestPath(
         dz = Math.sign(b.z - a.z);
       if (!dx && !dz) continue;
       score += Math.abs(b.x - a.x) + Math.abs(b.z - a.z);
-      for (const box of obstacles) if (crosses(a, b, box)) score += 10_000;
+      for (const box of ends) if (crosses(a, b, box)) score += 10_000;
+      score += 10_000 * countCrossings(a, b, all, grid, source.id, target.id);
       // Leaving against the source stub or arriving against the target stub.
       if (!previous && dx === -out.x && dz === -out.z) score += 5_000;
       if (i === path.length - 1 && dx === into.x && dz === into.z)

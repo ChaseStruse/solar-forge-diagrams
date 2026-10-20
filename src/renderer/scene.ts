@@ -12,9 +12,9 @@ import {
   Group,
   type InterleavedBuffer,
   InterleavedBufferAttribute,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
-  MeshLambertMaterial,
   type Object3D,
   PerspectiveCamera,
   Plane,
@@ -67,6 +67,9 @@ import { BoardView, type ViewMode } from './view';
 
 export type { ViewMode } from './view';
 
+/** Marching-dash defaults; themes may override them via flowStyle. */
+const DEFAULT_FLOW = { width: 3.6, dash: 12, gap: 38, speed: 80 };
+
 interface Rect {
   minX: number;
   maxX: number;
@@ -116,13 +119,24 @@ interface Tile {
   index: number;
   node: DiagramNode;
   group: Group;
-  material: MeshLambertMaterial;
   label: Object3D;
   headerIcon?: Object3D;
   annotation?: { root: Group; dispose: () => void };
 }
 const isAnnotation = (node: DiagramNode) =>
   node.kind === 'text' || node.kind === 'note';
+/** Caption anchor: boundary header, above a flow shape, or below a service tile. */
+function placeLabel(label: Object3D, node: DiagramNode): void {
+  label.position.set(
+    node.kind === 'group' ? -node.width / 2 + Math.min(node.width / 2, 150) : 0,
+    node.kind === 'group' ? 5 : node.shape ? 26 : 0,
+    node.kind === 'group'
+      ? -node.depth / 2 + 22
+      : node.shape
+        ? 0
+        : node.depth / 2 + 16,
+  );
+}
 /** Height of the invisible picking box, matching what is drawn. */
 function pickHeight(node: DiagramNode): number {
   if (node.kind === 'group') return 2;
@@ -162,6 +176,8 @@ export class DiagramScene {
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly content = new Group();
   private readonly geometry = new BoxGeometry(1, 1, 1);
+  /** Picking boxes are never drawn, so they all share one material. */
+  private readonly pickMaterial = new MeshBasicMaterial();
   private readonly shapeGeometries = createFlowGeometries();
   private readonly tileOutline = new EdgesGeometry(this.geometry);
   private details: TileDetails | undefined;
@@ -223,6 +239,13 @@ export class DiagramScene {
     this.fanCache ??= fansOf(this.edgeIndex.values(), this.nodeIndex);
     return this.fanCache;
   }
+  /** Invisible picking boxes, one per tile, rebuilt on load. */
+  private pickables: Mesh[] = [];
+  private readonly viewProjection = new Matrix4();
+  private readonly scratchA = new Vector3();
+  private readonly scratchB = new Vector3();
+  /** Something besides the animation clock changed since the last frame. */
+  private dirty = true;
   private readonly ray = new Raycaster();
   private readonly pointer = new Vector2();
   private readonly plane = new Plane(new Vector3(0, 1, 0), 0);
@@ -352,6 +375,11 @@ export class DiagramScene {
     | undefined;
   private selected: string | undefined;
   private disposed = false;
+  /** Disposers for detached boards, run once the next frame is drawn. */
+  private retired: (() => void)[] = [];
+  private flushRetired(): void {
+    for (const dispose of this.retired.splice(0)) dispose();
+  }
   private fitted = false;
   public onSelect: (node: DiagramNode | undefined) => void = () => {};
   public onMove: (
@@ -386,6 +414,8 @@ export class DiagramScene {
     this.renderer.info.autoReset = false;
     this.renderer.setClearColor('#000000', 0);
     this.scene.fog = this.fog;
+    // render() updates world matrices itself, and only when something moved.
+    this.scene.matrixWorldAutoUpdate = false;
     this.renderer.domElement.setAttribute(
       'aria-label',
       'Architecture diagram canvas',
@@ -460,6 +490,13 @@ export class DiagramScene {
     this.flowMaterial.color.set(palette.flow);
     this.guideMaterial.color.set(palette.guide);
     this.haloMaterial.opacity = palette.haloOpacity;
+    const width = palette.edgeWidth ?? 1.6;
+    this.edgeMaterial.linewidth = width;
+    this.haloMaterial.linewidth = width * 5;
+    const flow = palette.flowStyle ?? DEFAULT_FLOW;
+    this.flowMaterial.linewidth = flow.width;
+    this.flowMaterial.dashSize = flow.dash;
+    this.flowMaterial.gapSize = flow.gap;
   }
   /** Repaint the whole board in a new theme, keeping the current selection. */
   public setPalette(palette: ScenePalette): void {
@@ -470,24 +507,35 @@ export class DiagramScene {
     if (edge) this.selectEdge(edge);
     else this.selectMany(ids);
   }
+  /**
+   * Detach the current board. Its GPU resources are freed after the next
+   * frame: three drops a shader program as soon as its last material is
+   * disposed, so freeing them first would recompile every board shader on
+   * each load. The replacement materials pick up the still-live programs.
+   */
   private releaseContent(): void {
-    for (const tile of this.tiles.values()) {
-      tile.material.dispose();
-      tile.annotation?.dispose();
-    }
-    this.bodies?.dispose();
+    const annotations = [...this.tiles.values()].flatMap((tile) =>
+      tile.annotation ? [tile.annotation] : [],
+    );
+    const { bodies, details, edgeGeometry, flowGeometry } = this;
+    const labels = this.labels.retire();
+    this.retired.push(() => {
+      for (const annotation of annotations) annotation.dispose();
+      bodies?.dispose();
+      details?.dispose();
+      edgeGeometry?.dispose();
+      flowGeometry?.dispose();
+      labels();
+    });
     this.bodies = undefined;
-    this.details?.dispose();
     this.details = undefined;
-    this.edgeGeometry?.dispose();
     this.edgeGeometry = undefined;
-    this.flowGeometry?.dispose();
     this.flowGeometry = undefined;
     this.flowBuffer = undefined;
     this.edgeBuffer = undefined;
-    this.labels.dispose();
     this.content.clear();
     this.tiles.clear();
+    this.pickables = [];
     this.edges.clear();
     this.edgeLabels.clear();
     this.incident.clear();
@@ -530,20 +578,15 @@ export class DiagramScene {
     for (const [index, node] of document.nodes.entries()) {
       this.nodeIndex.set(node.id, node);
       const group = new Group();
-      const material = new MeshLambertMaterial({
-        color: node.kind === 'group' ? '#172c3a' : '#172b3a',
-        transparent: node.kind === 'group',
-        opacity: node.kind === 'group' ? 0.12 : 1,
-        depthWrite: node.kind !== 'group',
-      });
       const mesh = new Mesh(
         node.shape ? this.shapeGeometries[node.shape] : this.geometry,
-        material,
+        this.pickMaterial,
       );
       mesh.scale.set(node.width, pickHeight(node), node.depth);
       mesh.userData.nodeId = node.id;
       mesh.visible = false;
       group.add(mesh);
+      this.pickables.push(mesh);
       if (isAnnotation(node)) {
         const annotation = createAnnotation(node, this.palette);
         group.add(annotation.root);
@@ -553,7 +596,6 @@ export class DiagramScene {
           index,
           node,
           group,
-          material,
           label: new Group(),
           annotation,
         });
@@ -567,7 +609,7 @@ export class DiagramScene {
       }
       if (node.kind === 'service' && !node.shape) {
         const glyph = this.labels.create(
-          findService(node.serviceId ?? node.label)?.id ?? node.label,
+          component?.id ?? node.label,
           this.camera.zoom,
           'icon',
         );
@@ -585,24 +627,13 @@ export class DiagramScene {
       label.userData.captionBelow = node.kind === 'service' && !node.shape;
       label.userData.nodeWidth = node.width;
       label.userData.nodeDepth = node.depth;
-      label.position.set(
-        node.kind === 'group'
-          ? -node.width / 2 + Math.min(node.width / 2, 150)
-          : 0,
-        node.kind === 'group' ? 5 : node.shape ? 26 : 0,
-        node.kind === 'group'
-          ? -node.depth / 2 + 22
-          : node.shape
-            ? 0
-            : node.depth / 2 + 16,
-      );
+      placeLabel(label, node);
       group.add(label);
       this.content.add(group);
       const tile: Tile = {
         index,
         node,
         group,
-        material,
         label,
         ...(headerIcon ? { headerIcon } : {}),
       };
@@ -997,10 +1028,7 @@ export class DiagramScene {
   };
   /** Topmost node under the last located ray; services win over boundaries. */
   private nodeAt(): string | undefined {
-    const candidates = [...this.tiles.values()]
-      .map((t) => t.group.children[0])
-      .filter((item): item is Mesh => item instanceof Mesh);
-    const hits = this.ray.intersectObjects(candidates, false);
+    const hits = this.ray.intersectObjects(this.pickables, false);
     const hit =
       hits.find((h) => {
         const id: unknown = h.object.userData.nodeId;
@@ -1022,16 +1050,23 @@ export class DiagramScene {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const px = event.clientX - rect.left;
     const py = event.clientY - rect.top;
-    const a = new Vector3();
-    const b = new Vector3();
+    const a = this.scratchA;
+    const b = this.scratchB;
+    // Same result as Vector3.project, with one matrix product per point.
+    const projection = this.viewProjection.multiplyMatrices(
+      this.camera.projectionMatrix,
+      this.camera.matrixWorldInverse,
+    );
     let best: string | undefined;
     let bestDistance = 7;
     for (const [id, index] of this.edges) {
       for (let segment = 0; segment < 5; segment++) {
         const offset = index * 14 + segment * 2;
-        a.fromBufferAttribute(this.edgePositions, offset).project(this.camera);
-        b.fromBufferAttribute(this.edgePositions, offset + 1).project(
-          this.camera,
+        a.fromBufferAttribute(this.edgePositions, offset).applyMatrix4(
+          projection,
+        );
+        b.fromBufferAttribute(this.edgePositions, offset + 1).applyMatrix4(
+          projection,
         );
         const ax = ((a.x + 1) * this.width) / 2,
           ay = ((1 - a.y) * this.height) / 2;
@@ -1155,8 +1190,8 @@ export class DiagramScene {
     for (const origin of this.dragOrigins) {
       origin.node.x = origin.x + dx;
       origin.node.z = origin.z + dz;
-      this.refreshPosition(origin.node.id);
     }
+    this.refreshPositions(this.dragOrigins.map((origin) => origin.node.id));
   };
   private worldRect(tile: Tile | undefined): Rect {
     if (!tile) return { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
@@ -1293,35 +1328,43 @@ export class DiagramScene {
     this.invalidate();
   }
   public refreshPosition(id: string): void {
-    const tile = this.tiles.get(id);
-    if (!tile) return;
+    this.refreshPositions([id]);
+  }
+  /**
+   * Re-place several moved nodes at once: tiles first, then each affected
+   * route exactly once against the final obstacles.
+   */
+  private refreshPositions(ids: readonly string[]): void {
+    const tiles: Tile[] = [];
+    for (const id of ids) {
+      const tile = this.tiles.get(id);
+      if (tile) tiles.push(tile);
+    }
+    if (!tiles.length) return;
     this.obstacleCache = undefined;
     this.fanCache = undefined;
-    if (tile.node.kind === 'group') this.updatePositions();
+    if (tiles.some((tile) => tile.node.kind === 'group'))
+      this.updatePositions();
     else {
-      const position = worldPosition(tile.node, this.nodeIndex);
-      tile.group.position.set(position.x, position.level * 4, position.z);
-      this.bodies?.update(
-        tile.node,
-        tile.group.position,
-        this.selectedIds.has(tile.node.id),
-      );
-      this.details?.update(tile.index, tile.node, tile.group.position);
-      for (const edgeId of this.incident.get(tile.node.id) ?? [])
-        this.updateEdge(edgeId);
+      const routes = new Set<string>();
+      for (const tile of tiles) {
+        const position = worldPosition(tile.node, this.nodeIndex);
+        tile.group.position.set(position.x, position.level * 4, position.z);
+        this.bodies?.update(
+          tile.node,
+          tile.group.position,
+          this.selectedIds.has(tile.node.id),
+        );
+        this.details?.update(tile.index, tile.node, tile.group.position);
+        for (const edgeId of this.incident.get(tile.node.id) ?? [])
+          routes.add(edgeId);
+      }
+      for (const edgeId of routes) this.updateEdge(edgeId);
     }
-    tile.label.position.set(
-      tile.node.kind === 'group'
-        ? -tile.node.width / 2 + Math.min(tile.node.width / 2, 150)
-        : 0,
-      tile.node.kind === 'group' ? 5 : tile.node.shape ? 26 : 0,
-      tile.node.kind === 'group'
-        ? -tile.node.depth / 2 + 22
-        : tile.node.shape
-          ? 0
-          : tile.node.depth / 2 + 16,
-    );
-    this.positionHeaderIcon(tile);
+    for (const tile of tiles) {
+      placeLabel(tile.label, tile.node);
+      this.positionHeaderIcon(tile);
+    }
     this.invalidate();
   }
   /** Keep selection handles a constant on-screen size around the selected node. */
@@ -1369,7 +1412,9 @@ export class DiagramScene {
       this.camera instanceof PerspectiveCamera
         ? Math.max(
             1,
-            -point.clone().applyMatrix4(this.camera.matrixWorldInverse).z,
+            -this.scratchA
+              .copy(point)
+              .applyMatrix4(this.camera.matrixWorldInverse).z,
           )
         : 1;
     return (2 * depth) / (this.height * projectionY);
@@ -1426,12 +1471,7 @@ export class DiagramScene {
       this.connectionStart = undefined;
       this.clearPreview();
       const point = this.locate(event);
-      const hits = this.ray.intersectObjects(
-        [...this.tiles.values()]
-          .map((t) => t.group.children[0])
-          .filter((m): m is Mesh => m instanceof Mesh),
-        false,
-      );
+      const hits = this.ray.intersectObjects(this.pickables, false);
       const target = hits.find((h) => h.object.userData.nodeId !== start.id);
       const id: unknown = target?.object.userData.nodeId;
       const node = typeof id === 'string' ? this.nodeIndex.get(id) : undefined;
@@ -1665,15 +1705,20 @@ export class DiagramScene {
     this.invalidate();
   }
   private setNodeSelection(ids: readonly string[]): void {
+    const previous = [...this.selectedIds];
     this.selectedIds.clear();
     for (const id of ids) if (this.tiles.has(id)) this.selectedIds.add(id);
     this.selected = [...this.selectedIds].at(-1);
-    for (const tile of this.tiles.values())
-      this.bodies?.update(
-        tile.node,
-        tile.group.position,
-        this.selectedIds.has(tile.node.id),
-      );
+    // Only tiles entering or leaving the selection change colour.
+    for (const id of new Set([...previous, ...this.selectedIds])) {
+      const tile = this.tiles.get(id);
+      if (tile)
+        this.bodies?.update(
+          tile.node,
+          tile.group.position,
+          this.selectedIds.has(id),
+        );
+    }
     this.ports.clear();
     const tile = this.selected ? this.tiles.get(this.selected) : undefined;
     // Handles only for a single selection; a multi-selection moves as a unit.
@@ -1714,11 +1759,12 @@ export class DiagramScene {
       id !== this.hoveredEdge
     )
       this.scratchColor.lerp(this.dimColor.set(this.palette.sky[1]), 0.68);
-    for (let i = 0; i < 14; i++)
-      this.edgeColors.set(
-        [this.scratchColor.r, this.scratchColor.g, this.scratchColor.b],
-        index * 42 + i * 3,
-      );
+    const { r, g, b } = this.scratchColor;
+    for (let i = index * 42, end = i + 42; i < end; i += 3) {
+      this.edgeColors[i] = r;
+      this.edgeColors[i + 1] = g;
+      this.edgeColors[i + 2] = b;
+    }
     this.edgeColorBuffer.addUpdateRange(index * 42, 42);
     this.edgeColorBuffer.needsUpdate = true;
   }
@@ -1736,6 +1782,11 @@ export class DiagramScene {
     }, 220);
   }
   private invalidate(): void {
+    this.dirty = true;
+    this.schedule();
+  }
+  /** Request a frame without marking the board changed (animation ticks). */
+  private schedule(): void {
     if (this.frame || this.disposed) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
@@ -1871,12 +1922,19 @@ export class DiagramScene {
       this.flowLines.computeLineDistances();
       this.distancesDirty = false;
     }
-    this.flowMaterial.dashOffset = -((start / 1000) * 80) % 50;
+    const flow = this.palette.flowStyle ?? DEFAULT_FLOW;
+    this.flowMaterial.dashOffset =
+      -((start / 1000) * flow.speed) % (flow.dash + flow.gap);
+    const changed = this.dirty || quality;
+    this.dirty = false;
+    const stepping = this.animators.size > 0;
     for (const step of this.animators)
       if (!step(start)) this.animators.delete(step);
-    this.syncHandles();
-    this.scene.updateMatrixWorld();
-    this.labels.sync(this.camera, this.height);
+    // Marching dashes only move a uniform: transforms, handles and caption
+    // placement are recomputed only when the camera or board changed.
+    if (changed) this.syncHandles();
+    if (changed || stepping) this.scene.updateMatrixWorld();
+    if (changed) this.labels.sync(this.camera, this.height);
     // Count the board's draw calls, not only the final screen pass.
     this.renderer.info.reset();
     this.antialias.render(
@@ -1885,11 +1943,12 @@ export class DiagramScene {
       this.camera,
       quality || start >= this.motionUntil,
     );
+    this.flushRetired();
     this.metrics.textures = this.renderer.info.memory.textures;
     this.metrics.drawCalls = this.renderer.info.render.calls;
     this.metrics.frames++;
     this.metrics.lastRenderMs = performance.now() - start;
-    if (this.animating) this.invalidate();
+    if (this.animating) this.schedule();
   }
   public async checkContextRecovery(): Promise<boolean> {
     const extension = this.renderer
@@ -2155,6 +2214,7 @@ export class DiagramScene {
     clearTimeout(this.settleTimer);
     this.observer.disconnect();
     this.releaseContent();
+    this.flushRetired();
     this.grid.dispose();
     for (const geometry of Object.values(this.shapeGeometries))
       geometry.dispose();
@@ -2165,6 +2225,7 @@ export class DiagramScene {
     this.handleGeometry.dispose();
     this.handleMaterial.dispose();
     this.geometry.dispose();
+    this.pickMaterial.dispose();
     this.tileOutline.dispose();
     this.haloMaterial.dispose();
     this.flowMaterial.dispose();

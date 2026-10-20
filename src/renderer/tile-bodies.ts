@@ -19,9 +19,19 @@ export function tinted(
   tint: string,
   amount: number,
 ): Color {
-  return target.set(base).lerp(scratch.set(tint), amount);
+  return target.copy(parsed(base)).lerp(parsed(tint), amount);
 }
-const scratch = new Color();
+/** CSS colour strings parse (and convert to linear) once, not per tile update. */
+const colors = new Map<string, Color>();
+function parsed(style: string): Color {
+  let color = colors.get(style);
+  if (!color) {
+    if (colors.size > 4096) colors.clear();
+    color = new Color(style);
+    colors.set(style, color);
+  }
+  return color;
+}
 
 /** Render shared bodies in at most five draws; separate invisible meshes provide picking. */
 export class TileBodies {
@@ -93,9 +103,20 @@ export class TileBodies {
   private paint(node: DiagramNode, selected: boolean): Color {
     const palette = this.palette;
     if (node.kind === 'group')
-      tinted(this.color, palette.group, node.color, 0.35);
-    else tinted(this.color, palette.tile, node.color, palette.tileTint);
-    if (selected) this.color.lerp(scratch.set(palette.selected), 0.12);
+      tinted(
+        this.color,
+        palette.group,
+        node.color,
+        palette.monochrome ? 0 : 0.35,
+      );
+    else
+      tinted(
+        this.color,
+        palette.tile,
+        node.color,
+        palette.monochrome ? 0 : palette.tileTint,
+      );
+    if (selected) this.color.lerp(parsed(palette.selected), 0.12);
     return this.color;
   }
   public dispose(): void {

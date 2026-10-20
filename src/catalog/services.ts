@@ -448,14 +448,21 @@ export const services: ComponentDefinition[] = [
     }),
   ),
 ];
+/** Catalog positions by id and by lower-case label; the first entry wins. */
+const byId = new Map<string, number>();
+const byLabel = new Map<string, number>();
+for (const [index, service] of services.entries()) {
+  if (!byId.has(service.id)) byId.set(service.id, index);
+  const label = service.label.toLowerCase();
+  if (!byLabel.has(label)) byLabel.set(label, index);
+}
+/** The first catalog entry whose id or label (any case) matches. */
 export function findService(
   idOrLabel: string,
 ): ComponentDefinition | undefined {
-  return services.find(
-    (service) =>
-      service.id === idOrLabel ||
-      service.label.toLowerCase() === idOrLabel.toLowerCase(),
-  );
+  const id = byId.get(idOrLabel) ?? Infinity;
+  const label = byLabel.get(idOrLabel.toLowerCase()) ?? Infinity;
+  return services[Math.min(id, label)];
 }
 export function serviceGlyph(label: string): string {
   return findService(label)?.glyph ?? '◇';
