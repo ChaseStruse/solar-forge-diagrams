@@ -1,10 +1,12 @@
-# Implementation progress
+# Development log
 
-## Current alpha status
+Historical record of the implementation, kept as written at each checkpoint. Measurements, file names and "remaining work" lists below reflect the state at the time of each entry and are not current. For the current state see [STATUS.md](STATUS.md); for user-facing changes see [CHANGELOG.md](../CHANGELOG.md).
+
+## Alpha status — 2026-10-16
 
 **M1–M5 alpha implementation is complete.** Implementation, native editing and final package checks passed. The user accepted measured memory and scheduled-input misses for the alpha; original targets remain unmet. M6 is optional/deferred. No source or binaries have been pushed or published. No desktop configuration or Docker context was changed.
 
-## Current verification
+## Verification — 2026-10-16
 
 - Frontend: lint, strict TypeScript, 20 tests / 130 assertions, production build, 182,245-byte gzip initial JS (358,400-byte budget).
 - Rust: formatting, both atomic replacement tests, clippy with warnings denied, optimized native builds.

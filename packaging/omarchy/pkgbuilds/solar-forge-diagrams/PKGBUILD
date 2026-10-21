@@ -1,10 +1,11 @@
 # Build from the reviewed local source archive; no application runtime server.
 pkgname=solar-forge-diagrams
-pkgver=0.1.0
-pkgrel=6
+pkgver=0.2.0
+pkgrel=1
 pkgdesc='Native offline flowcharts and AWS architecture diagrams'
+url='https://github.com/ChaseStruse/solar-forge-diagrams'
 arch=('x86_64')
-license=('LicenseRef-SolarForge' 'LicenseRef-AWS-Architecture-Icons' 'MIT' 'Apache-2.0')
+license=('MIT' 'Apache-2.0' 'LicenseRef-AWS-Architecture-Icons')
 depends=('webkit2gtk-4.1' 'gtk3' 'xdg-desktop-portal')
 makedepends=('rust' 'bun' 'pkgconf' 'python')
 optdepends=('xdg-desktop-portal-gtk: file chooser backend when not provided by your desktop'
@@ -29,7 +30,7 @@ package() {
   install -Dm644 assets/solar-forge.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/com.solarforge.diagrams.svg"
   install -Dm644 packaging/linux/com.solarforge.diagrams.xml "$pkgdir/usr/share/mime/packages/com.solarforge.diagrams.xml"
   install -Dm644 assets/aws/NOTICE.md "$pkgdir/usr/share/licenses/$pkgname/AWS-NOTICE.md"
-  install -Dm644 SOURCE_LICENSE.md "$pkgdir/usr/share/licenses/$pkgname/SOURCE_LICENSE.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
   cp -r artifacts/licenses "$pkgdir/usr/share/licenses/$pkgname/dependencies"
   install -Dm644 docs/USER_GUIDE.md "$pkgdir/usr/share/doc/$pkgname/USER_GUIDE.md"

@@ -47,7 +47,7 @@ yaml_metadata = json.loads((root / 'node_modules/yaml/package.json').read_text()
 yaml_notice = out / f"yaml-{yaml_metadata['version']}"
 yaml_notice.mkdir(exist_ok=True)
 shutil.copyfile(root / 'node_modules/yaml/LICENSE', yaml_notice / 'LICENSE')
-for filename in ['SOURCE_LICENSE.md', 'THIRD_PARTY_NOTICES.md']:
+for filename in ['LICENSE', 'THIRD_PARTY_NOTICES.md']:
     shutil.copyfile(root / filename, out / filename)
 shutil.copytree(root / 'assets/aws', out / 'aws-architecture-icons', dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.svg'))
 shutil.copytree(root / 'assets/kubernetes', out / 'kubernetes-icons', dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.svg'))

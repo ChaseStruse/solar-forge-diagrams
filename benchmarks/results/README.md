@@ -6,7 +6,7 @@ The `release-single-group` run used the earlier fixture with one root group. The
 
 Hardware inventory: Intel i9-11900H, 16 GB system RAM, Intel UHD + NVIDIA RTX 3060 Mobile. CPU/RSS, driver selection, physical latency, repeated warm/cold startup, and the 1920×1080 reference run remain to be measured. `navigationToScriptMs` starts at web navigation, not process launch.
 
-The `release-nested-groups` run uses the corrected three-boundary fixture and portal backend from `57cc746`. Window size was 900×918, DPR 1. It reports 151 ms standard-board load, 4 ms render-submission p95, and 19 ms scheduled camera-update-to-frame p95. The smaller window and updated fixture prevent a controlled comparison with the earlier run. See `docs/PROGRESS.md` for all open acceptance measurements.
+The `release-nested-groups` run uses the corrected three-boundary fixture and portal backend from `57cc746`. Window size was 900×918, DPR 1. It reports 151 ms standard-board load, 4 ms render-submission p95, and 19 ms scheduled camera-update-to-frame p95. The smaller window and updated fixture prevent a controlled comparison with the earlier run. See `docs/STATUS.md` for current figures and open acceptance measurements.
 
 ## Accepted alpha measurements — 2026-10-16
 

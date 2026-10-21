@@ -118,26 +118,55 @@ async fn open_document(
     .map_err(|e| e.to_string())?
 }
 #[derive(serde::Serialize)]
-struct InfrastructureSource { name: String, content: String }
+struct InfrastructureSource {
+    name: String,
+    content: String,
+}
 #[tauri::command]
-async fn open_infrastructure(app: tauri::AppHandle, window: tauri::Window) -> Result<Vec<InfrastructureSource>, String> {
+async fn open_infrastructure(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+) -> Result<Vec<InfrastructureSource>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let Some(files) = app.dialog().file().set_parent(&window)
+        let Some(files) = app
+            .dialog()
+            .file()
+            .set_parent(&window)
             .add_filter("Infrastructure code", &["tf", "json", "yaml", "yml"])
-            .blocking_pick_files() else { return Ok(Vec::new()); };
-        if files.len() > 256 { return Err("Choose at most 256 files".into()); }
+            .blocking_pick_files()
+        else {
+            return Ok(Vec::new());
+        };
+        if files.len() > 256 {
+            return Err("Choose at most 256 files".into());
+        }
         let mut result = Vec::new();
         let mut total = 0;
         for file in files {
             let path = file.into_path().map_err(|e| e.to_string())?;
             let mut content = String::new();
-            fs::File::open(&path).map_err(|e| e.to_string())?.take(50_000_001).read_to_string(&mut content).map_err(|e| e.to_string())?;
+            fs::File::open(&path)
+                .map_err(|e| e.to_string())?
+                .take(50_000_001)
+                .read_to_string(&mut content)
+                .map_err(|e| e.to_string())?;
             total += content.len();
-            if total > 50_000_000 { return Err("Infrastructure input exceeds 50 MB".into()); }
-            result.push(InfrastructureSource { name: path.file_name().unwrap_or_default().to_string_lossy().into_owned(), content });
+            if total > 50_000_000 {
+                return Err("Infrastructure input exceeds 50 MB".into());
+            }
+            result.push(InfrastructureSource {
+                name: path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned(),
+                content,
+            });
         }
         Ok(result)
-    }).await.map_err(|e| e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn save_document(
@@ -385,18 +414,33 @@ async fn export_video(
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
         return Err("Video export requires a binary payload".into());
     };
-    let format = if bytes.starts_with(b"\x1a\x45\xdf\xa3") { "webm" }
-        else if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" { "mp4" }
-        else { return Err("Invalid video export".into()); };
-    if bytes.len() > 100_000_000 { return Err("Video exceeds 100 MB".into()); }
+    let format = if bytes.starts_with(b"\x1a\x45\xdf\xa3") {
+        "webm"
+    } else if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
+        "mp4"
+    } else {
+        return Err("Invalid video export".into());
+    };
+    if bytes.len() > 100_000_000 {
+        return Err("Video exceeds 100 MB".into());
+    }
     let bytes = bytes.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let Some(file) = app.dialog().file().set_parent(&window)
-            .add_filter("Journey video", &[format]).set_file_name(format!("journey.{format}"))
-            .blocking_save_file() else { return Ok(false); };
+        let Some(file) = app
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("Journey video", &[format])
+            .set_file_name(format!("journey.{format}"))
+            .blocking_save_file()
+        else {
+            return Ok(false);
+        };
         atomic_write(&file.into_path().map_err(|e| e.to_string())?, &bytes)?;
         Ok(true)
-    }).await.map_err(|e| e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -410,12 +454,24 @@ async fn export_text(
         return Err("Invalid interchange export".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let Some(file) = app.dialog().file().set_parent(&window)
-            .add_filter("Diagram source", &[format.as_str()]).set_file_name(format!("diagram.{format}"))
-            .blocking_save_file() else { return Ok(false); };
-        atomic_write(&file.into_path().map_err(|e| e.to_string())?, content.as_bytes())?;
+        let Some(file) = app
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("Diagram source", &[format.as_str()])
+            .set_file_name(format!("diagram.{format}"))
+            .blocking_save_file()
+        else {
+            return Ok(false);
+        };
+        atomic_write(
+            &file.into_path().map_err(|e| e.to_string())?,
+            content.as_bytes(),
+        )?;
         Ok(true)
-    }).await.map_err(|e| e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Put a PNG on the desktop clipboard with the session's clipboard tool.

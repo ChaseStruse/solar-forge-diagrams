@@ -1,6 +1,6 @@
 # Solar Forge Diagrams — agent implementation plan
 
-Status: implementation in progress. See [progress and task-to-commit mapping](docs/PROGRESS.md) for verified results and the next action.
+Status: alpha complete for M1–M5; M6 deferred. See [project status](docs/STATUS.md) for current results and next steps, and the [development log](docs/DEVELOPMENT_LOG.md) for the task-to-commit history.
 
 ## 1. Product objective and priorities
 
@@ -202,7 +202,7 @@ Work sequentially through decision gates. Each milestone must leave a runnable a
 | M2–M5 | No completion commits yet | Planned; initial palette/inspector/export prototypes do not establish milestone completion. |
 | M6 | None | Optional and deferred until M5. |
 
-Read [docs/PROGRESS.md](docs/PROGRESS.md) for exact validation, measured limits, local tooling, and next steps. Each subsequent implementation commit must add or update its corresponding row in that handoff record.
+Read [docs/STATUS.md](docs/STATUS.md) and [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md) for exact validation, measured limits, local tooling, and next steps. Each subsequent implementation change must add a dated entry to the development log and keep the status page current.
 
 ### M0 — Native feasibility and measurements
 
@@ -257,7 +257,7 @@ Read [docs/PROGRESS.md](docs/PROGRESS.md) for exact validation, measured limits,
 - Use descriptive conventional messages such as `feat(editor): add plane-constrained dragging` or `perf(renderer): update only incident edges`.
 - Stage specific files, inspect the staged diff, and never commit secrets, unrelated changes, generated build output, or dependency caches.
 - Do not amend others' commits, reset unrelated work, force push, or push/publish without authorization. Local frequent commits are expected.
-- Keep a concise `docs/PROGRESS.md` with completed milestone items, validation commands/results, benchmark changes, next action, and blockers. Do not mark unverified work complete.
+- Keep `docs/STATUS.md` concise and current, and append dated entries to `docs/DEVELOPMENT_LOG.md` with completed milestone items, validation commands/results, benchmark changes, next action, and blockers. Do not mark unverified work complete.
 - Record consequential deviations in `docs/decisions/` with motivation, alternatives, and performance implications.
 - Do not spawn parallel agents unless separately authorized by the user or applicable instructions. If parallel work is authorized, assign clear ownership and coordinate changes to shared model files.
 
