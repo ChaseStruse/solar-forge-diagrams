@@ -25,3 +25,22 @@ FROM scratch AS frontend-artifacts
 COPY --from=frontend /artifacts/ /
 FROM scratch AS native-artifacts
 COPY --from=native /artifacts/ /
+
+# Omarchy release package: makepkg needs Arch, so this builder is separate from the Debian checks above.
+FROM archlinux:base-devel@sha256:0ccc8b2e55c0c26a6e501e892cc6b1cdea7cfdf77e432941320148b4dabd2bff AS omarchy-package
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+# Fixed Arch archive date (matching the base image) makes package resolution independent of current mirrors.
+RUN echo 'Server = https://archive.archlinux.org/repos/2026/10/19/$repo/os/$arch' > /etc/pacman.d/mirrorlist \
+ && pacman -Syyuu --noconfirm --needed rust pkgconf python webkit2gtk-4.1 gtk3 \
+ && pacman -Scc --noconfirm \
+ && useradd --create-home --uid 1000 builder
+COPY scripts/container-package.sh /usr/local/bin/container-package
+USER builder
+# release-source is a named build context holding the git-archived source; see scripts/docker-release.sh.
+RUN --mount=type=bind,from=release-source,target=/input \
+    --mount=type=cache,target=/home/builder/.cargo,uid=1000,gid=1000 \
+    --mount=type=cache,target=/home/builder/.bun/install/cache,uid=1000,gid=1000 \
+    --mount=type=cache,target=/home/builder/cargo-target,uid=1000,gid=1000 \
+    CARGO_HOME=/home/builder/.cargo CARGO_TARGET_DIR=/home/builder/cargo-target container-package /input /home/builder/out
+FROM scratch AS release-artifacts
+COPY --from=omarchy-package /home/builder/out/ /
