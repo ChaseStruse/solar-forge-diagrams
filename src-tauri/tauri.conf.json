@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Solar Forge Diagrams",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.solarforge.diagrams",
   "build": {
     "beforeDevCommand": "bun run dev",

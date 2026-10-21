@@ -4,6 +4,10 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-20
+
+First public release.
+
 ### Added
 
 - **MIT license** for the application source.
@@ -14,7 +18,7 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 - **Exports:** WebM/MP4 journey video, Mermaid, PlantUML and multi-page draw.io.
 - **Catalog:** Kubernetes resources with official icons; container, DevOps and networking pictograms; an example browser with AWS, Kubernetes and flowchart examples.
 - Text annotations, sticky notes, themes and copy-image to clipboard.
-- Release scripts that check version consistency and produce a fixed-name download bundle.
+- Release builds run entirely in Docker (`scripts/docker-release.sh`) and produce a fixed-name download bundle.
 
 ### Changed
 
@@ -31,5 +35,6 @@ First alpha, distributed only as local builds (packages 0.1.0-1 through 0.1.0-6)
 - PNG, SVG and animated GIF export.
 - Omarchy package with launcher, icon and file association, and a verified install bundle.
 
-[Unreleased]: https://github.com/ChaseStruse/solar-forge-diagrams/compare/main...HEAD
+[Unreleased]: https://github.com/ChaseStruse/solar-forge-diagrams/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ChaseStruse/solar-forge-diagrams/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ChaseStruse/solar-forge-diagrams/blob/main/CHANGELOG.md#010--2026-10-16
