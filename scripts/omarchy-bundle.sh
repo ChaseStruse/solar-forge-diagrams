@@ -26,4 +26,10 @@ cp docs/USER_GUIDE.md docs/DOCUMENTS.md docs/BUILDING.md "$staging/$bundle/"
   sha256sum -- ./* > SHA256SUMS
 )
 tar -czf "artifacts/omarchy/$bundle.tar.gz" -C "$staging" "$bundle"
-sha256sum "artifacts/omarchy/$bundle.tar.gz"
+# A fixed-name copy lets releases/latest/download/<name> links stay valid across versions.
+latest=solar-forge-diagrams-omarchy-x86_64.tar.gz
+cp -- "artifacts/omarchy/$bundle.tar.gz" "artifacts/omarchy/$latest"
+(
+  cd artifacts/omarchy
+  sha256sum -- "$bundle.tar.gz" "$latest" | tee "$bundle.SHA256SUMS"
+)
