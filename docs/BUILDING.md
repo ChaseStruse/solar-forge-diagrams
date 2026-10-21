@@ -36,4 +36,6 @@ Use your existing Docker Engine or Docker Desktop context; inspect it with `dock
 
 Alternatively `mkdir -p artifacts` and run `LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose run --rm frontend` (or `native`). Compose writes with the selected host UID/GID. Docker Desktop may use a VM; choose mounts/contexts explicitly. Neither image is the installed application runtime, and Docker is never required to launch the executable.
 
+To build the complete Omarchy release (package, install bundle and source archive) without host Rust or `makepkg`, run `scripts/docker-release.sh`. It builds the git-archived `HEAD` in a pinned Arch stage (`omarchy-package`), runs every check, and writes the results to `artifacts/release/<version>/`. See [RELEASING.md](RELEASING.md).
+
 Build validation and any outstanding install/hardware checks are recorded in [STATUS.md](STATUS.md) and the benchmark reports. Do not treat a package recipe as proof of clean-install acceptance.

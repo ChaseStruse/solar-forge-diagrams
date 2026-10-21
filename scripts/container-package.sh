@@ -20,7 +20,9 @@ cp -r "$source/packaging/omarchy/pkgbuilds/solar-forge-diagrams" "$recipe"
 cp -- "$archive" "$recipe/"
 
 # The PKGBUILD runs bun verify and cargo test. Build tools come from this image, not pacman.
-(cd "$recipe" && updpkgsums && makepkg --nodeps --cleanbuild --noconfirm)
+sum=$(sha256sum -- "$archive" | cut -d' ' -f1)
+sed -i "s/^sha256sums=.*/sha256sums=('$sum')/" "$recipe/PKGBUILD"
+(cd "$recipe" && makepkg --nodeps --cleanbuild --noconfirm)
 packages=("$recipe/solar-forge-diagrams-$version"-*-x86_64.pkg.tar.zst)
 if (( ${#packages[@]} != 1 )); then
   echo 'Expected exactly one application package from makepkg.' >&2
