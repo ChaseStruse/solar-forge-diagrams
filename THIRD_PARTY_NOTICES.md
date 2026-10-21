@@ -1,6 +1,6 @@
 # Third-party software and artwork
 
-The original application source license is described in SOURCE_LICENSE.md. The following components have separate licenses; their copyright/license texts must accompany redistribution. No artifacts have been published by this implementation.
+Solar Forge Diagrams source code is released under the MIT License (see LICENSE). The following components have separate licenses; their copyright/license texts must accompany redistribution.
 
 - yaml 2.9.1 — ISC, copyright Eemeli Aro. License: node_modules/yaml/LICENSE. https://github.com/eemeli/yaml
 - Three.js 0.183.2 — MIT, copyright Three.js authors. License: node_modules/three/LICENSE. https://github.com/mrdoob/three.js
