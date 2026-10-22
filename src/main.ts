@@ -51,7 +51,10 @@ import {
   exportPng,
   nativeAvailable,
   openDocumentFile,
+  readRecovery,
   saveDocumentFile,
+  saveSvg,
+  writeRecovery,
 } from './platform/files';
 import { DiagramScene, type EditTarget, type Tool } from './renderer/scene';
 import { applyThemeCss, findTheme, themes } from './themes';
@@ -104,10 +107,7 @@ let fileHandle: number | undefined;
 let recoveryReady = false;
 const recovery = new RecoveryWriter(
   () => (history.isDirty ? serializeDocument(project) : null),
-  (content) =>
-    nativeAvailable()
-      ? invoke('write_recovery', { content })
-      : Promise.resolve(),
+  writeRecovery,
   (error) => notify(`Recovery failed: ${String(error)}. Save your diagram.`),
 );
 let layersVisible = true;
@@ -491,10 +491,7 @@ element('gif-record').onclick = () =>
 element('export-svg').onclick = () =>
   void action(async () => {
     const { exportSvg } = await import('./export/svg');
-    if (
-      await invoke<boolean>('export_svg', { content: await exportSvg(current) })
-    )
-      notify('SVG exported');
+    if (await saveSvg(await exportSvg(current))) notify('SVG exported');
   });
 for (const [id, format] of [
   ['export-mermaid', 'mmd'],
@@ -756,6 +753,7 @@ async function saveCurrent(saveAs = false): Promise<boolean> {
   const saved = await saveDocumentFile(
     serializeDocument(project),
     saveAs ? undefined : fileHandle,
+    project.title,
   );
   if (!saved) return false;
   if (history === savedHistory) fileHandle = saved.handle;
@@ -2406,10 +2404,11 @@ scene.fit();
 notify(
   nativeAvailable()
     ? 'Offline · Ready'
-    : 'Development preview · File operations use the native app',
+    : 'Browser workspace · Saving downloads a copy',
 );
-if (nativeAvailable())
-  void (async () => {
+void (async () => {
+  const native = nativeAvailable();
+  if (native) {
     if (await invoke<boolean>('diagnostic_mode')) {
       const { runNativeDiagnostics } = await import('./renderer/diagnostics');
       await runNativeDiagnostics(scene);
@@ -2425,7 +2424,7 @@ if (nativeAvailable())
         // A deliberate discard also removes the recovery snapshot.
         if (recoveryReady) {
           await recovery.flush();
-          await invoke('write_recovery', { content: null });
+          await writeRecovery(null);
         }
         recovery.dispose();
         await getCurrentWindow().destroy();
@@ -2435,48 +2434,51 @@ if (nativeAvailable())
           closing = false;
         });
     });
-    const content = await invoke<string | null>('read_recovery');
-    if (content) {
-      const decision = await choose(
-        'Recover your diagram?',
-        'An unsaved diagram was found from a previous session.',
-        ['Close app', 'Discard recovery', 'Recover'],
-      );
-      if (decision === 'Recover') {
-        replaceDocument(parseDocument(content));
-        history.markSaved(-1);
-        updateHeader();
-        notify('Recovered diagram. Save to choose a destination.');
-      } else if (decision === 'Discard recovery')
-        await invoke('write_recovery', { content: null });
-      else {
-        await getCurrentWindow().destroy();
-        return;
-      }
-    }
-    recoveryReady = true;
-    await refreshRecents();
-    const openPending = async () => {
-      if (busy) return;
-      const opened = await invoke<OpenedFile | null>('take_pending_file');
-      if (!opened) return;
-      await action(async () => {
-        if (!(await canReplace())) return;
-        replaceDocument(parseDocument(opened.content));
-        fileHandle = opened.handle;
-        notify(`Opened ${opened.name}`);
-        await refreshRecents();
-      });
-    };
-    await listen(
-      'pending-file',
-      () => void openPending().catch((error) => notify(String(error))),
+  }
+  const content = await readRecovery();
+  if (content) {
+    const decision = await choose(
+      'Recover your diagram?',
+      'An unsaved diagram was found from a previous session.',
+      native
+        ? ['Close app', 'Discard recovery', 'Recover']
+        : ['Discard recovery', 'Recover'],
     );
-    await openPending();
-    window.addEventListener('blur', () => {
-      if (history.isDirty) {
-        recovery.schedule();
-        void recovery.flush().catch(() => {});
-      }
+    if (decision === 'Recover') {
+      replaceDocument(parseDocument(content));
+      history.markSaved(-1);
+      updateHeader();
+      notify('Recovered diagram. Save to choose a destination.');
+    } else if (decision === 'Discard recovery') await writeRecovery(null);
+    else if (native) {
+      await getCurrentWindow().destroy();
+      return;
+    }
+  }
+  recoveryReady = true;
+  window.addEventListener('blur', () => {
+    if (history.isDirty) {
+      recovery.schedule();
+      void recovery.flush().catch(() => {});
+    }
+  });
+  if (!native) return;
+  await refreshRecents();
+  const openPending = async () => {
+    if (busy) return;
+    const opened = await invoke<OpenedFile | null>('take_pending_file');
+    if (!opened) return;
+    await action(async () => {
+      if (!(await canReplace())) return;
+      replaceDocument(parseDocument(opened.content));
+      fileHandle = opened.handle;
+      notify(`Opened ${opened.name}`);
+      await refreshRecents();
     });
-  })().catch((error) => notify(`Startup check failed: ${String(error)}`));
+  };
+  await listen(
+    'pending-file',
+    () => void openPending().catch((error) => notify(String(error))),
+  );
+  await openPending();
+})().catch((error) => notify(`Startup check failed: ${String(error)}`));

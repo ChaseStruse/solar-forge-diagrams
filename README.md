@@ -47,7 +47,7 @@ bun run verify      # lint, type check, tests, build, size budget
 bun run desktop     # native development window
 ```
 
-`bun run dev` previews UI work in a browser, but only `bun run desktop` validates the native Tauri and GPU behavior. The installed app bundles its assets and needs no server, Bun or Docker at runtime.
+`bun run dev` previews UI work in a browser, where Save downloads a copy and Open uses the browser file picker, but only `bun run desktop` validates the native Tauri and GPU behavior. The installed app bundles its assets and needs no server, Bun or Docker at runtime.
 
 ### Native smoke check
 
