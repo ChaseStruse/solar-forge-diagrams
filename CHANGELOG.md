@@ -4,6 +4,10 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 
 ## [Unreleased]
 
+### Added
+
+- **Browser file operations:** in a browser build, Save and Save as download a `.sforge.json` copy, Open uses the browser file picker, PNG and SVG exports download, and crash recovery keeps a snapshot in local storage. The native app is unchanged.
+
 ## [0.2.0] — 2026-10-20
 
 First public release.
