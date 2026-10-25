@@ -14,7 +14,7 @@ test('curated catalog IDs are stable and official icon files are present', () =>
   expect(new Set(services.map((service) => service.id)).size).toBe(
     services.length,
   );
-  expect(services.filter((s) => s.id.startsWith('aws.')).length).toBe(24);
+  expect(services.filter((s) => s.id.startsWith('aws.')).length).toBe(27);
   for (const service of services.filter((s) => s.asset)) {
     const source = readFileSync(
       new URL(`../assets/${service.asset}`, import.meta.url),

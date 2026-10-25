@@ -268,3 +268,34 @@ test('manually attached resource policies also restrict shared Compose networks'
       .status,
   ).toBe('allowed');
 });
+test('Cognito, WAF and Shield resources import with their catalog icons', () => {
+  const terraform = importInfrastructure([
+    {
+      name: 'edge.tf',
+      content: `resource "aws_cognito_user_pool" "users" { name = "users" }
+resource "aws_wafv2_web_acl" "edge" { name = "edge" }
+resource "aws_shield_protection" "cdn" { name = "cdn" }`,
+    },
+  ]);
+  const services = terraform.document.nodes
+    .flatMap((n) => (n.serviceId?.startsWith('aws.') ? [n.serviceId] : []))
+    .sort();
+  expect(services).toEqual(['aws.cognito', 'aws.shield', 'aws.waf']);
+  const cloudformation = importInfrastructure([
+    {
+      name: 'edge.json',
+      content: JSON.stringify({
+        Resources: {
+          Users: { Type: 'AWS::Cognito::UserPool', Properties: {} },
+          Edge: { Type: 'AWS::WAFv2::WebACL', Properties: {} },
+          Cdn: { Type: 'AWS::Shield::Protection', Properties: {} },
+        },
+      }),
+    },
+  ]);
+  expect(
+    cloudformation.document.nodes
+      .flatMap((n) => (n.serviceId?.startsWith('aws.') ? [n.serviceId] : []))
+      .sort(),
+  ).toEqual(['aws.cognito', 'aws.shield', 'aws.waf']);
+});
