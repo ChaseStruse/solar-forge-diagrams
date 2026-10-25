@@ -542,8 +542,9 @@
 :root:is([data-theme="monochrome"], [data-theme="comic-noir"]) img {
   filter: grayscale(1) contrast(1.3);
 }
+/* Comic Noir keeps colour icons so components stay easy to tell apart. */
 :root[data-theme="comic-noir"] img {
-  filter: grayscale(1) invert(1) contrast(1.3);
+  filter: none;
 }
 :root:is([data-theme="monochrome"], [data-theme="comic-noir"]) .status {
   color: var(--ink);
