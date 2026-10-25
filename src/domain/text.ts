@@ -89,16 +89,28 @@ export function resizedFont(
   );
 }
 
-/** Shared readable, multiline service caption layout for canvas and SVG. */
+/**
+ * Shared component caption layout for canvas and SVG. Captions stay on one
+ * line (explicit line breaks still apply), shrinking to fit the tile unless
+ * the component has its own font size. With `wrap`, words wrap to the tile.
+ */
 export function serviceCaption(
-  node: Pick<DiagramNode, 'label' | 'width' | 'depth'>,
+  node: Pick<DiagramNode, 'label' | 'width' | 'depth' | 'fontSize' | 'wrap'>,
   measure: (text: string, size: number) => number,
 ): { size: number; lines: string[] } {
-  return fitText(
-    node.label,
-    node.width * 0.82,
-    node.depth * 0.75,
-    Math.min(node.width * 0.13, node.depth * 0.25),
-    measure,
-  );
+  const width = node.width * 0.9;
+  const auto = Math.min(node.width * 0.13, node.depth * 0.25);
+  if (node.wrap)
+    return node.fontSize
+      ? {
+          size: node.fontSize,
+          lines: wrapText(node.label, width, (line) =>
+            measure(line, node.fontSize ?? auto),
+          ),
+        }
+      : fitText(node.label, width, node.depth * 0.75, auto, measure);
+  const lines = node.label.split('\n');
+  if (node.fontSize) return { size: node.fontSize, lines };
+  const widest = Math.max(0, ...lines.map((line) => measure(line, auto)));
+  return { size: widest > width ? (auto * width) / widest : auto, lines };
 }

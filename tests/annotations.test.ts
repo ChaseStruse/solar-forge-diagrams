@@ -87,18 +87,46 @@ test('auto fit preserves all text inside narrow and short boxes', async () => {
   ).toBe(40);
 });
 
-test('service captions wrap long labels without flattening the font', async () => {
+test('service captions stay on one line, shrinking to fit the tile', async () => {
   const { serviceCaption } = await import('../src/domain/text');
-  const caption = serviceCaption(
-    { label: 'Public route · 0.0.0.0/0 → IGW', width: 160, depth: 100 },
-    (text, size) => text.length * size * 0.6,
-  );
-  expect(caption.lines.length).toBeGreaterThan(1);
-  expect(caption.size).toBeGreaterThan(16);
+  const measure = (text: string, size: number) => text.length * size * 0.6;
+  const label = 'Public route · 0.0.0.0/0 → IGW';
+  const caption = serviceCaption({ label, width: 160, depth: 100 }, measure);
+  expect(caption.lines).toEqual([label]);
+  expect(measure(label, caption.size)).toBeCloseTo(160 * 0.9);
+  // Short labels keep the default size rather than growing.
   expect(
-    caption.lines.every(
-      (line) => line.length * caption.size * 0.6 <= 160 * 0.82,
-    ),
+    serviceCaption({ label: 'S3', width: 160, depth: 100 }, measure).size,
+  ).toBeCloseTo(160 * 0.13);
+  // Explicit line breaks are kept.
+  expect(
+    serviceCaption({ label: 'Orders\nAPI', width: 160, depth: 100 }, measure)
+      .lines,
+  ).toEqual(['Orders', 'API']);
+});
+
+test('service captions honour a chosen size and opt-in wrapping', async () => {
+  const { serviceCaption } = await import('../src/domain/text');
+  const measure = (text: string, size: number) => text.length * size * 0.6;
+  const label = 'Public route · 0.0.0.0/0 → IGW';
+  const sized = serviceCaption(
+    { label, width: 160, depth: 100, fontSize: 30 },
+    measure,
+  );
+  expect(sized).toEqual({ size: 30, lines: [label] });
+  const wrapped = serviceCaption(
+    { label, width: 160, depth: 100, wrap: true },
+    measure,
+  );
+  expect(wrapped.lines.length).toBeGreaterThan(1);
+  expect(wrapped.size).toBeGreaterThan(16);
+  expect(
+    wrapped.lines.every((line) => measure(line, wrapped.size) <= 160 * 0.9),
   ).toBe(true);
-  expect(caption.lines.length * caption.size * 1.28).toBeLessThanOrEqual(75);
+  const both = serviceCaption(
+    { label, width: 160, depth: 100, wrap: true, fontSize: 30 },
+    measure,
+  );
+  expect(both.size).toBe(30);
+  expect(both.lines.length).toBeGreaterThan(1);
 });
