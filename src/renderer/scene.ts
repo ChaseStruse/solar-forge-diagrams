@@ -29,7 +29,7 @@ import {
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { loadServiceImages } from '../catalog/images';
+import { loadServiceImages, missingServiceImages } from '../catalog/images';
 import { findService } from '../catalog/services';
 import type {
   DiagramDocument,
@@ -150,7 +150,8 @@ export type EditTarget =
   | { kind: 'empty'; x: number; z: number };
 export type Tool = 'select' | 'pan' | 'connect' | 'text' | 'note';
 export class DiagramScene {
-  public readonly ready: Promise<void>;
+  /** Settles once the icons of the current board have loaded. */
+  public ready: Promise<void> = Promise.resolve();
   private document: DiagramDocument;
   private readonly scene = new Scene();
   private palette: ScenePalette = defaultTheme.scene;
@@ -458,14 +459,6 @@ export class DiagramScene {
     palette: ScenePalette = defaultTheme.scene,
   ) {
     this.document = document;
-    this.ready = loadServiceImages()
-      .then(() => {
-        if (this.disposed) return;
-        const ids = this.selection;
-        this.load(this.document);
-        this.selectMany(ids);
-      })
-      .catch((error) => this.onError(String(error)));
     // Match the display (up to 2×): a lower ratio is upscaled and blurs text.
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.info.autoReset = false;
@@ -767,6 +760,27 @@ export class DiagramScene {
     this.updatePositions();
     this.invalidate();
     this.onSelect(undefined);
+    this.loadIcons(document);
+  }
+  /** Fetch the icons this board shows that are not loaded yet, then redraw. */
+  private loadIcons(document: DiagramDocument): void {
+    const ids: string[] = [];
+    for (const node of document.nodes) {
+      const service = findService(node.serviceId ?? node.label);
+      if (service?.icon) ids.push(service.id);
+    }
+    const missing = missingServiceImages(ids);
+    if (!missing.length) return;
+    this.ready = loadServiceImages(missing)
+      .then(() => {
+        if (this.disposed || this.document !== document) return;
+        const edge = this.selectedEdge;
+        const selection = this.selection;
+        this.load(document);
+        if (edge) this.selectEdge(edge);
+        else this.selectMany(selection);
+      })
+      .catch((error) => this.onError(String(error)));
   }
   private positionHeaderIcon(tile: Tile): void {
     if (!tile.headerIcon) return;

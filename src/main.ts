@@ -1186,6 +1186,8 @@ function serviceButton(service: (typeof services)[number]): HTMLButtonElement {
   symbol.style.color = service.color;
   if (service.icon) {
     const image = document.createElement('img');
+    image.loading = 'lazy';
+    image.decoding = 'async';
     image.src = service.icon;
     image.alt = '';
     symbol.append(image);
