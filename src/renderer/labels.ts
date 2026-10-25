@@ -67,9 +67,9 @@ const MAX_PAGE = 2048;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 4;
 /** Raster scale for a wanted pixel density: half-octave steps, rounded up. */
-export function rasterBucket(wanted: number): number {
+export function rasterBucket(wanted: number, max = MAX_SCALE): number {
   const scale = 2 ** (Math.ceil(Math.log2(Math.max(1e-3, wanted)) * 2) / 2);
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+  return Math.min(max, Math.max(MIN_SCALE, scale));
 }
 
 /**

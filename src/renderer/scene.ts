@@ -55,7 +55,7 @@ import { createAnnotation, NOTE_HEIGHT } from './annotations';
 import { AntialiasPass } from './antialias';
 import { createBackdrop } from './backdrop';
 import { JourneyPlayer } from './journey';
-import { LabelAtlas } from './labels';
+import { LabelAtlas, rasterBucket } from './labels';
 import {
   nodesInSelectionRect,
   type ScreenPoint,
@@ -381,14 +381,50 @@ export class DiagramScene {
     for (const dispose of this.retired.splice(0)) dispose();
   }
   private labelTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Redraw captions at their new size once zooming pauses. */
-  private sharpenLabelsSoon(): void {
+  /** Canvas pixels per world unit for new text and notes; follows zoom. */
+  private annotationScale = 2;
+  /** Redraw captions and notes at their new size once zooming pauses. */
+  private sharpenLabelsSoon(labels: boolean): void {
     clearTimeout(this.labelTimer);
     this.labelTimer = setTimeout(() => {
       if (this.disposed) return;
-      this.retired.push(this.labels.redraw());
+      if (labels) this.retired.push(this.labels.redraw());
+      this.sharpenAnnotations();
       this.invalidate();
     }, 160);
+  }
+  /** Text and notes drawn too soft, or far too large, for the current view. */
+  private staleAnnotations(): { tile: Tile; scale: number }[] {
+    const ratio = this.renderer.getPixelRatio();
+    const stale: { tile: Tile; scale: number }[] = [];
+    for (const tile of this.tiles.values()) {
+      const root = tile.annotation?.root;
+      if (!root) continue;
+      // The canvas size limit in createAnnotation caps very large notes.
+      const scale = rasterBucket(
+        ratio / this.pixelSize(tile.group.position),
+        16,
+      );
+      const current = Number(root.userData.resolution);
+      if (
+        (scale > current + 1e-6 && !root.userData.capped) ||
+        scale * 2 < current - 1e-6
+      )
+        stale.push({ tile, scale });
+    }
+    return stale;
+  }
+  private sharpenAnnotations(): void {
+    for (const { tile, scale } of this.staleAnnotations()) {
+      const old = tile.annotation;
+      if (!old) continue;
+      const annotation = createAnnotation(tile.node, this.palette, scale);
+      tile.group.remove(old.root);
+      tile.group.add(annotation.root);
+      tile.annotation = annotation;
+      this.retired.push(old.dispose);
+      this.annotationScale = scale;
+    }
   }
   /** Redraw captions for the current view now, before a capture. */
   private sharpenLabels(): void {
@@ -397,6 +433,8 @@ export class DiagramScene {
       this.labels.sync(this.camera, this.height, this.renderer.getPixelRatio())
     )
       this.retired.push(this.labels.redraw());
+    this.sharpenAnnotations();
+    this.scene.updateMatrixWorld();
   }
   private fitted = false;
   public onSelect: (node: DiagramNode | undefined) => void = () => {};
@@ -607,7 +645,11 @@ export class DiagramScene {
       group.add(mesh);
       this.pickables.push(mesh);
       if (isAnnotation(node)) {
-        const annotation = createAnnotation(node, this.palette);
+        const annotation = createAnnotation(
+          node,
+          this.palette,
+          this.annotationScale,
+        );
         group.add(annotation.root);
         this.content.add(group);
         // Annotations carry their own text; the placeholder keeps Tile uniform.
@@ -1958,11 +2000,15 @@ export class DiagramScene {
     // placement are recomputed only when the camera or board changed.
     if (changed) this.syncHandles();
     if (changed || stepping) this.scene.updateMatrixWorld();
-    if (
-      changed &&
-      this.labels.sync(this.camera, this.height, this.renderer.getPixelRatio())
-    )
-      this.sharpenLabelsSoon();
+    if (changed) {
+      const labels = this.labels.sync(
+        this.camera,
+        this.height,
+        this.renderer.getPixelRatio(),
+      );
+      if (labels || this.staleAnnotations().length)
+        this.sharpenLabelsSoon(labels);
+    }
     // Count the board's draw calls, not only the final screen pass.
     this.renderer.info.reset();
     this.antialias.render(
