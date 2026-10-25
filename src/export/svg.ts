@@ -16,11 +16,14 @@ const xmlText = (text: string) =>
         "'": '&apos;',
       })[c] ?? c,
   );
-export async function exportSvg(doc: DiagramDocument): Promise<string> {
+export async function exportSvg(
+  doc: DiagramDocument,
+  font = 'system-ui, sans-serif',
+): Promise<string> {
   const context = document.createElement('canvas').getContext('2d');
   if (!context) throw Error('Text canvas unavailable');
   const measure = (text: string, size: number, weight = 600) => {
-    context.font = `${weight} ${size}px system-ui, sans-serif`;
+    context.font = `${weight} ${size}px ${font}`;
     return context.measureText(text).width;
   };
   const nodes = new Map(doc.nodes.map((n) => [n.id, n]));
@@ -140,5 +143,5 @@ export async function exportSvg(doc: DiagramDocument): Promise<string> {
       return `<g>${note ? `<rect x="${x}" y="${z}" width="${node.width}" height="${node.depth}" rx="3" fill="${node.color}" stroke="#00000022"/>` : ''}<text x="${x + padding}" y="${z + padding}" font-size="${size}" font-weight="${note ? 500 : 600}" fill="${note ? '#2a2010' : '#172c43'}">${text}</text></g>`;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minZ} ${width} ${height}" role="img" aria-label="${xmlText(doc.title)}"><title>${xmlText(doc.title)}</title><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="#576b84"/></marker></defs><rect x="${minX}" y="${minZ}" width="${width}" height="${height}" fill="#fff"/><g font-family="system-ui, sans-serif">${groups}${edges}${services}${annotations}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minZ} ${width} ${height}" role="img" aria-label="${xmlText(doc.title)}"><title>${xmlText(doc.title)}</title><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="#576b84"/></marker></defs><rect x="${minX}" y="${minZ}" width="${width}" height="${height}" fill="#fff"/><g font-family="${xmlText(font)}">${groups}${edges}${services}${annotations}</g></svg>`;
 }

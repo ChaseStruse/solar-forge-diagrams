@@ -1513,3 +1513,10 @@ input[type="color"] {
   margin: 0;
   accent-color: var(--accent);
 }
+.font-picker {
+  justify-content: space-between;
+}
+.font-picker select {
+  width: auto;
+  flex: 0 1 60%;
+}
