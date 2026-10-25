@@ -380,6 +380,24 @@ export class DiagramScene {
   private flushRetired(): void {
     for (const dispose of this.retired.splice(0)) dispose();
   }
+  private labelTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Redraw captions at their new size once zooming pauses. */
+  private sharpenLabelsSoon(): void {
+    clearTimeout(this.labelTimer);
+    this.labelTimer = setTimeout(() => {
+      if (this.disposed) return;
+      this.retired.push(this.labels.redraw());
+      this.invalidate();
+    }, 160);
+  }
+  /** Redraw captions for the current view now, before a capture. */
+  private sharpenLabels(): void {
+    this.scene.updateMatrixWorld();
+    if (
+      this.labels.sync(this.camera, this.height, this.renderer.getPixelRatio())
+    )
+      this.retired.push(this.labels.redraw());
+  }
   private fitted = false;
   public onSelect: (node: DiagramNode | undefined) => void = () => {};
   public onMove: (
@@ -410,7 +428,8 @@ export class DiagramScene {
         this.selectMany(ids);
       })
       .catch((error) => this.onError(String(error)));
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    // Match the display (up to 2×): a lower ratio is upscaled and blurs text.
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.info.autoReset = false;
     this.renderer.setClearColor('#000000', 0);
     this.scene.fog = this.fog;
@@ -622,7 +641,12 @@ export class DiagramScene {
         node.label,
         this.camera.zoom,
         node.kind === 'group' ? 'group' : 'node',
-        { width: node.width, depth: node.depth },
+        {
+          width: node.width,
+          depth: node.depth,
+          ...(node.fontSize ? { fontSize: node.fontSize } : {}),
+          ...(node.wrap ? { wrap: true } : {}),
+        },
       );
       label.userData.captionBelow = node.kind === 'service' && !node.shape;
       label.userData.nodeWidth = node.width;
@@ -1934,7 +1958,11 @@ export class DiagramScene {
     // placement are recomputed only when the camera or board changed.
     if (changed) this.syncHandles();
     if (changed || stepping) this.scene.updateMatrixWorld();
-    if (changed) this.labels.sync(this.camera, this.height);
+    if (
+      changed &&
+      this.labels.sync(this.camera, this.height, this.renderer.getPixelRatio())
+    )
+      this.sharpenLabelsSoon();
     // Count the board's draw calls, not only the final screen pass.
     this.renderer.info.reset();
     this.antialias.render(
@@ -2060,6 +2088,7 @@ export class DiagramScene {
     this.view.setPanelVisible(false);
     this.fit();
     this.renderer.setPixelRatio(Math.min(3, Math.max(2, devicePixelRatio)));
+    this.sharpenLabels();
     this.render(true);
     const crop = this.contentBounds(28);
     const scale = this.renderer.getPixelRatio();
@@ -2212,6 +2241,7 @@ export class DiagramScene {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     clearTimeout(this.settleTimer);
+    clearTimeout(this.labelTimer);
     this.observer.disconnect();
     this.releaseContent();
     this.flushRetired();
