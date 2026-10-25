@@ -29,7 +29,7 @@ import {
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { loadServiceImages } from '../catalog/images';
+import { loadServiceImages, missingServiceImages } from '../catalog/images';
 import { findService } from '../catalog/services';
 import type {
   DiagramDocument,
@@ -55,7 +55,7 @@ import { createAnnotation, NOTE_HEIGHT } from './annotations';
 import { AntialiasPass } from './antialias';
 import { createBackdrop } from './backdrop';
 import { JourneyPlayer } from './journey';
-import { LabelAtlas } from './labels';
+import { LabelAtlas, rasterBucket } from './labels';
 import {
   nodesInSelectionRect,
   type ScreenPoint,
@@ -68,7 +68,7 @@ import { BoardView, type ViewMode } from './view';
 export type { ViewMode } from './view';
 
 /** Marching-dash defaults; themes may override them via flowStyle. */
-const DEFAULT_FLOW = { width: 3.6, dash: 12, gap: 38, speed: 80 };
+const DEFAULT_FLOW = { width: 3.6, dash: 12, gap: 38, speed: 40 };
 
 interface Rect {
   minX: number;
@@ -150,7 +150,8 @@ export type EditTarget =
   | { kind: 'empty'; x: number; z: number };
 export type Tool = 'select' | 'pan' | 'connect' | 'text' | 'note';
 export class DiagramScene {
-  public readonly ready: Promise<void>;
+  /** Settles once the icons of the current board have loaded. */
+  public ready: Promise<void> = Promise.resolve();
   private document: DiagramDocument;
   private readonly scene = new Scene();
   private palette: ScenePalette = defaultTheme.scene;
@@ -380,6 +381,62 @@ export class DiagramScene {
   private flushRetired(): void {
     for (const dispose of this.retired.splice(0)) dispose();
   }
+  private labelTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Canvas pixels per world unit for new text and notes; follows zoom. */
+  private annotationScale = 2;
+  /** Redraw captions and notes at their new size once zooming pauses. */
+  private sharpenLabelsSoon(labels: boolean): void {
+    clearTimeout(this.labelTimer);
+    this.labelTimer = setTimeout(() => {
+      if (this.disposed) return;
+      if (labels) this.retired.push(this.labels.redraw());
+      this.sharpenAnnotations();
+      this.invalidate();
+    }, 160);
+  }
+  /** Text and notes drawn too soft, or far too large, for the current view. */
+  private staleAnnotations(): { tile: Tile; scale: number }[] {
+    const ratio = this.renderer.getPixelRatio();
+    const stale: { tile: Tile; scale: number }[] = [];
+    for (const tile of this.tiles.values()) {
+      const root = tile.annotation?.root;
+      if (!root) continue;
+      // The canvas size limit in createAnnotation caps very large notes.
+      const scale = rasterBucket(
+        ratio / this.pixelSize(tile.group.position),
+        16,
+      );
+      const current = Number(root.userData.resolution);
+      if (
+        (scale > current + 1e-6 && !root.userData.capped) ||
+        scale * 2 < current - 1e-6
+      )
+        stale.push({ tile, scale });
+    }
+    return stale;
+  }
+  private sharpenAnnotations(): void {
+    for (const { tile, scale } of this.staleAnnotations()) {
+      const old = tile.annotation;
+      if (!old) continue;
+      const annotation = createAnnotation(tile.node, this.palette, scale);
+      tile.group.remove(old.root);
+      tile.group.add(annotation.root);
+      tile.annotation = annotation;
+      this.retired.push(old.dispose);
+      this.annotationScale = scale;
+    }
+  }
+  /** Redraw captions for the current view now, before a capture. */
+  private sharpenLabels(): void {
+    this.scene.updateMatrixWorld();
+    if (
+      this.labels.sync(this.camera, this.height, this.renderer.getPixelRatio())
+    )
+      this.retired.push(this.labels.redraw());
+    this.sharpenAnnotations();
+    this.scene.updateMatrixWorld();
+  }
   private fitted = false;
   public onSelect: (node: DiagramNode | undefined) => void = () => {};
   public onMove: (
@@ -402,15 +459,8 @@ export class DiagramScene {
     palette: ScenePalette = defaultTheme.scene,
   ) {
     this.document = document;
-    this.ready = loadServiceImages()
-      .then(() => {
-        if (this.disposed) return;
-        const ids = this.selection;
-        this.load(this.document);
-        this.selectMany(ids);
-      })
-      .catch((error) => this.onError(String(error)));
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    // Match the display (up to 2×): a lower ratio is upscaled and blurs text.
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.info.autoReset = false;
     this.renderer.setClearColor('#000000', 0);
     this.scene.fog = this.fog;
@@ -588,7 +638,11 @@ export class DiagramScene {
       group.add(mesh);
       this.pickables.push(mesh);
       if (isAnnotation(node)) {
-        const annotation = createAnnotation(node, this.palette);
+        const annotation = createAnnotation(
+          node,
+          this.palette,
+          this.annotationScale,
+        );
         group.add(annotation.root);
         this.content.add(group);
         // Annotations carry their own text; the placeholder keeps Tile uniform.
@@ -622,7 +676,12 @@ export class DiagramScene {
         node.label,
         this.camera.zoom,
         node.kind === 'group' ? 'group' : 'node',
-        { width: node.width, depth: node.depth },
+        {
+          width: node.width,
+          depth: node.depth,
+          ...(node.fontSize ? { fontSize: node.fontSize } : {}),
+          ...(node.wrap ? { wrap: true } : {}),
+        },
       );
       label.userData.captionBelow = node.kind === 'service' && !node.shape;
       label.userData.nodeWidth = node.width;
@@ -701,6 +760,27 @@ export class DiagramScene {
     this.updatePositions();
     this.invalidate();
     this.onSelect(undefined);
+    this.loadIcons(document);
+  }
+  /** Fetch the icons this board shows that are not loaded yet, then redraw. */
+  private loadIcons(document: DiagramDocument): void {
+    const ids: string[] = [];
+    for (const node of document.nodes) {
+      const service = findService(node.serviceId ?? node.label);
+      if (service?.icon) ids.push(service.id);
+    }
+    const missing = missingServiceImages(ids);
+    if (!missing.length) return;
+    this.ready = loadServiceImages(missing)
+      .then(() => {
+        if (this.disposed || this.document !== document) return;
+        const edge = this.selectedEdge;
+        const selection = this.selection;
+        this.load(document);
+        if (edge) this.selectEdge(edge);
+        else this.selectMany(selection);
+      })
+      .catch((error) => this.onError(String(error)));
   }
   private positionHeaderIcon(tile: Tile): void {
     if (!tile.headerIcon) return;
@@ -1934,7 +2014,15 @@ export class DiagramScene {
     // placement are recomputed only when the camera or board changed.
     if (changed) this.syncHandles();
     if (changed || stepping) this.scene.updateMatrixWorld();
-    if (changed) this.labels.sync(this.camera, this.height);
+    if (changed) {
+      const labels = this.labels.sync(
+        this.camera,
+        this.height,
+        this.renderer.getPixelRatio(),
+      );
+      if (labels || this.staleAnnotations().length)
+        this.sharpenLabelsSoon(labels);
+    }
     // Count the board's draw calls, not only the final screen pass.
     this.renderer.info.reset();
     this.antialias.render(
@@ -2060,6 +2148,7 @@ export class DiagramScene {
     this.view.setPanelVisible(false);
     this.fit();
     this.renderer.setPixelRatio(Math.min(3, Math.max(2, devicePixelRatio)));
+    this.sharpenLabels();
     this.render(true);
     const crop = this.contentBounds(28);
     const scale = this.renderer.getPixelRatio();
@@ -2212,6 +2301,7 @@ export class DiagramScene {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     clearTimeout(this.settleTimer);
+    clearTimeout(this.labelTimer);
     this.observer.disconnect();
     this.releaseContent();
     this.flushRetired();

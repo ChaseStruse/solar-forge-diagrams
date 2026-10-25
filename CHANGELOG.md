@@ -4,6 +4,26 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 
 ## [Unreleased]
 
+### Added
+
+- **Cognito, WAF and Shield** components with official AWS icons, also recognised by Terraform and CloudFormation import.
+- **Comic Noir** (Black & White inverted) and **Deep Space** themes.
+- **Board font** choice: Standard, Courier New or Terminal (bundled VT323, loaded on demand).
+- **Features tour** from the top bar.
+- **Bulk architecture details:** edit details for every selected object at once, or apply a boundary's details to everything inside it.
+- Component **Text size** and **Wrap caption** controls.
+- **Browser file operations:** in a browser build, Save and Save as download a `.sforge.json` copy, Open uses the browser file picker, PNG and SVG exports download, and crash recovery keeps a snapshot in local storage. The native app is unchanged.
+
+### Changed
+
+- Connections between two components in both directions are drawn as two parallel one-way lanes.
+- Component captions stay on one line by default, shrinking to fit.
+- Data-flow animation runs at half its previous speed.
+
+### Fixed
+
+- Blurry board text: rendering now matches the display pixel ratio, and captions, labels, text and notes are redrawn at their on-screen size when zooming pauses.
+
 ## [0.2.0] — 2026-10-20
 
 First public release.

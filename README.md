@@ -19,7 +19,7 @@ The installer checks the bundle's checksums and package identity, then installs 
 
 ## Features
 
-- **Editing:** Plan and 2.5D views, multi-select, grouping, resize, connections, clipboard, undo/redo, text and sticky notes, themes.
+- **Editing:** Plan and 2.5D views, multi-select, grouping, resize, connections, clipboard, undo/redo, text and sticky notes, bulk architecture details, themes and board fonts, and a built-in Features tour.
 - **Catalog:** official AWS and Kubernetes icons, container/DevOps/networking pictograms, flowchart shapes, and an example browser.
 - **Import:** Terraform (`.tf` or `terraform show -json`), CloudFormation YAML/JSON and Docker Compose, parsed locally. No Terraform, Docker or network access is needed.
 - **Network checks:** security groups, network ACLs and route tables feed a reachability matrix with explained Allowed / Denied / Unknown decisions.
@@ -47,7 +47,7 @@ bun run verify      # lint, type check, tests, build, size budget
 bun run desktop     # native development window
 ```
 
-`bun run dev` previews UI work in a browser, but only `bun run desktop` validates the native Tauri and GPU behavior. The installed app bundles its assets and needs no server, Bun or Docker at runtime.
+`bun run dev` previews UI work in a browser, where Save downloads a copy and Open uses the browser file picker, but only `bun run desktop` validates the native Tauri and GPU behavior. The installed app bundles its assets and needs no server, Bun or Docker at runtime.
 
 ### Native smoke check
 

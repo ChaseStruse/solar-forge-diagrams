@@ -26,8 +26,13 @@ export interface DiagramNode {
   serviceId?: string;
   shape?: 'process' | 'decision' | 'terminal';
   boundary?: 'account' | 'region' | 'vpc' | 'zone' | 'subnet';
-  /** World-unit font size for text and notes. */
+  /**
+   * World-unit font size. Text and notes always have one; a component without
+   * one sizes its caption automatically to fit the tile on a single line.
+   */
   fontSize?: number;
+  /** Let a component caption word-wrap to the tile width instead. */
+  wrap?: boolean;
   /**
    * What a journey does where this node has several outgoing connections:
    * walk them all, ask which way, or always take one connection.
@@ -197,6 +202,10 @@ function parseBoard(json: string): DiagramDocument {
       const size = finite(n.fontSize);
       if (size < 4 || size > 400) throw Error('Invalid font size');
       node.fontSize = size;
+    }
+    if (n.wrap !== undefined) {
+      if (typeof n.wrap !== 'boolean') throw Error('Invalid caption wrapping');
+      if (n.wrap) node.wrap = true;
     }
     if (n.journey !== undefined) {
       const journey = record(n.journey);

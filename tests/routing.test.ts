@@ -107,3 +107,32 @@ test('branches sharing a side fork at their shared node and merge at the target'
   const single = routeEdge(edges[0] as DiagramEdge, board(ecr, eks));
   expect(single.points[2]?.x).not.toBe(114);
 });
+
+test('connections running both ways split into two parallel one-way lanes', () => {
+  const api = tile('api', 0, 0),
+    db = tile('db', 400, 160);
+  const nodes = board(api, db);
+  const edges: DiagramEdge[] = [
+    { id: 'there', source: 'api', target: 'db', label: '' },
+    { id: 'back', source: 'db', target: 'api', label: '' },
+  ];
+  const fans = fansOf(edges, nodes);
+  const [there, back] = edges.map(
+    (edge) => routeEdge(edge, nodes, obstaclesOf(nodes), fans).points,
+  );
+  if (!there || !back) throw Error('Missing routes');
+  expect(there.length).toBe(back.length);
+  // Same path walked in opposite directions, held a lane apart everywhere.
+  const reversed = [...back].reverse();
+  for (const [i, p] of there.entries()) {
+    const q = reversed[i];
+    if (!q) throw Error('Missing point');
+    expect(Math.hypot(p.x - q.x, p.z - q.z)).toBeGreaterThanOrEqual(13.9);
+  }
+  // Each lane still starts and ends on its node's port side.
+  expect(there[0]?.x).toBe(90);
+  expect(back.at(-1)?.x).toBe(90);
+  // A one-way connection keeps the centre line.
+  const single = routeEdge(edges[0] as DiagramEdge, nodes);
+  expect(single.points[0]).toEqual({ x: 90, z: 0 });
+});

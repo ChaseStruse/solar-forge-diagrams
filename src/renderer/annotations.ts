@@ -22,12 +22,17 @@ const slab = new BoxGeometry(1, 1, 1);
 export function createAnnotation(
   node: DiagramNode,
   palette: ScenePalette,
+  /** Canvas pixels per world unit wanted; capped to a 4096 px canvas. */
+  wanted = 3,
 ): { root: Group; dispose: () => void } {
   const note = node.kind === 'note';
   const root = new Group();
   root.userData.width = node.width;
   root.userData.depth = node.depth;
-  const resolution = Math.min(3, 2048 / Math.max(node.width, node.depth));
+  const limit = 4096 / Math.max(node.width, node.depth);
+  const resolution = Math.min(wanted, limit);
+  root.userData.resolution = resolution;
+  root.userData.capped = wanted > limit;
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(2, Math.round(node.width * resolution));
   canvas.height = Math.max(2, Math.round(node.depth * resolution));

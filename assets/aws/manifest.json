@@ -118,5 +118,20 @@
     "file": "aws-iam-role.svg",
     "sourcePath": "Resource-Icons_07312026/Res_Security-Identity/Res_AWS-Identity-Access-Management_Role_48.svg",
     "sha256": "e47256f0e788e6bda40d17b0da4cf9abab170a29dfc7a22f579e13f4891407da"
+  },
+  {
+    "file": "amazon-cognito.svg",
+    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Security-Identity/64/Arch_Amazon-Cognito_64.svg",
+    "sha256": "cf9c55baa325d5d07aea0054115b1b24d68c1d7e046a4f8a360ccdefbba507e9"
+  },
+  {
+    "file": "aws-waf.svg",
+    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Security-Identity/64/Arch_AWS-WAF_64.svg",
+    "sha256": "3bfa7a5af38e550346b1828bead1cd3a35436fa19e1bf82f6cf6a366250cf65a"
+  },
+  {
+    "file": "aws-shield.svg",
+    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Security-Identity/64/Arch_AWS-Shield_64.svg",
+    "sha256": "52941bc7cf0c5ec706e7fd1b47d264e947e8b580f4e2338aef21755bfec9d6c0"
   }
 ]

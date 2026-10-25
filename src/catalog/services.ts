@@ -214,6 +214,30 @@ const aws: readonly (readonly [
     'identity access role assume sts temporary credentials instance profile',
     '#dd344c',
   ],
+  [
+    'cognito',
+    'Cognito',
+    'Amazon-Cognito',
+    'Security',
+    'identity user pool sign in sign up login auth authentication oauth oidc saml federation',
+    '#dd344c',
+  ],
+  [
+    'waf',
+    'WAF',
+    'AWS-WAF',
+    'Security',
+    'web application firewall acl rules bot sql injection xss rate limit',
+    '#dd344c',
+  ],
+  [
+    'shield',
+    'Shield',
+    'AWS-Shield',
+    'Security',
+    'ddos protection mitigation advanced edge',
+    '#dd344c',
+  ],
 ];
 /** Official AWS architecture group colours. */
 export const boundaryColors = {

@@ -46,15 +46,19 @@ import {
   pasteFragment,
   ungroupNodes,
 } from './editor/operations';
+import { boardFonts, findBoardFont, loadBoardFont } from './fonts';
 import {
   copyPng,
   exportPng,
   nativeAvailable,
   openDocumentFile,
+  readRecovery,
   saveDocumentFile,
+  saveSvg,
+  writeRecovery,
 } from './platform/files';
 import { DiagramScene, type EditTarget, type Tool } from './renderer/scene';
-import { applyThemeCss, findTheme, themes } from './themes';
+import { applyThemeCss, findTheme, type ScenePalette, themes } from './themes';
 import { icon } from './ui/icons';
 import { renderAmbient } from './ui/theme-fx';
 
@@ -64,19 +68,19 @@ root.innerHTML = `
   <main class="workspace" aria-label="Diagram workspace"><div id="canvas"></div><nav id="diagram-path" class="diagram-path" aria-label="Diagram navigation"></nav><div id="journey-caption" class="journey-caption" hidden role="status"></div></main><div id="theme-fx" aria-hidden="true"></div>
   <header class="topbar">
     <div class="board-heading"><button id="menu" class="icon-button" aria-label="File menu" aria-expanded="false" title="File menu">${icon('menu')}</button><span id="forge-mark" class="forge-mark" aria-hidden="true">✦</span><span class="brand">Solar Forge</span><span class="heading-divider"></span><button id="title" class="document-title" title="Rename diagram"></button><span id="save-state" class="save-state">Unchanged</span></div>
-    <div class="top-actions"><button id="examples" class="quiet-button" title="Browse examples">${icon('layers')}<span>Examples</span></button><button id="components" class="quiet-button" title="Components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="copy-image" class="quiet-button" title="Copy diagram image to clipboard (Ctrl+Shift+C)">${icon('camera')}<span>Copy image</span></button><button id="theme" class="icon-button" aria-label="Theme" aria-expanded="false" title="Theme">${icon('palette')}</button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
+    <div class="top-actions"><button id="features" class="quiet-button" title="Take a quick tour of the features">${icon('play')}<span>Features</span></button><button id="examples" class="quiet-button" title="Browse examples">${icon('layers')}<span>Examples</span></button><button id="components" class="quiet-button" title="Components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="copy-image" class="quiet-button" title="Copy diagram image to clipboard (Ctrl+Shift+C)">${icon('camera')}<span>Copy image</span></button><button id="theme" class="icon-button" aria-label="Theme" aria-expanded="false" title="Theme">${icon('palette')}</button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
   </header>
   <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="browse-examples">Browse examples…</button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="import-infrastructure">Import infrastructure…</button><button id="reachability">Reachability matrix…</button><button id="auto-layout">Automatic layout</button><button id="export">Export PNG ${icon('arrow')}</button><button id="export-gif">Export journey GIF</button><button id="export-video">Export journey video…</button><button id="export-mermaid">Export Mermaid source</button><button id="export-plantuml">Export PlantUML source</button><button id="export-drawio">Export draw.io project</button><button id="export-svg">Export SVG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">RECENT DIAGRAMS</p><div id="recent-files"></div></section>
-  <section id="theme-menu" class="popover theme-menu" aria-label="Themes" hidden><div id="theme-list"></div><label class="fx-toggle"><input id="theme-fx-toggle" type="checkbox"> Ambient effects</label></section>
+  <section id="theme-menu" class="popover theme-menu" aria-label="Themes" hidden><div id="theme-list"></div><label class="fx-toggle"><input id="theme-fx-toggle" type="checkbox"> Ambient effects</label><label class="fx-toggle font-picker">Board font<select id="board-font"></select></label></section>
   <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add component" title="Add component (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-text" class="tool" aria-label="Text" aria-pressed="false" title="Text: click the board (T)">${icon('text')}<kbd>T</kbd></button><button id="tool-note" class="tool" aria-label="Sticky note" aria-pressed="false" title="Sticky note: click the board (N)">${icon('note')}<kbd>N</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
   <section id="component-palette" class="popover component-palette" aria-label="Components" hidden><div class="popover-heading"><h2>Components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a component to add it to your board.</p></section>
-  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label id="node-branch-row">Journey at this fork<select id="node-branch"></select></label><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><label>Walkthrough caption<textarea id="node-caption" maxlength="1000" rows="3" placeholder="Explain what happens at this hop"></textarea></label><details id="detail-controls"><summary>Detail diagram</summary><label>Linked diagram<select id="node-detail"></select></label><button id="detail-open">Open detail ↗</button><button id="detail-create">Create detail diagram</button><p class="muted">Double-click a linked resource to open it. Use Label to rename it.</p></details><div id="resource-network"></div><details><summary>Architecture details</summary><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><div class="property-actions"><button id="edge-active">Make active route</button><button id="edge-all-routes">Show all routes</button></div><details><summary>Journey traffic rule</summary><label>Action<select id="rule-action"><option value="none">Unrestricted</option><option value="allow">Allow matching traffic</option><option value="deny">Deny all traffic</option></select></label><label>Protocol<select id="rule-protocol"><option value="any">Any</option><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Port (blank = any)<input id="rule-port" type="number" min="1" max="65535"></label><label>Source CIDR (blank = any)<input id="rule-source" placeholder="0.0.0.0/0"></label><label>Direction<select id="rule-direction"><option value="any">Any</option><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="rule-apply">Apply rule</button><p id="rule-result" class="muted" role="status"></p></details><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
+  <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><label id="node-wrap-row" class="check-row"><input id="node-wrap" type="checkbox"> Wrap caption to tile width</label><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label id="node-branch-row">Journey at this fork<select id="node-branch"></select></label><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><label>Walkthrough caption<textarea id="node-caption" maxlength="1000" rows="3" placeholder="Explain what happens at this hop"></textarea></label><details id="detail-controls"><summary>Detail diagram</summary><label>Linked diagram<select id="node-detail"></select></label><button id="detail-open">Open detail ↗</button><button id="detail-create">Create detail diagram</button><p class="muted">Double-click a linked resource to open it. Use Label to rename it.</p></details><div id="resource-network"></div><details id="meta-details"><summary>Architecture details</summary><p id="meta-scope" class="muted" hidden></p><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label><button id="meta-apply-inside" hidden>Apply to everything inside</button></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><div class="property-actions"><button id="edge-active">Make active route</button><button id="edge-all-routes">Show all routes</button></div><details><summary>Journey traffic rule</summary><label>Action<select id="rule-action"><option value="none">Unrestricted</option><option value="allow">Allow matching traffic</option><option value="deny">Deny all traffic</option></select></label><label>Protocol<select id="rule-protocol"><option value="any">Any</option><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Port (blank = any)<input id="rule-port" type="number" min="1" max="65535"></label><label>Source CIDR (blank = any)<input id="rule-source" placeholder="0.0.0.0/0"></label><label>Direction<select id="rule-direction"><option value="any">Any</option><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="rule-apply">Apply rule</button><p id="rule-result" class="muted" role="status"></p></details><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
   <nav class="canvas-controls" aria-label="Canvas controls"><div class="zoom-dock floating-dock" aria-label="Zoom controls"><button id="zoom-out" class="small-icon" aria-label="Zoom out">${icon('minus')}</button><span id="zoom-level">100%</span><button id="zoom-in" class="small-icon" aria-label="Zoom in">${icon('plus')}</button><span class="dock-divider"></span><button id="fit">Fit</button><span class="dock-divider"></span><button id="help" class="small-icon" aria-label="Keyboard help" aria-expanded="false">${icon('help')}</button></div>
   <div class="history-dock floating-dock" aria-label="Edit history"><button id="undo" class="small-icon" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button><button id="redo" class="small-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>${icon('redo')}</button></div>
   <div class="view-dock floating-dock" aria-label="View controls"><button id="journey" class="journey-button" aria-pressed="false" title="Walk a person through the data flow (P)">${icon('user')}<span>Journey</span></button><button id="traffic-settings" title="Configure journey traffic">Traffic</button><button id="flow" aria-pressed="true" title="Animate data flow along connections">${icon('flow')}<span>Flow</span></button><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
   <section id="gif-panel" class="popover help-panel" aria-label="GIF recording settings" hidden><h2 id="recording-title">Journey GIF</h2><label id="video-format-row" hidden>Video format<select id="video-format"><option value="webm">WebM</option><option value="mp4">MP4</option></select></label><p id="video-help" hidden>Up to 30 fps, 1280 × 720, full colour. Format availability depends on your browser. Decision forks use their first branch.</p><label>Duration (seconds)<input id="gif-duration" type="number" min="2" max="120" step="1" value="12"></label><label id="gif-dither-row" class="checkbox-label"><input id="gif-dither" type="checkbox" checked> Dither gradients</label><p id="gif-help">Up to 8 frames per second, 640 × 480. An adaptive palette preserves theme colours. Decision forks use their first branch.</p><button id="gif-record">Record GIF</button><p>Press Esc to cancel recording.</p></section>
   <section id="traffic-panel" class="popover help-panel" aria-label="Journey traffic" hidden><h2>Journey traffic</h2><label>Saved scenario<select id="traffic-scenario"></select></label><div class="property-actions"><button id="scenario-use">Use scenario</button><button id="scenario-delete">Delete</button></div><label>Scenario name<input id="scenario-name" maxlength="100"></label><label>Start (optional)<select id="scenario-source"></select></label><label>Destination (optional)<select id="scenario-target"></select></label><button id="scenario-save">Save / update scenario</button><p>Rules on connections allow matching traffic. Blocked attempts flash red and stop at the source. This illustrates configured paths, not a full AWS policy simulation.</p><label>Protocol<select id="traffic-protocol"><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Destination port<input id="traffic-port" type="number" min="1" max="65535" value="443"></label><label>Source IPv4<input id="traffic-source" value="203.0.113.10"></label><label>Direction<select id="traffic-direction"><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="traffic-apply">Apply traffic</button><p>For private egress in the demo, select a private worker, use source 10.0.10.10 and Egress, then play Journey.</p></section>
-  <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add · Enter drops it <kbd>C</kbd> Connect</p><p><kbd>T</kbd> Text <kbd>N</kbd> Note <kbd>P</kbd> Journey</p><p>Double-click to rename · <kbd>Ctrl K</kbd> Commands</p><p><kbd>Esc</kbd> Deselect · stop</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><label class="quality-label">Rendering quality<select id="quality"><option value="1">Efficient · 1×</option><option value="1.5" selected>Balanced · 1.5×</option><option value="2">Sharp · 2×</option></select></label><p>Drag empty canvas to select. Shift-drag adds.<br>Hold Ctrl while dragging to skip guides.<br>Scroll to zoom. Right-drag to pan.</p></section>
+  <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add · Enter drops it <kbd>C</kbd> Connect</p><p><kbd>T</kbd> Text <kbd>N</kbd> Note <kbd>P</kbd> Journey</p><p>Double-click to rename · <kbd>Ctrl K</kbd> Commands</p><p><kbd>Esc</kbd> Deselect · stop</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><label class="quality-label">Rendering quality<select id="quality"><option value="1">Efficient · 1×</option><option value="1.5">Balanced · 1.5×</option><option value="2" selected>Sharp · match display</option></select></label><p>Drag empty canvas to select. Shift-drag adds.<br>Hold Ctrl while dragging to skip guides.<br>Scroll to zoom. Right-drag to pan.</p></section>
   <section id="context-menu" class="popover context-menu" aria-label="Selection actions" hidden><button data-action="duplicate">Duplicate</button><button data-action="tool-group">Group</button><button data-action="ungroup">Ungroup</button><div class="align-row" data-multi><button data-align="left" title="Align left edges">⇤</button><button data-align="center" title="Align centres horizontally">↔</button><button data-align="right" title="Align right edges">⇥</button><button data-align="top" title="Align top edges">⤒</button><button data-align="middle" title="Align middles">↕</button><button data-align="bottom" title="Align bottom edges">⤓</button></div><div class="align-row" data-multi><button data-align="distribute-x" title="Distribute horizontally">⋯ Space evenly ↔</button><button data-align="distribute-z" title="Distribute vertically">⋮ ↕</button></div><button data-action="edge-active">Make active route</button><button data-action="edge-all-routes">Show all routes</button><button data-action="delete">Delete</button><button data-action="fit">Fit view</button></section>
   <div id="status" class="status" role="status">Ready</div><span id="count" class="board-count"></span>`;
 function element(id: string): HTMLElement {
@@ -97,6 +101,13 @@ let diagramTrail: (typeof current)[] = [];
 let selected: string | undefined;
 let checkedJourney: { path: string[]; allowed: boolean } | undefined;
 let selectedIds = new Set<string>();
+const METADATA_KEYS = [
+  'region',
+  'environment',
+  'resourceName',
+  'tags',
+  'notes',
+] as const;
 let selectedEdge: string | undefined;
 let dirty = false;
 let busy = false;
@@ -104,10 +115,7 @@ let fileHandle: number | undefined;
 let recoveryReady = false;
 const recovery = new RecoveryWriter(
   () => (history.isDirty ? serializeDocument(project) : null),
-  (content) =>
-    nativeAvailable()
-      ? invoke('write_recovery', { content })
-      : Promise.resolve(),
+  writeRecovery,
   (error) => notify(`Recovery failed: ${String(error)}. Save your diagram.`),
 );
 let layersVisible = true;
@@ -132,6 +140,21 @@ let themeEffects = (() => {
   } catch {}
   return !matchMedia('(prefers-reduced-motion: reduce)').matches;
 })();
+let boardFont = findBoardFont(
+  (() => {
+    try {
+      return localStorage.getItem('solar-forge-font');
+    } catch {
+      return null;
+    }
+  })(),
+);
+/** The theme's board colours with the chosen board font. */
+function scenePalette(): ScenePalette {
+  return boardFont.family
+    ? { ...theme.scene, labelFont: boardFont.family }
+    : theme.scene;
+}
 function applyThemeChrome(): void {
   applyThemeCss(theme);
   document.documentElement.dataset.fx = themeEffects ? 'on' : 'off';
@@ -162,7 +185,7 @@ function showComponents(show: boolean): void {
 function setTheme(id: string): void {
   theme = findTheme(id);
   applyThemeChrome();
-  scene.setPalette(theme.scene);
+  scene.setPalette(scenePalette());
   for (const button of element('theme-list').querySelectorAll('button'))
     button.setAttribute(
       'aria-pressed',
@@ -204,6 +227,35 @@ for (const [index, option] of themes.entries()) {
   };
   element('theme-list').append(button);
 }
+/** Switch board text to a font, drawing only once its face has loaded. */
+async function setBoardFont(id: string, announce = true): Promise<void> {
+  const font = findBoardFont(id);
+  boardFont = font;
+  field('board-font').value = font.id;
+  try {
+    await loadBoardFont(font);
+  } catch {
+    notify(`${font.name} font unavailable; using a fallback.`);
+  }
+  if (boardFont !== font) return;
+  scene.setPalette(scenePalette());
+  try {
+    localStorage.setItem('solar-forge-font', font.id);
+  } catch {}
+  if (announce) notify(`Board font · ${font.name}`);
+}
+fillOptions(
+  'board-font',
+  boardFonts.map((font) => [font.id, font.name] as [string, string]),
+  boardFont.id,
+);
+field('board-font').onchange = () =>
+  void setBoardFont(field('board-font').value);
+if (boardFont.family) void setBoardFont(boardFont.id, false);
+element('features').onclick = () =>
+  void import('./ui/tour')
+    .then(({ startTour }) => startTour())
+    .catch((error) => notify(`Tour unavailable: ${String(error)}`));
 inputElement('theme-fx-toggle').checked = themeEffects;
 inputElement('theme-fx-toggle').onchange = () => {
   themeEffects = inputElement('theme-fx-toggle').checked;
@@ -491,9 +543,7 @@ element('gif-record').onclick = () =>
 element('export-svg').onclick = () =>
   void action(async () => {
     const { exportSvg } = await import('./export/svg');
-    if (
-      await invoke<boolean>('export_svg', { content: await exportSvg(current) })
-    )
+    if (await saveSvg(await exportSvg(current, boardFont.family)))
       notify('SVG exported');
   });
 for (const [id, format] of [
@@ -567,7 +617,9 @@ function inspect(): void {
     'for',
     annotation ? 'node-text' : 'node-label',
   );
-  element('node-font-row').hidden = !annotation;
+  const component = node?.kind === 'service';
+  element('node-font-row').hidden = !annotation && !component;
+  element('node-wrap-row').hidden = !component;
   const outgoing = node
     ? current.edges.filter((edge) => edge.source === node.id)
     : [];
@@ -594,7 +646,14 @@ function inspect(): void {
   }
   if (node) {
     field('node-text').value = node.label;
-    inputElement('node-font').value = String(fontSize(node));
+    // Components without a size fit their caption automatically.
+    inputElement('node-font').value =
+      node.kind === 'service'
+        ? String(node.fontSize ?? '')
+        : String(fontSize(node));
+    inputElement('node-font').placeholder =
+      node.kind === 'service' ? 'Auto' : '';
+    inputElement('node-wrap').checked = Boolean(node.wrap);
     inputElement('node-color').value = node.color;
   }
   const edge = current.edges.find((e) => e.id === selectedEdge);
@@ -621,14 +680,26 @@ function inspect(): void {
       ],
       node.parentId ?? '',
     );
-    for (const key of [
-      'region',
-      'environment',
-      'resourceName',
-      'tags',
-      'notes',
-    ] as const)
-      field(`meta-${key}`).value = node.metadata?.[key] ?? '';
+    const targets = detailTargets();
+    for (const key of METADATA_KEYS) {
+      const input = field(`meta-${key}`) as HTMLInputElement;
+      input.dataset.placeholder ??= input.placeholder;
+      const values = targets.map((n) => n.metadata?.[key] ?? '');
+      const same = values.every((value) => value === values[0]);
+      input.value = same ? (values[0] ?? '') : '';
+      input.placeholder = same
+        ? (input.dataset.placeholder ?? '')
+        : 'Mixed · type to set for all';
+    }
+    const scope = element('meta-scope');
+    scope.hidden = targets.length < 2;
+    scope.textContent = `Editing ${targets.length} selected objects. Changes apply to all of them.`;
+    element('meta-apply-inside').hidden =
+      targets.length > 1 || descendants(node.id).length === 0;
+    if (targets.length > 1) {
+      element('selection').textContent = `${targets.length} selected`;
+      (element('meta-details') as HTMLDetailsElement).open = true;
+    }
   }
   if (edge) {
     const routes = routeActions();
@@ -756,6 +827,7 @@ async function saveCurrent(saveAs = false): Promise<boolean> {
   const saved = await saveDocumentFile(
     serializeDocument(project),
     saveAs ? undefined : fileHandle,
+    project.title,
   );
   if (!saved) return false;
   if (history === savedHistory) fileHandle = saved.handle;
@@ -970,6 +1042,16 @@ field('node-text').onchange = () => {
 };
 field('node-font').onchange = () => {
   const node = current.nodes.find((n) => n.id === selected);
+  if (node?.kind === 'service' && !field('node-font').value.trim()) {
+    const value = { ...node };
+    delete value.fontSize;
+    commit({
+      type: 'graph',
+      label: 'Text size',
+      nodes: [{ id: node.id, value }],
+    });
+    return;
+  }
   const size = Number(field('node-font').value);
   if (!node || !Number.isFinite(size) || size < 4 || size > 400) {
     inspect();
@@ -979,6 +1061,18 @@ field('node-font').onchange = () => {
     type: 'graph',
     label: 'Text size',
     nodes: [{ id: node.id, value: { ...node, fontSize: size } }],
+  });
+};
+inputElement('node-wrap').onchange = () => {
+  const node = current.nodes.find((n) => n.id === selected);
+  if (!node) return;
+  const value = { ...node };
+  if (inputElement('node-wrap').checked) value.wrap = true;
+  else delete value.wrap;
+  commit({
+    type: 'graph',
+    label: 'Caption wrapping',
+    nodes: [{ id: node.id, value }],
   });
 };
 field('node-branch').onchange = () => {
@@ -1092,6 +1186,8 @@ function serviceButton(service: (typeof services)[number]): HTMLButtonElement {
   symbol.style.color = service.color;
   if (service.icon) {
     const image = document.createElement('img');
+    image.loading = 'lazy';
+    image.decoding = 'async';
     image.src = service.icon;
     image.alt = '';
     symbol.append(image);
@@ -1985,33 +2081,71 @@ field('node-parent').onchange = () => {
     nodes: [{ id: node.id, value }],
   });
 };
-for (const key of [
-  'region',
-  'environment',
-  'resourceName',
-  'notes',
-  'tags',
-] as const)
+/** Nodes whose architecture details the panel edits: the whole selection. */
+function detailTargets(): DiagramNode[] {
+  const ids = selectedIds.size
+    ? selectedIds
+    : new Set(selected ? [selected] : []);
+  return current.nodes.filter((n) => ids.has(n.id));
+}
+/** Every node nested inside a boundary, at any depth. */
+function descendants(id: string): DiagramNode[] {
+  const inside = new Set([id]);
+  const result: DiagramNode[] = [];
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const n of current.nodes)
+      if (n.parentId && inside.has(n.parentId) && !inside.has(n.id)) {
+        inside.add(n.id);
+        result.push(n);
+        changed = true;
+      }
+  }
+  return result;
+}
+/** Set architecture details on several nodes in one undoable step. */
+function setDetails(
+  nodes: readonly DiagramNode[],
+  details: NonNullable<DiagramNode['metadata']>,
+  label: string,
+): void {
+  if (!nodes.length) return;
+  commit({
+    type: 'graph',
+    label,
+    nodes: nodes.map((n) => ({
+      id: n.id,
+      value: { ...n, metadata: { ...n.metadata, ...details } },
+    })),
+  });
+}
+for (const key of METADATA_KEYS)
   field(`meta-${key}`).onchange = () => {
-    const node = current.nodes.find((n) => n.id === selected);
-    if (node)
-      commit({
-        type: 'graph',
-        label: `Edit ${key}`,
-        nodes: [
-          {
-            id: node.id,
-            value: {
-              ...node,
-              metadata: {
-                ...node.metadata,
-                [key]: field(`meta-${key}`).value.slice(0, 1000),
-              },
-            },
-          },
-        ],
-      });
+    const targets = detailTargets();
+    setDetails(
+      targets,
+      { [key]: field(`meta-${key}`).value.slice(0, 1000) },
+      targets.length > 1
+        ? `Edit ${key} on ${targets.length} objects`
+        : `Edit ${key}`,
+    );
   };
+element('meta-apply-inside').onclick = () => {
+  const boundary = current.nodes.find((n) => n.id === selected);
+  if (!boundary) return;
+  const details = Object.fromEntries(
+    Object.entries(boundary.metadata ?? {}).filter(([, value]) => value),
+  );
+  const inside = descendants(boundary.id);
+  if (!Object.keys(details).length) {
+    notify('Fill in this boundary’s details first, then apply them.');
+    return;
+  }
+  setDetails(inside, details, 'Apply details inside boundary');
+  notify(
+    `Details applied to ${inside.length} objects inside ${boundary.label}`,
+  );
+};
 for (const key of [
   'label',
   'source',
@@ -2406,10 +2540,11 @@ scene.fit();
 notify(
   nativeAvailable()
     ? 'Offline · Ready'
-    : 'Development preview · File operations use the native app',
+    : 'Browser workspace · Saving downloads a copy',
 );
-if (nativeAvailable())
-  void (async () => {
+void (async () => {
+  const native = nativeAvailable();
+  if (native) {
     if (await invoke<boolean>('diagnostic_mode')) {
       const { runNativeDiagnostics } = await import('./renderer/diagnostics');
       await runNativeDiagnostics(scene);
@@ -2425,7 +2560,7 @@ if (nativeAvailable())
         // A deliberate discard also removes the recovery snapshot.
         if (recoveryReady) {
           await recovery.flush();
-          await invoke('write_recovery', { content: null });
+          await writeRecovery(null);
         }
         recovery.dispose();
         await getCurrentWindow().destroy();
@@ -2435,48 +2570,51 @@ if (nativeAvailable())
           closing = false;
         });
     });
-    const content = await invoke<string | null>('read_recovery');
-    if (content) {
-      const decision = await choose(
-        'Recover your diagram?',
-        'An unsaved diagram was found from a previous session.',
-        ['Close app', 'Discard recovery', 'Recover'],
-      );
-      if (decision === 'Recover') {
-        replaceDocument(parseDocument(content));
-        history.markSaved(-1);
-        updateHeader();
-        notify('Recovered diagram. Save to choose a destination.');
-      } else if (decision === 'Discard recovery')
-        await invoke('write_recovery', { content: null });
-      else {
-        await getCurrentWindow().destroy();
-        return;
-      }
-    }
-    recoveryReady = true;
-    await refreshRecents();
-    const openPending = async () => {
-      if (busy) return;
-      const opened = await invoke<OpenedFile | null>('take_pending_file');
-      if (!opened) return;
-      await action(async () => {
-        if (!(await canReplace())) return;
-        replaceDocument(parseDocument(opened.content));
-        fileHandle = opened.handle;
-        notify(`Opened ${opened.name}`);
-        await refreshRecents();
-      });
-    };
-    await listen(
-      'pending-file',
-      () => void openPending().catch((error) => notify(String(error))),
+  }
+  const content = await readRecovery();
+  if (content) {
+    const decision = await choose(
+      'Recover your diagram?',
+      'An unsaved diagram was found from a previous session.',
+      native
+        ? ['Close app', 'Discard recovery', 'Recover']
+        : ['Discard recovery', 'Recover'],
     );
-    await openPending();
-    window.addEventListener('blur', () => {
-      if (history.isDirty) {
-        recovery.schedule();
-        void recovery.flush().catch(() => {});
-      }
+    if (decision === 'Recover') {
+      replaceDocument(parseDocument(content));
+      history.markSaved(-1);
+      updateHeader();
+      notify('Recovered diagram. Save to choose a destination.');
+    } else if (decision === 'Discard recovery') await writeRecovery(null);
+    else if (native) {
+      await getCurrentWindow().destroy();
+      return;
+    }
+  }
+  recoveryReady = true;
+  window.addEventListener('blur', () => {
+    if (history.isDirty) {
+      recovery.schedule();
+      void recovery.flush().catch(() => {});
+    }
+  });
+  if (!native) return;
+  await refreshRecents();
+  const openPending = async () => {
+    if (busy) return;
+    const opened = await invoke<OpenedFile | null>('take_pending_file');
+    if (!opened) return;
+    await action(async () => {
+      if (!(await canReplace())) return;
+      replaceDocument(parseDocument(opened.content));
+      fileHandle = opened.handle;
+      notify(`Opened ${opened.name}`);
+      await refreshRecents();
     });
-  })().catch((error) => notify(`Startup check failed: ${String(error)}`));
+  };
+  await listen(
+    'pending-file',
+    () => void openPending().catch((error) => notify(String(error))),
+  );
+  await openPending();
+})().catch((error) => notify(`Startup check failed: ${String(error)}`));

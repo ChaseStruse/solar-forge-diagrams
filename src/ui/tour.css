@@ -1,0 +1,84 @@
+/* Features tour: loaded with the tour module, not at startup. */
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+.tour-spotlight {
+  position: fixed;
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 9999px #000a;
+  pointer-events: none;
+  transition:
+    left 0.25s ease,
+    top 0.25s ease,
+    width 0.25s ease,
+    height 0.25s ease;
+}
+.tour-card {
+  position: fixed;
+  width: min(360px, calc(100vw - 24px));
+  padding: 18px 18px 14px;
+  background: var(--panel-raised);
+  border: 1px solid var(--accent-border);
+  border-radius: 14px;
+  box-shadow: 0 18px 60px #000a;
+  color: var(--text);
+}
+.tour-centered .tour-card {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.tour-count {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--accent-text);
+}
+.tour-card h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+.tour-body {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+.tour-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.tour-actions button {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input);
+  color: var(--text);
+  cursor: pointer;
+}
+.tour-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.tour-actions .tour-skip {
+  margin-right: auto;
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+.tour-actions .tour-next {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-spotlight {
+    transition: none;
+  }
+}

@@ -67,4 +67,21 @@ export function renderAmbient(
         '--fx-length': `${between(80, 260)}px`,
       });
   } else if (ambient === 'grain') spawn('fx-grain', {});
+  else if (ambient === 'stars') {
+    for (let i = 0; i < 40; i++)
+      spawn('fx-star', {
+        left: `${between(0, 100)}%`,
+        top: `${between(0, 100)}%`,
+        '--fx-size': `${between(1, 2.6)}px`,
+        '--fx-duration': `${between(2.5, 7)}s`,
+        '--fx-delay': `${-between(0, 7)}s`,
+      });
+    for (let i = 0; i < 3; i++)
+      spawn('fx-comet', {
+        top: `${between(4, 60)}%`,
+        left: `${between(30, 100)}%`,
+        '--fx-duration': `${between(9, 18)}s`,
+        '--fx-delay': `${-between(0, 18)}s`,
+      });
+  }
 }

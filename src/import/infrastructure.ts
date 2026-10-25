@@ -230,6 +230,10 @@ function cfn(root: Record<string, unknown>, warnings: string[]): Resource[] {
       'AWS::EKS::Cluster': 'aws_eks_cluster',
       'AWS::SQS::Queue': 'aws_sqs_queue',
       'AWS::SNS::Topic': 'aws_sns_topic',
+      'AWS::Cognito::UserPool': 'aws_cognito_user_pool',
+      'AWS::Cognito::IdentityPool': 'aws_cognito_identity_pool',
+      'AWS::WAFv2::WebACL': 'aws_wafv2_web_acl',
+      'AWS::Shield::Protection': 'aws_shield_protection',
       'AWS::ElasticLoadBalancingV2::LoadBalancer': 'aws_lb',
     };
     tfType ??= other[type] ?? type;
