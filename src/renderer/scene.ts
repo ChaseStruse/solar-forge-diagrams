@@ -68,7 +68,7 @@ import { BoardView, type ViewMode } from './view';
 export type { ViewMode } from './view';
 
 /** Marching-dash defaults; themes may override them via flowStyle. */
-const DEFAULT_FLOW = { width: 3.6, dash: 12, gap: 38, speed: 80 };
+const DEFAULT_FLOW = { width: 3.6, dash: 12, gap: 38, speed: 40 };
 
 interface Rect {
   minX: number;

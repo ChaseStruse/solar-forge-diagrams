@@ -139,7 +139,7 @@ const cyberpunk: Theme = {
     labelFont:
       'Orbitron, Rajdhani, "Share Tech", "Segoe UI", system-ui, sans-serif',
     edgeWidth: 2.2,
-    flowStyle: { width: 5, dash: 22, gap: 28, speed: 220 },
+    flowStyle: { width: 5, dash: 22, gap: 28, speed: 110 },
   },
 };
 
@@ -435,7 +435,7 @@ const hacker: Theme = {
       'grayscale(1) sepia(1) hue-rotate(70deg) saturate(5) brightness(0.95)',
     monochrome: true,
     edgeWidth: 1.4,
-    flowStyle: { width: 2.4, dash: 6, gap: 14, speed: 160 },
+    flowStyle: { width: 2.4, dash: 6, gap: 14, speed: 80 },
   },
 };
 
@@ -514,7 +514,7 @@ const solarRam: Theme = {
     ambient: 2.2,
     labelFont: 'Montserrat, Poppins, "Segoe UI", system-ui, sans-serif',
     edgeWidth: 2,
-    flowStyle: { width: 4.2, dash: 18, gap: 30, speed: 120 },
+    flowStyle: { width: 4.2, dash: 18, gap: 30, speed: 60 },
   },
 };
 
@@ -591,7 +591,7 @@ const zenGarden: Theme = {
     labelFont:
       '"Noto Serif", "Noto Serif JP", Georgia, "Times New Roman", serif',
     edgeWidth: 1.3,
-    flowStyle: { width: 2.6, dash: 4, gap: 46, speed: 22 },
+    flowStyle: { width: 2.6, dash: 4, gap: 46, speed: 14 },
   },
 };
 
@@ -669,7 +669,7 @@ const monochrome: Theme = {
     iconFilter: 'grayscale(1) contrast(1.3)',
     monochrome: true,
     edgeWidth: 2,
-    flowStyle: { width: 3, dash: 10, gap: 10, speed: 60 },
+    flowStyle: { width: 3, dash: 10, gap: 10, speed: 30 },
   },
 };
 
