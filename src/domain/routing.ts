@@ -99,8 +99,13 @@ export function resolvePorts(
     );
   return [sourcePort, targetPort];
 }
-/** Connections sharing a node side, keyed "node:port"; shared sides fork at the node. */
+/**
+ * Board-wide routing context: connections sharing a node side, keyed
+ * "node:port" (shared sides fork at the node), and each connected
+ * source/target pair, so a pair linked both ways can split into two lanes.
+ */
 export type Fans = ReadonlyMap<string, number>;
+const pairKey = (source: string, target: string) => `${source}\0${target}`;
 export function fansOf(
   edges: Iterable<DiagramEdge>,
   nodes: ReadonlyMap<string, DiagramNode>,
@@ -109,16 +114,94 @@ export function fansOf(
   for (const edge of edges) {
     if (!nodes.has(edge.source) || !nodes.has(edge.target)) continue;
     const [out, into] = resolvePorts(edge, nodes);
-    for (const key of [`${edge.source}:${out}`, `${edge.target}:${into}`])
+    for (const key of [
+      `${edge.source}:${out}`,
+      `${edge.target}:${into}`,
+      pairKey(edge.source, edge.target),
+    ])
       fans.set(key, (fans.get(key) ?? 0) + 1);
   }
   return fans;
+}
+/** Gap between the two lanes of a connection pair that runs both ways. */
+export const LANE_GAP = 14;
+/**
+ * A connection whose reverse also exists. Both share one route, each shifted
+ * to its own right-hand side, so the pair reads as two parallel one-way arrows
+ * instead of a single line carrying flow both ways.
+ */
+function isTwoWay(edge: DiagramEdge, fans: Fans | undefined): boolean {
+  return (
+    edge.source !== edge.target &&
+    (fans?.get(pairKey(edge.target, edge.source)) ?? 0) > 0
+  );
+}
+/** Offset an orthogonal polyline sideways, to the right of its direction. */
+export function shiftRight(points: readonly Point[], by: number): Point[] {
+  const normals: (Point | undefined)[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1],
+      b = points[i];
+    const dx = (b?.x ?? 0) - (a?.x ?? 0),
+      dz = (b?.z ?? 0) - (a?.z ?? 0);
+    const length = Math.hypot(dx, dz);
+    // +X is screen-right and +Z screen-down, so right of travel is (-dz, dx).
+    normals.push(length ? { x: -dz / length, z: dx / length } : undefined);
+  }
+  return points.map((point, i) => {
+    let into: Point | undefined, out: Point | undefined;
+    for (let j = i - 1; j >= 0 && !into; j--) into = normals[j];
+    for (let j = i; j < normals.length && !out; j++) out = normals[j];
+    into ??= out;
+    out ??= into;
+    if (!into || !out) return { ...point };
+    // Miter join: a right-angle corner moves along both normals.
+    const dot = into.x * out.x + into.z * out.z;
+    const scale = dot > -0.99 ? by / (1 + dot) : by;
+    const x = dot > -0.99 ? into.x + out.x : into.x,
+      z = dot > -0.99 ? into.z + out.z : into.z;
+    return { x: point.x + x * scale, z: point.z + z * scale };
+  });
 }
 export function routeEdge(
   edge: DiagramEdge,
   nodes: ReadonlyMap<string, DiagramNode>,
   obstacles: readonly Obstacle[] = obstaclesOf(nodes),
   fans?: Fans,
+): { points: Point[]; sourcePort: Port; targetPort: Port } {
+  if (isTwoWay(edge, fans)) {
+    // Both directions follow the route of the lower-ID direction, so the
+    // lanes stay parallel; each then keeps to its own right-hand side.
+    const forward = edge.source < edge.target;
+    const shared = forward
+      ? routeOnce(edge, nodes, obstacles, fans)
+      : routeOnce(mirror(edge), nodes, obstacles, fans);
+    const points = forward ? shared.points : shared.points.reverse();
+    return {
+      sourcePort: forward ? shared.sourcePort : shared.targetPort,
+      targetPort: forward ? shared.targetPort : shared.sourcePort,
+      points: shiftRight(points, LANE_GAP / 2),
+    };
+  }
+  return routeOnce(edge, nodes, obstacles, fans);
+}
+function mirror(edge: DiagramEdge): DiagramEdge {
+  const result: DiagramEdge = {
+    ...edge,
+    source: edge.target,
+    target: edge.source,
+  };
+  delete result.sourcePort;
+  delete result.targetPort;
+  if (edge.targetPort) result.sourcePort = edge.targetPort;
+  if (edge.sourcePort) result.targetPort = edge.sourcePort;
+  return result;
+}
+function routeOnce(
+  edge: DiagramEdge,
+  nodes: ReadonlyMap<string, DiagramNode>,
+  obstacles: readonly Obstacle[],
+  fans: Fans | undefined,
 ): { points: Point[]; sourcePort: Port; targetPort: Port } {
   const source = nodes.get(edge.source),
     target = nodes.get(edge.target);
