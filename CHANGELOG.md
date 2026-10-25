@@ -7,7 +7,7 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 ### Added
 
 - **Cognito, WAF and Shield** components with official AWS icons, also recognised by Terraform and CloudFormation import.
-- **Comic Noir** (Black & White inverted) and **Deep Space** themes.
+- **Comic Noir** (inked black-and-white chrome, colour components) and **Deep Space** themes.
 - **Board font** choice: Standard, Courier New or Terminal (bundled VT323, loaded on demand).
 - **Features tour** from the top bar.
 - **Bulk architecture details:** edit details for every selected object at once, or apply a boundary's details to everything inside it.

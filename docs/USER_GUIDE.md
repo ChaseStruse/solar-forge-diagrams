@@ -42,7 +42,7 @@ Copy image (top bar, or Ctrl+Shift+C) puts a sharp picture of the whole diagram 
 
 Text (`T`) and Sticky note (`N`) place an annotation where you click; double-clicking empty board also starts a text. Type, then Ctrl+Enter or click away to finish; Esc cancels a new annotation. Text wraps inside its box; resize the box or change Text size in the inspector. Notes take any colour.
 
-The palette button in the top bar switches theme: Cyberpunk (default), Hacker, Solar Ram Studios, Zen Garden, Black & White, Comic Noir (Black & White inverted), Deep Space, Solar Forge, Nord or Daylight. **Board font** in the same menu sets the font for board text and SVG exports: Standard (the theme's own), Courier New, or Terminal (bundled VT323). The choices, Flow and render quality are remembered on this machine. Render quality defaults to matching the display (up to 2×), and board text is redrawn at its on-screen size whenever zooming pauses, so it stays sharp.
+The palette button in the top bar switches theme: Cyberpunk (default), Hacker, Solar Ram Studios, Zen Garden, Black & White, Comic Noir (inked black-and-white chrome with colour components), Deep Space, Solar Forge, Nord or Daylight. **Board font** in the same menu sets the font for board text and SVG exports: Standard (the theme's own), Courier New, or Terminal (bundled VT323). The choices, Flow and render quality are remembered on this machine. Render quality defaults to matching the display (up to 2×), and board text is redrawn at its on-screen size whenever zooming pauses, so it stays sharp.
 
 Ctrl+Z undoes a complete gesture; Ctrl+Shift+Z or Ctrl+Y redoes it. Input fields retain normal text undo. Ctrl+K searches commands and components. Escape cancels an in-progress gesture or tool and closes popovers.
 
