@@ -78,6 +78,8 @@ test('showpiece themes ship their extras and unknown ids fall back', () => {
     'solar-ram',
     'zen-garden',
     'monochrome',
+    'comic-noir',
+    'space',
   ]) {
     const theme = findTheme(id);
     expect(theme.id).toBe(id);

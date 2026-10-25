@@ -481,11 +481,19 @@
   color: #fff;
 }
 
-/* ---------- Black & White: ink, halftone, brutal shadows ---------- */
+/* ---------- Black & White and Comic Noir: ink, halftone, brutal shadows ---------- */
 :root[data-theme="monochrome"] {
+  --ink: #000;
+  --paper: #fff;
+}
+:root[data-theme="comic-noir"] {
+  --ink: #fff;
+  --paper: #000;
+}
+:root:is([data-theme="monochrome"], [data-theme="comic-noir"]) {
   font-family: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
 }
-:root[data-theme="monochrome"]
+:root:is([data-theme="monochrome"], [data-theme="comic-noir"])
   :is(
     .icon-button,
     .quiet-button,
@@ -495,26 +503,26 @@
     .layers-panel,
     .popover
   ) {
-  border: 2px solid #000;
+  border: 2px solid var(--ink);
   border-radius: 0;
-  box-shadow: 5px 5px 0 #000;
+  box-shadow: 5px 5px 0 var(--ink);
 }
-:root[data-theme="monochrome"]
+:root:is([data-theme="monochrome"], [data-theme="comic-noir"])
   :is(.icon-button, .quiet-button, .export-button):active {
   transform: translate(3px, 3px);
-  box-shadow: 2px 2px 0 #000;
+  box-shadow: 2px 2px 0 var(--ink);
 }
-:root[data-theme="monochrome"] .brand {
+:root:is([data-theme="monochrome"], [data-theme="comic-noir"]) .brand {
   text-transform: uppercase;
   font-weight: 900;
   letter-spacing: -0.5px;
   font-size: 15px;
-  background: #000;
-  color: #fff;
+  background: var(--ink);
+  color: var(--paper);
   padding: 2px 8px;
   transform: rotate(-2deg);
 }
-:root[data-theme="monochrome"]
+:root:is([data-theme="monochrome"], [data-theme="comic-noir"])
   :is(
     .panel-heading h2,
     .popover-heading h2,
@@ -525,16 +533,62 @@
   font-weight: 900;
   letter-spacing: 1px;
 }
-:root[data-theme="monochrome"]
+:root:is([data-theme="monochrome"], [data-theme="comic-noir"])
   #app
   :is(.tool.active, button[aria-pressed="true"]) {
-  background: #000;
-  color: #fff;
+  background: var(--ink);
+  color: var(--paper);
 }
-:root[data-theme="monochrome"] img {
+:root:is([data-theme="monochrome"], [data-theme="comic-noir"]) img {
   filter: grayscale(1) contrast(1.3);
 }
-:root[data-theme="monochrome"] .status {
-  color: #000;
+:root[data-theme="comic-noir"] img {
+  filter: grayscale(1) invert(1) contrast(1.3);
+}
+:root:is([data-theme="monochrome"], [data-theme="comic-noir"]) .status {
+  color: var(--ink);
   font-weight: 700;
+}
+:root[data-theme="comic-noir"] .fx-grain {
+  filter: invert(1);
+}
+.fx-star {
+  position: absolute;
+  width: var(--fx-size);
+  height: var(--fx-size);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px var(--accent-strong);
+  animation: fx-twinkle var(--fx-duration) ease-in-out var(--fx-delay) infinite;
+}
+@keyframes fx-twinkle {
+  50% {
+    opacity: 0.15;
+    transform: scale(0.6);
+  }
+}
+.fx-comet {
+  position: absolute;
+  width: 140px;
+  height: 2px;
+  background: linear-gradient(to left, #fff, var(--hot) 30%, transparent);
+  border-radius: 2px;
+  opacity: 0;
+  transform: rotate(-28deg);
+  animation: fx-comet var(--fx-duration) ease-in var(--fx-delay) infinite;
+  will-change: transform, opacity;
+}
+@keyframes fx-comet {
+  0%,
+  88% {
+    opacity: 0;
+    transform: rotate(-28deg) translateX(0);
+  }
+  90% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(-28deg) translateX(-480px);
+  }
 }
