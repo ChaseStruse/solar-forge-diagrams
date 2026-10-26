@@ -15,6 +15,12 @@ export interface BoardBounds {
  * gently tilted slabs rather than steep trapezoids.
  */
 const ELEVATION = (52 * Math.PI) / 180;
+/** Camera distance the zoom limits are tuned for. */
+const REFERENCE_DISTANCE = 1600;
+/** Roughly where a small board fits; farther away, fog stops thickening. */
+const FOG_DISTANCE = 2800;
+const MIN_ZOOM = 0.05;
+const MAX_ZOOM = 4;
 export class BoardView {
   public readonly target = new Vector3();
   private readonly spatial = new PerspectiveCamera(20, 1, 20, 80000);
@@ -22,7 +28,7 @@ export class BoardView {
   private mode: ViewMode = 'isometric';
   private width = 1;
   private height = 1;
-  private distance = 1600;
+  private distance = REFERENCE_DISTANCE;
   private rightInset = 260;
   public get camera(): PerspectiveCamera | OrthographicCamera {
     return this.mode === 'top' ? this.plan : this.spatial;
@@ -131,8 +137,25 @@ export class BoardView {
       this.update();
     };
   }
+  /**
+   * The 2.5D camera backs away to fit a large board, so its zoom ceiling grows
+   * with that distance: tiles can always be magnified to the same on-screen
+   * size, however big the board is.
+   */
+  public clampZoom(zoom: number): number {
+    const reach =
+      this.mode === 'top' ? 1 : Math.max(1, this.distance / REFERENCE_DISTANCE);
+    return Math.min(MAX_ZOOM * reach, Math.max(MIN_ZOOM, zoom));
+  }
+  /**
+   * Fog density multiplier. Fog is atmosphere relative to the view: a large
+   * board seen from far away must not fade into the fog colour.
+   */
+  public get fogScale(): number {
+    return this.mode === 'top' ? 1 : Math.min(1, FOG_DISTANCE / this.distance);
+  }
   public zoomBy(factor: number): void {
-    this.camera.zoom = Math.min(4, Math.max(0.1, this.camera.zoom * factor));
+    this.camera.zoom = this.clampZoom(this.camera.zoom * factor);
     this.update();
   }
   public get percent(): number {
