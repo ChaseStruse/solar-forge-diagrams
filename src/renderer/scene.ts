@@ -67,6 +67,8 @@ import { BoardView, type ViewMode } from './view';
 
 export type { ViewMode } from './view';
 
+/** Fog density at the reference camera distance; see BoardView.fogScale. */
+const FOG_DENSITY = 0.00012;
 /** Marching-dash defaults; themes may override them via flowStyle. */
 const DEFAULT_FLOW = { width: 3.6, dash: 12, gap: 38, speed: 40 };
 
@@ -159,7 +161,7 @@ export class DiagramScene {
   private readonly labels = new LabelAtlas(this.palette);
   private grid = new GridHelper(16000, 320);
   private readonly ambient = new AmbientLight('#c9def1', 2);
-  private readonly fog = new FogExp2('#0b111a', 0.00012);
+  private readonly fog = new FogExp2('#0b111a', FOG_DENSITY);
   private readonly view = new BoardView();
   private get camera() {
     return this.view.camera;
@@ -1627,9 +1629,8 @@ export class DiagramScene {
     this.fitted = false;
     event.preventDefault();
     const before = this.locate(event)?.clone();
-    this.camera.zoom = Math.min(
-      4,
-      Math.max(0.05, this.camera.zoom * Math.exp(-event.deltaY * 0.001)),
+    this.camera.zoom = this.view.clampZoom(
+      this.camera.zoom * Math.exp(-event.deltaY * 0.001),
     );
     this.camera.updateProjectionMatrix();
     const after = this.locate(event);
@@ -2007,6 +2008,7 @@ export class DiagramScene {
       -((start / 1000) * flow.speed) % (flow.dash + flow.gap);
     const changed = this.dirty || quality;
     this.dirty = false;
+    this.fog.density = FOG_DENSITY * this.view.fogScale;
     const stepping = this.animators.size > 0;
     for (const step of this.animators)
       if (!step(start)) this.animators.delete(step);

@@ -22,6 +22,8 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 
 ### Fixed
 
+- Large boards no longer fade to black: fog now thins as the camera backs away to fit a big diagram, so tiles, boundaries and notes keep their colours.
+- Zooming in on a large board in the 2.5D view is no longer capped at 4× the fitted view; the zoom-in limit grows with the board.
 - Blurry board text: rendering now matches the display pixel ratio, and captions, labels, text and notes are redrawn at their on-screen size when zooming pauses.
 
 ## [0.2.0] — 2026-10-20

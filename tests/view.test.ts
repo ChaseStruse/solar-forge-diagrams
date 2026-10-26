@@ -38,3 +38,44 @@ test('a narrow tiled window retains a usable board instead of shrinking behind L
   expect(((left.x + 1) * 513) / 2).toBeGreaterThan(90);
   expect(((right.x + 1) * 513) / 2).toBeLessThan(485);
 });
+
+const largeBoard = { minX: -300, maxX: 2700, minZ: -600, maxZ: 4500, maxY: 45 };
+test('a large board keeps full colour instead of fading into the fog', () => {
+  const small = new BoardView();
+  small.resize(1440, 1000);
+  small.fit({ minX: -470, maxX: 470, minZ: -305, maxZ: 305, maxY: 80 });
+  // Small boards keep their existing atmosphere.
+  expect(small.fogScale).toBeGreaterThan(0.95);
+  const large = new BoardView();
+  large.resize(1440, 1000);
+  large.fit(largeBoard);
+  const distance = large.camera.position.distanceTo(large.target);
+  // FogExp2: fog factor = 1 - exp(-(density * distance)^2).
+  const fog = 1 - Math.exp(-((0.00012 * large.fogScale * distance) ** 2));
+  expect(fog).toBeLessThan(0.12);
+});
+test('zoom-in reach grows with the board instead of capping at 4x the fit', () => {
+  const view = new BoardView();
+  view.resize(1440, 1000);
+  view.fit(largeBoard);
+  const fitted = view.camera.zoom;
+  for (let step = 0; step < 200; step++) view.zoomBy(1.2);
+  const tileWidth = (zoom: number) => {
+    view.camera.zoom = zoom;
+    view.update();
+    const a = new Vector3(view.target.x - 80, 0, view.target.z).project(
+      view.camera,
+    );
+    const b = new Vector3(view.target.x + 80, 0, view.target.z).project(
+      view.camera,
+    );
+    return ((b.x - a.x) * 1440) / 2;
+  };
+  const maxed = view.camera.zoom;
+  expect(maxed / fitted).toBeGreaterThan(20);
+  // A 160-unit tile can be magnified to fill a large part of the screen.
+  expect(tileWidth(maxed)).toBeGreaterThan(600);
+  view.setMode('top');
+  expect(view.clampZoom(1000)).toBe(4);
+  expect(view.clampZoom(0)).toBe(0.05);
+});
