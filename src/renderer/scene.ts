@@ -52,7 +52,7 @@ import {
 } from '../domain/routing';
 import { defaultTheme, type ScenePalette } from '../themes';
 import { createAnnotation, NOTE_HEIGHT } from './annotations';
-import { AntialiasPass } from './antialias';
+import { AntialiasPass, OVERLAY_LAYER, overlay } from './antialias';
 import { createBackdrop } from './backdrop';
 import { JourneyPlayer } from './journey';
 import { LabelAtlas, rasterBucket } from './labels';
@@ -465,6 +465,8 @@ export class DiagramScene {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.info.autoReset = false;
     this.renderer.setClearColor('#000000', 0);
+    // Resize and connect handles are drawn on the overlay layer.
+    this.ray.layers.enable(OVERLAY_LAYER);
     this.scene.fog = this.fog;
     // render() updates world matrices itself, and only when something moved.
     this.scene.matrixWorldAutoUpdate = false;
@@ -1361,7 +1363,7 @@ export class DiagramScene {
     this.guides.computeLineDistances();
     this.guides.frustumCulled = false;
     this.guides.renderOrder = 11;
-    this.scene.add(this.guides);
+    this.scene.add(overlay(this.guides));
     this.invalidate();
   }
   private applySize(tile: Tile): void {
@@ -1397,7 +1399,7 @@ export class DiagramScene {
       );
       this.preview.frustumCulled = false;
       this.preview.renderOrder = 11;
-      this.scene.add(this.preview);
+      this.scene.add(overlay(this.preview));
     } else this.preview.geometry.setPositions(positions);
     this.preview.computeLineDistances();
     this.invalidate();
@@ -1809,7 +1811,7 @@ export class DiagramScene {
       mesh.userData.nodeId = tile.node.id;
       mesh.userData.port = port;
       mesh.renderOrder = 12;
-      this.ports.add(mesh);
+      this.ports.add(overlay(mesh));
     }
     for (const sx of [-1, 0, 1])
       for (const sz of [-1, 0, 1]) {
@@ -1818,7 +1820,7 @@ export class DiagramScene {
         handle.userData.nodeId = tile.node.id;
         handle.userData.resize = [sx, sz];
         handle.renderOrder = 13;
-        this.ports.add(handle);
+        this.ports.add(overlay(handle));
       }
   }
   /** Write one connection's colour into the shared line buffer. */
@@ -1897,7 +1899,7 @@ export class DiagramScene {
     this.journey?.dispose();
     this.journey = new JourneyPlayer(
       {
-        add: (object) => this.scene.add(object),
+        add: (object) => this.scene.add(overlay(object)),
         remove: (object) => this.scene.remove(object),
         animate: (step) => this.animate(step),
         route: (id) => {
@@ -1996,7 +1998,7 @@ export class DiagramScene {
       ((this.flowing && this.hasFlowEdges) || this.animators.size > 0)
     );
   }
-  /** Captures pass `quality` so exports never use the in-motion FXAA path. */
+  /** Captures pass `quality` so exports never use the FXAA path. */
   private render(quality = false): void {
     const start = performance.now();
     if (this.distancesDirty && this.flowLines) {
@@ -2031,7 +2033,9 @@ export class DiagramScene {
       this.renderer,
       this.scene,
       this.camera,
-      quality || start >= this.motionUntil,
+      // MSAA costs several times FXAA on integrated GPUs: keep it for a
+      // board at rest, not one redrawn every frame for flow or a journey.
+      quality || (start >= this.motionUntil && !this.animating),
     );
     this.flushRetired();
     this.metrics.textures = this.renderer.info.memory.textures;
