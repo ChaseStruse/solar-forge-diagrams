@@ -14,6 +14,17 @@ import {
 } from 'three';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 
+/** Layer for captions and editing overlays, which draw over the board. */
+export const OVERLAY_LAYER = 1;
+/**
+ * Draw an object in the overlay pass, after FXAA, so glyphs are never smeared.
+ * Overlays must not depth test: they are drawn over the finished board.
+ */
+export function overlay<T extends Object3D>(object: T): T {
+  object.layers.set(OVERLAY_LAYER);
+  return object;
+}
+
 /**
  * Antialiasing for a context created without MSAA. On integrated GPUs 4× MSAA
  * cost more than the whole board, so motion (pan, zoom, drag) uses one cheap
@@ -25,6 +36,10 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
  * (it affects output colour space and tone mapping only; tone mapping is off)
  * and stored as plain RGBA8 so the GPU does not encode a second time. FXAA
  * then reads the encoded colour it is designed for and copies it through.
+ *
+ * FXAA cannot tell text from edges and blurs it, so in that path the overlay
+ * layer (captions, handles, guides) is drawn afterwards, straight to the
+ * canvas. MSAA leaves textures untouched and draws everything in one pass.
  */
 export class AntialiasPass {
   private readonly target = encodedTarget(0);
@@ -59,7 +74,7 @@ export class AntialiasPass {
   /** Draw the board to the canvas; `settled` selects MSAA over FXAA. */
   public render(
     renderer: WebGLRenderer,
-    scene: Object3D,
+    scene: Scene,
     camera: Camera,
     settled: boolean,
   ): void {
@@ -73,11 +88,26 @@ export class AntialiasPass {
         1 / this.size.y,
       );
     this.mesh.material = settled ? this.copy : this.material;
+    const mask = camera.layers.mask;
+    if (settled) camera.layers.enable(OVERLAY_LAYER);
+    else camera.layers.disable(OVERLAY_LAYER);
     const previous = renderer.getRenderTarget();
     renderer.setRenderTarget(target);
     renderer.render(scene, camera);
     renderer.setRenderTarget(previous);
     renderer.render(this.quad, this.camera);
+    if (!settled) {
+      // The background plane is on every layer; it must not cover the board.
+      const { background } = scene;
+      const { autoClear } = renderer;
+      scene.background = null;
+      renderer.autoClear = false;
+      camera.layers.set(OVERLAY_LAYER);
+      renderer.render(scene, camera);
+      renderer.autoClear = autoClear;
+      scene.background = background;
+    }
+    camera.layers.mask = mask;
   }
   public dispose(): void {
     this.target.dispose();

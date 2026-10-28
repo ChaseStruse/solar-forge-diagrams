@@ -25,6 +25,9 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 - Large boards no longer fade to black: fog now thins as the camera backs away to fit a big diagram, so tiles, boundaries and notes keep their colours.
 - Zooming in on a large board in the 2.5D view is no longer capped at 4× the fitted view; the zoom-in limit grows with the board.
 - Blurry board text: rendering now matches the display pixel ratio, and captions, labels, text and notes are redrawn at their on-screen size when zooming pauses.
+- Captions, icons and labels stay sharp while panning and zooming: they are drawn after the in-motion antialiasing pass instead of being smoothed by it.
+- Idle boards with data flow on no longer saturate integrated GPUs: animated frames use the cheap antialiasing pass, and full multisampling is kept for a board at rest (about 3× the idle frame rate on Intel UHD graphics).
+- Shorter stall when zooming stops: caption atlas pages upload about 4× faster.
 
 ## [0.2.0] — 2026-10-20
 

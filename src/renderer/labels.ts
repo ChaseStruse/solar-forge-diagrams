@@ -1,6 +1,7 @@
 import type { Camera, Group } from 'three';
 import {
   CanvasTexture,
+  CustomBlending,
   DynamicDrawUsage,
   InstancedBufferAttribute,
   InstancedMesh,
@@ -8,9 +9,10 @@ import {
   Matrix4,
   MeshBasicMaterial,
   Object3D,
+  OneFactor,
+  OneMinusSrcAlphaFactor,
   PerspectiveCamera,
   PlaneGeometry,
-  SRGBColorSpace,
   Vector3,
 } from 'three';
 import { serviceImages } from '../catalog/images';
@@ -18,6 +20,7 @@ import { serviceGlyph } from '../catalog/services';
 import type { DiagramNode } from '../domain/document';
 import { serviceCaption } from '../domain/text';
 import type { ScenePalette } from '../themes';
+import { overlay } from './antialias';
 
 type LabelKind = 'node' | 'edge' | 'icon' | 'group';
 /** Caption box and typography of a component; only `node` labels use it. */
@@ -274,8 +277,11 @@ export class LabelAtlas {
     if (!context) throw new Error('Text canvas unavailable');
     context.textAlign = 'center';
     context.textBaseline = 'middle';
+    // Upload the canvas as it is stored: premultiplied sRGB bytes in a plain
+    // RGBA8 texture. An sRGB format makes browsers convert on the CPU, which
+    // cost several times as much and stalled the frame after every zoom.
     const texture = new CanvasTexture(canvas);
-    texture.colorSpace = SRGBColorSpace;
+    texture.premultiplyAlpha = true;
     texture.generateMipmaps = false;
     texture.minFilter = LinearFilter;
     const page: Page = {
@@ -309,9 +315,14 @@ export class LabelAtlas {
       );
     }
     geometry.setAttribute('atlasRect', new InstancedBufferAttribute(rects, 4));
+    // Texels are already premultiplied and sRGB-encoded, the space the board
+    // blends in, so they are blended as-is and not encoded a second time.
     const material = new MeshBasicMaterial({
       map: page.texture,
       transparent: true,
+      blending: CustomBlending,
+      blendSrc: OneFactor,
+      blendDst: OneMinusSrcAlphaFactor,
       depthTest: false,
       depthWrite: false,
       fog: false,
@@ -326,14 +337,18 @@ export class LabelAtlas {
           '#include <uv_vertex>',
           '#include <uv_vertex>\nvMapUv = atlasRect.xy + vMapUv * atlasRect.zw;',
         );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <colorspace_fragment>',
+        '',
+      );
     };
-    material.customProgramCacheKey = () => 'solar-forge-atlas-v2';
+    material.customProgramCacheKey = () => 'solar-forge-atlas-v3';
     const batch = new InstancedMesh(geometry, material, page.entries.length);
     batch.instanceMatrix.setUsage(DynamicDrawUsage);
     batch.frustumCulled = false;
     batch.renderOrder = 10;
     page.batch = batch;
-    root.add(batch);
+    root.add(overlay(batch));
   }
   /**
    * Place every label for the camera. `pixelRatio` is device pixels per CSS
