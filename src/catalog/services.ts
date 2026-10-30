@@ -1,4 +1,5 @@
 import type { DiagramNode } from '../domain/document';
+import { moreAwsServices } from './aws-services';
 export interface ComponentDefinition {
   id: string;
   label: string;
@@ -391,19 +392,23 @@ export const services: ComponentDefinition[] = [
     asset: `kubernetes/${id}.svg`,
     icon: new URL(`../../assets/kubernetes/${id}.svg`, import.meta.url).href,
   })),
-  ...aws.map(([id, label, file, category, aliases, color]) => ({
-    id: `aws.${id}`,
-    label,
-    color,
-    glyph: label === 'Lambda' ? 'λ' : label.slice(0, 3),
-    description: `AWS · ${category}`,
-    category,
-    aliases,
-    kind: 'service' as const,
-    asset: `aws/${file.toLowerCase()}.svg`,
-    icon: new URL(`../../assets/aws/${file.toLowerCase()}.svg`, import.meta.url)
-      .href,
-  })),
+  ...[...aws, ...moreAwsServices].map(
+    ([id, label, file, category, aliases, color]) => ({
+      id: `aws.${id}`,
+      label,
+      color,
+      glyph: label === 'Lambda' ? 'λ' : label.slice(0, 3),
+      description: `AWS · ${category}`,
+      category,
+      aliases,
+      kind: 'service' as const,
+      asset: `aws/${file.toLowerCase()}.svg`,
+      icon: new URL(
+        `../../assets/aws/${file.toLowerCase()}.svg`,
+        import.meta.url,
+      ).href,
+    }),
+  ),
   ...(
     [
       [
