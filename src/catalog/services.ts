@@ -188,7 +188,7 @@ const aws: readonly (readonly [
     'SageMaker AI',
     'Amazon-SageMaker-AI',
     'Machine Learning',
-    'ml machine learning train recommendations data pipeline',
+    'ml machine learning train recommendations data pipeline unified studio',
     '#01a88d',
   ],
   [
