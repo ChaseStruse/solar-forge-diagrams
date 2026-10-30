@@ -695,46 +695,6 @@
     "sha256": "ad5ee90a06ce7cb105f3ef87e756a2a21a993db1305d1296e6ec854cfe771d32"
   },
   {
-    "file": "aws-activate.svg",
-    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Customer-Enablement/64/Arch_AWS-Activate_64.svg",
-    "sha256": "74477de8a2eef206124d7c4939f0d425ec0be6b806d62d0d68b80ed3e4d046b0"
-  },
-  {
-    "file": "aws-iq.svg",
-    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Customer-Enablement/64/Arch_AWS-IQ_64.svg",
-    "sha256": "98484a6215fec62b3ccae0e6afadc66917174631957159560ad96b814df4ac4e"
-  },
-  {
-    "file": "aws-managed-services.svg",
-    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Customer-Enablement/64/Arch_AWS-Managed-Services_64.svg",
-    "sha256": "47d344814dd9fdf12b8746256756cde3c2d3a2e4ef6658198d0519f14bffeb3c"
-  },
-  {
-    "file": "aws-professional-services.svg",
-    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Customer-Enablement/64/Arch_AWS-Professional-Services_64.svg",
-    "sha256": "617d8eaa3e546c49de43932bfd800872253c2593804adc5cd0f302f49c8530bd"
-  },
-  {
-    "file": "aws-support.svg",
-    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Customer-Enablement/64/Arch_AWS-Support_64.svg",
-    "sha256": "b156178e25d7eb093e94d09afc4faac897964f425e489d7f2e16b99c4e95c375"
-  },
-  {
-    "file": "aws-training-certification.svg",
-    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Customer-Enablement/64/Arch_AWS-Training-Certification_64.svg",
-    "sha256": "b96abc945f505167544558f12dc658598122aea241a65207ea946f76efcfbc12"
-  },
-  {
-    "file": "aws-repost-private.svg",
-    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Customer-Enablement/64/Arch_AWS-rePost-Private_64.svg",
-    "sha256": "9156d4e879630e366de7a2a73ae14af0114091045babcec89c0b1244e3938aab"
-  },
-  {
-    "file": "aws-repost.svg",
-    "sourcePath": "Architecture-Service-Icons_07312026/Arch_Customer-Enablement/64/Arch_AWS-rePost_64.svg",
-    "sha256": "93c3c2c053f30919ae237603844ccea3d30774122d1c71e1ffe7a5ef5a9c0f7f"
-  },
-  {
     "file": "aws-database-migration-service.svg",
     "sourcePath": "Architecture-Service-Icons_07312026/Arch_Databases/64/Arch_AWS-Database-Migration-Service_64.svg",
     "sha256": "4884a4efb9fe79b23ef96c3fc90c49e4cf5cff682c96447d4f4263926cd596fd"
@@ -893,11 +853,6 @@
     "file": "open-3d-engine.svg",
     "sourcePath": "Architecture-Service-Icons_07312026/Arch_Games/64/Arch_Open-3D-Engine_64.svg",
     "sha256": "6ef945e3be11ee46b71029c96b15c2d7753155f52754e0a0e29bdeca00c4fee7"
-  },
-  {
-    "file": "aws-marketplace.svg",
-    "sourcePath": "Architecture-Service-Icons_07312026/Arch_General-Icons/64/Arch_AWS-Marketplace_Light_64.svg",
-    "sha256": "8de70fc29b75385807662e0ef13542360737283764d5c1f596a5d0196bbb9730"
   },
   {
     "file": "aws-iot-core.svg",

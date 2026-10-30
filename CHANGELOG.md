@@ -6,7 +6,7 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 
 ### Added
 
-- **Every AWS service** in the official July 2026 icon package: 278 more components (305 in all) across all 24 AWS categories, from Aurora, Bedrock and Step Functions to Ground Station and Braket, each with its official icon and category colour and searchable by full name and common abbreviation. AWS icons now ship as separate files, loaded only when shown, so the initial script stays smaller than before.
+- **Every AWS architecture service** in the official July 2026 icon package: 269 more components (296 in all) across 22 AWS categories, from Aurora, Bedrock and Step Functions to Ground Station and Braket, each with its official icon and category colour and searchable by full name and common abbreviation. AWS icons now ship as separate files, loaded only when shown, so the initial script stays smaller than before.
 - **Cognito, WAF and Shield** components with official AWS icons, also recognised by Terraform and CloudFormation import.
 - **Comic Noir** (inked black-and-white chrome, colour components) and **Deep Space** themes.
 - **Board font** choice: Standard, Courier New or Terminal (bundled VT323, loaded on demand).
