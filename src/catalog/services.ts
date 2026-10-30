@@ -403,10 +403,8 @@ export const services: ComponentDefinition[] = [
       aliases,
       kind: 'service' as const,
       asset: `aws/${file.toLowerCase()}.svg`,
-      icon: new URL(
-        `../../assets/aws/${file.toLowerCase()}.svg`,
-        import.meta.url,
-      ).href,
+      // Served at a fixed path; see vite.config.ts.
+      icon: `${import.meta.env?.BASE_URL ?? '/'}assets/aws/${file.toLowerCase()}.svg`,
     }),
   ),
   ...(

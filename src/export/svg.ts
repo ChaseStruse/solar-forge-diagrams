@@ -56,22 +56,20 @@ export async function exportSvg(
     width = Math.max(200, xs.reduce((a, b) => Math.max(a, b), 0) - minX + 50),
     height = Math.max(160, zs.reduce((a, b) => Math.max(a, b), 0) - minZ + 50);
   const icons = new Map<string, string>();
-  const assets = import.meta.glob<string>('../../assets/*/*.svg', {
-    query: '?raw',
-    import: 'default',
-  });
-  const needed = [
-    ...new Set(
-      doc.nodes
-        .map((node) => findService(node.serviceId ?? node.label)?.asset)
-        .filter((asset): asset is string => !!asset),
-    ),
-  ];
+  // The palette and board load these same icon files, so they are usually cached.
+  const needed = new Map(
+    doc.nodes.flatMap((node) => {
+      const service = findService(node.serviceId ?? node.label);
+      return service?.asset && service.icon
+        ? [[service.asset, service.icon] as const]
+        : [];
+    }),
+  );
   await Promise.all(
-    needed.map(async (asset) => {
-      const load = assets[`../../assets/${asset}`];
-      if (!load) throw Error('Missing bundled export icon');
-      const bytes = new TextEncoder().encode(await load());
+    [...needed].map(async ([asset, url]) => {
+      const response = await fetch(url);
+      if (!response.ok) throw Error('Missing bundled export icon');
+      const bytes = new Uint8Array(await response.arrayBuffer());
       let binary = '';
       for (const byte of bytes) binary += String.fromCharCode(byte);
       icons.set(asset, `data:image/svg+xml;base64,${btoa(binary)}`);
