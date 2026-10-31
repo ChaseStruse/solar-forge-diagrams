@@ -7,7 +7,9 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 ### Added
 
 - **Pen input:** handles, connection hit areas and the tool rail grow while a pen is in use; a pen tap no longer nudges the component under it; a barrel button that sends a right or middle click pans, as those mouse buttons do; a pen's eraser end deletes the components and connections it passes over in one undoable step.
-- **Sketch tool** (`D`): draw a box, diamond or oval to add a process, decision or terminal shape at that size, or draw a line between two components to connect them.
+- **Feature tours** in Examples: Building blocks, Detail diagrams, Network flow, and Journeys and forks. Each is a small board with a sticky note that walks through the feature step by step.
+- **Keyboard camera:** hold WASD or the arrow keys to glide the view, with Shift for faster. Arrow keys still nudge a selection.
+- **Sketch tool** (`B`): draw a box, diamond or oval to add a process, decision or terminal shape at that size, or draw a line between two components to connect them.
 - **Tablet mode** from the top bar: full screen with pen-sized controls and fewer top-bar buttons. Under Hyprland the window first moves to the monitor the pen is mapped to (`input:tablet:output`) and returns to its previous monitor afterwards.
 - **Tablet buttons** in the new **Settings** panel (gear in the top bar): choose Assign next to an action, then press a tablet button, the Kamvas pen's side button (mapped to the Pan tool by default) or an extra mouse button, and that control runs the action; pressing a tool's button again returns to Select. Actions cover the tools, undo/redo, delete, zoom, fit, journey and tablet mode, plus Components-menu navigation for wheels that send key combos. Mappings are saved locally.
 - **Huion Kamvas wheels** in the desktop app, with no setup beyond a permission rule the package installs: turn to zoom; press to open the Components menu, turn to scroll it and press again to add the highlighted component. Sensitivity and direction are in Settings.

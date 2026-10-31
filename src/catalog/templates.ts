@@ -1,6 +1,12 @@
 import type { DiagramDocument, DiagramNode } from '../domain/document';
 import { sampleDocument, starterDocument } from '../domain/document';
 import { dataPipelineExample } from './data-pipeline';
+import {
+  buildingBlocksTour,
+  detailDiagramsTour,
+  journeyForksTour,
+  networkFlowTour,
+} from './feature-examples';
 import { kubernetesExample } from './kubernetes';
 import {
   approvalExample,
@@ -62,6 +68,42 @@ function architecture(title: string, ids: readonly string[]): DiagramDocument {
   };
 }
 export const templates: Template[] = [
+  {
+    id: 'tour-building-blocks',
+    name: 'Building blocks',
+    category: 'Feature tours',
+    subcategory: 'Boards',
+    description:
+      'Nested boundaries, two-way lanes, dependency arrows, notes and moving the view, with a step-by-step note.',
+    create: buildingBlocksTour,
+  },
+  {
+    id: 'tour-detail-diagrams',
+    name: 'Detail diagrams',
+    category: 'Feature tours',
+    subcategory: 'Boards',
+    description:
+      'Double-click a tile to open the board inside it, two levels deep, then find your way back.',
+    create: detailDiagramsTour,
+  },
+  {
+    id: 'tour-network-flow',
+    name: 'Network flow',
+    category: 'Feature tours',
+    subcategory: 'Journeys and traffic',
+    description:
+      'Play a journey and switch traffic scenarios to see connection rules allow or block HTTPS and SSH.',
+    create: networkFlowTour,
+  },
+  {
+    id: 'tour-journey-forks',
+    name: 'Journeys and forks',
+    category: 'Feature tours',
+    subcategory: 'Journeys and traffic',
+    description:
+      'Follow a journey that asks at a decision, splits at a fork and keeps to an active route.',
+    create: journeyForksTour,
+  },
   {
     id: 'private-worker',
     name: 'Private worker egress',

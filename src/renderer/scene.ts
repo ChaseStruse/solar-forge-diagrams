@@ -966,6 +966,29 @@ export class DiagramScene {
     this.onZoom(this.view.percent);
     this.invalidate();
   }
+  /**
+   * Slide the camera by a screen distance, measured on the board plane at the
+   * centre of the view, so a key pan feels the same at any zoom or view.
+   */
+  public panByPixels(dx: number, dy: number): void {
+    const ground = (x: number, y: number) => {
+      this.pointer.set((x / this.width) * 2, (-y / this.height) * 2);
+      this.ray.setFromCamera(this.pointer, this.camera);
+      return this.ray.ray.intersectPlane(this.plane, new Vector3());
+    };
+    const from = ground(0, 0);
+    const across = ground(dx, 0);
+    const along = ground(0, dy);
+    if (!from || !across || !along) return;
+    this.inMotion();
+    this.fitted = false;
+    // Both views keep board rows horizontal: screen x is board x, screen y is
+    // board z. Taking one axis from each ray drops perspective's sideways drift.
+    this.target.x += across.x - from.x;
+    this.target.z += along.z - from.z;
+    this.setView(this.mode);
+    this.invalidate();
+  }
   public setTool(tool: Tool): void {
     this.cancelInteraction();
     this.tool = tool;
