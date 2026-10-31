@@ -1,0 +1,3 @@
+# Let the signed-in user read Huion tablet HID reports, so Solar Forge
+# Diagrams can use the Kamvas wheels without Huion's driver.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="256c", TAG+="uaccess"

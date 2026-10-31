@@ -46,6 +46,7 @@ import {
   pasteFragment,
   ungroupNodes,
 } from './editor/operations';
+import { recognizeSketch } from './editor/sketch';
 import { boardFonts, findBoardFont, loadBoardFont } from './fonts';
 import {
   copyPng,
@@ -57,6 +58,27 @@ import {
   saveSvg,
   writeRecovery,
 } from './platform/files';
+import {
+  type DialStatus,
+  setTabletFullscreen,
+  watchTabletDial,
+} from './platform/tablet';
+import {
+  actionForCombo,
+  assignCombo,
+  comboFromEvent,
+  comboFromPointer,
+  dialLevels,
+  dialSteps,
+  isBuiltInCombo,
+  parseBindings,
+  penSideButton,
+  repeatingActions,
+  type TabletAction,
+  type TabletBindings,
+  tabletActions,
+  withDefaults,
+} from './platform/tablet-buttons';
 import { DiagramScene, type EditTarget, type Tool } from './renderer/scene';
 import { applyThemeCss, findTheme, type ScenePalette, themes } from './themes';
 import { icon } from './ui/icons';
@@ -68,11 +90,12 @@ root.innerHTML = `
   <main class="workspace" aria-label="Diagram workspace"><div id="canvas"></div><nav id="diagram-path" class="diagram-path" aria-label="Diagram navigation"></nav><div id="journey-caption" class="journey-caption" hidden role="status"></div></main><div id="theme-fx" aria-hidden="true"></div>
   <header class="topbar">
     <div class="board-heading"><button id="menu" class="icon-button" aria-label="File menu" aria-expanded="false" title="File menu">${icon('menu')}</button><span id="forge-mark" class="forge-mark" aria-hidden="true">✦</span><span class="brand">Solar Forge</span><span class="heading-divider"></span><button id="title" class="document-title" title="Rename diagram"></button><span id="save-state" class="save-state">Unchanged</span></div>
-    <div class="top-actions"><button id="features" class="quiet-button" title="Take a quick tour of the features">${icon('play')}<span>Features</span></button><button id="examples" class="quiet-button" title="Browse examples">${icon('layers')}<span>Examples</span></button><button id="components" class="quiet-button" title="Components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="copy-image" class="quiet-button" title="Copy diagram image to clipboard (Ctrl+Shift+C)">${icon('camera')}<span>Copy image</span></button><button id="theme" class="icon-button" aria-label="Theme" aria-expanded="false" title="Theme">${icon('palette')}</button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
+    <div class="top-actions"><button id="features" class="quiet-button" title="Take a quick tour of the features">${icon('play')}<span>Features</span></button><button id="examples" class="quiet-button" title="Browse examples">${icon('layers')}<span>Examples</span></button><button id="components" class="quiet-button" title="Components (/)" aria-expanded="false">${icon('cube')}<span>Components</span></button><button id="copy-image" class="quiet-button" title="Copy diagram image to clipboard (Ctrl+Shift+C)">${icon('camera')}<span>Copy image</span></button><button id="tablet-mode" class="icon-button" aria-label="Tablet mode" aria-pressed="false" title="Tablet mode: full screen on the pen display">${icon('tablet')}</button><button id="settings" class="icon-button" aria-label="Settings" aria-expanded="false" title="Settings">${icon('settings')}</button><button id="theme" class="icon-button" aria-label="Theme" aria-expanded="false" title="Theme">${icon('palette')}</button><button id="toggle-layers" class="icon-button" aria-label="Toggle Layers panel" aria-pressed="true" title="Layers">${icon('layers')}</button><button id="quick-save" class="quiet-button" title="Save diagram (Ctrl+S)">${icon('save')}<span>Save</span></button><button id="quick-export" class="export-button">Export ${icon('arrow')}</button></div>
   </header>
   <section id="file-menu" class="popover file-menu" aria-label="File menu" hidden><p class="popover-caption">LOCAL WORKSPACE</p><button id="new">New diagram <kbd>Ctrl N</kbd></button><button id="browse-examples">Browse examples…</button><button id="open">Open diagram <kbd>Ctrl O</kbd></button><button id="save">Save diagram <kbd>Ctrl S</kbd></button><button id="save-as">Save as… <kbd>Ctrl Shift S</kbd></button><button id="import-infrastructure">Import infrastructure…</button><button id="reachability">Reachability matrix…</button><button id="auto-layout">Automatic layout</button><button id="export">Export PNG ${icon('arrow')}</button><button id="export-gif">Export journey GIF</button><button id="export-video">Export journey video…</button><button id="export-mermaid">Export Mermaid source</button><button id="export-plantuml">Export PlantUML source</button><button id="export-drawio">Export draw.io project</button><button id="export-svg">Export SVG ${icon('arrow')}</button><div class="menu-divider"></div><p class="popover-caption">RECENT DIAGRAMS</p><div id="recent-files"></div></section>
+  <section id="settings-panel" class="popover settings-panel" aria-labelledby="settings-title" hidden><div class="popover-heading"><h2 id="settings-title">Settings</h2><button id="close-settings" class="small-icon" aria-label="Close settings">${icon('close')}</button></div><div class="settings-tabs" role="tablist"><button id="settings-tab-tablet" role="tab" aria-selected="true" aria-controls="settings-tablet">Tablet buttons</button></div><div id="settings-tablet" role="tabpanel" aria-labelledby="settings-tab-tablet"><p class="section-label">WHEELS</p><p id="dial-status" class="muted" role="status"></p><label class="dial-row">Wheel sensitivity<input id="dial-sensitivity" type="range" min="1" max="10" step="1"></label><label class="check-row"><input id="dial-reverse" type="checkbox"> Reverse wheel direction</label><p class="section-label">BUTTONS</p><p class="muted">Choose Assign, then press a tablet button, pen button or extra mouse button. Tablet buttons send ordinary key combos, so the same keys typed on a keyboard do the same thing.</p><div id="tablet-bindings" class="tablet-bindings"></div><div class="property-actions"><button id="tablet-bindings-reset">Clear all</button></div></div></section>
   <section id="theme-menu" class="popover theme-menu" aria-label="Themes" hidden><div id="theme-list"></div><label class="fx-toggle"><input id="theme-fx-toggle" type="checkbox"> Ambient effects</label><label class="fx-toggle font-picker">Board font<select id="board-font"></select></label></section>
-  <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add component" title="Add component (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-text" class="tool" aria-label="Text" aria-pressed="false" title="Text: click the board (T)">${icon('text')}<kbd>T</kbd></button><button id="tool-note" class="tool" aria-label="Sticky note" aria-pressed="false" title="Sticky note: click the board (N)">${icon('note')}<kbd>N</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
+  <nav class="tool-rail" aria-label="Canvas tools"><button id="tool-select" class="tool active" aria-label="Select" aria-pressed="true" title="Select (V)">${icon('pointer')}<kbd>V</kbd></button><button id="tool-pan" class="tool" aria-label="Pan" aria-pressed="false" title="Pan (M)">${icon('hand')}<kbd>M</kbd></button><span class="rail-divider"></span><button id="tool-add" class="tool" aria-label="Add component" title="Add component (/)">${icon('cube')}<kbd>/</kbd></button><button id="tool-connect" class="tool" aria-label="Connect components" aria-pressed="false" title="Connect (C)">${icon('connect')}<kbd>C</kbd></button><button id="tool-sketch" class="tool" aria-label="Sketch" aria-pressed="false" title="Sketch (D): draw a box, diamond or oval to add a shape, or a line between two components to connect them">${icon('pen')}<kbd>D</kbd></button><button id="tool-text" class="tool" aria-label="Text" aria-pressed="false" title="Text: click the board (T)">${icon('text')}<kbd>T</kbd></button><button id="tool-note" class="tool" aria-label="Sticky note" aria-pressed="false" title="Sticky note: click the board (N)">${icon('note')}<kbd>N</kbd></button><button id="tool-group" class="tool" aria-label="Group selection" title="Group (Ctrl+G)">${icon('group')}</button><button id="tool-edit" class="tool" aria-label="Rename selected component" title="Rename selected component" disabled>${icon('edit')}</button><span class="rail-divider"></span><button id="tool-fit" class="tool" aria-label="Fit diagram" title="Fit diagram (F)">${icon('fit')}</button></nav>
   <section id="component-palette" class="popover component-palette" aria-label="Components" hidden><div class="popover-heading"><h2>Components</h2><button id="close-components" class="small-icon" aria-label="Close components">${icon('close')}</button></div><label class="sr-only" for="search">Find a component</label><input id="search" type="search" placeholder="Search services…"><div id="services"></div><p class="palette-hint">Choose a component to add it to your board.</p></section>
   <aside id="layers-panel" class="layers-panel" aria-label="Layers and properties"><div class="panel-heading"><h2>Layers</h2><button id="layer-add" class="small-icon" aria-label="Add service">${icon('plus')}</button><button id="close-layers" class="small-icon" aria-label="Close Layers panel">${icon('close')}</button></div><div class="ground-card"><button id="ground-toggle" class="ground-eye" aria-label="Hide diagram" aria-pressed="true">${icon('eye')}</button><div><strong><span class="ground-dot"></span>Diagram</strong><p id="ground-summary"></p></div><span class="layer-index">01</span></div><div id="layer-tree" class="layer-tree" aria-label="Diagram objects"></div><section id="properties" class="properties" aria-label="Selected component properties" hidden><p class="section-label">SELECTED COMPONENT</p><h3 id="selection"></h3><p id="selection-note" class="muted"></p><label for="node-label" id="node-label-caption">Label</label><input id="node-label" maxlength="1000"><textarea id="node-text" rows="4" hidden></textarea><div class="property-grid"><label id="node-font-row">Text size<input id="node-font" type="number" min="4" max="400"></label><label>Colour<input id="node-color" type="color"></label></div><label id="node-wrap-row" class="check-row"><input id="node-wrap" type="checkbox"> Wrap caption to tile width</label><div class="property-grid"><label>X<input id="node-x" type="number" min="-1000000" max="1000000"></label><label>Z<input id="node-z" type="number" min="-1000000" max="1000000"></label><label>Width<input id="node-width" type="number" min="30" max="1000000"></label><label>Depth<input id="node-depth" type="number" min="30" max="1000000"></label></div><label id="node-branch-row">Journey at this fork<select id="node-branch"></select></label><label for="node-parent">Inside boundary</label><select id="node-parent"></select><div class="property-actions"><button id="duplicate">Duplicate</button><button id="ungroup">Ungroup</button></div><label>Walkthrough caption<textarea id="node-caption" maxlength="1000" rows="3" placeholder="Explain what happens at this hop"></textarea></label><details id="detail-controls"><summary>Detail diagram</summary><label>Linked diagram<select id="node-detail"></select></label><button id="detail-open">Open detail ↗</button><button id="detail-create">Create detail diagram</button><p class="muted">Double-click a linked resource to open it. Use Label to rename it.</p></details><div id="resource-network"></div><details id="meta-details"><summary>Architecture details</summary><p id="meta-scope" class="muted" hidden></p><label>Region<input id="meta-region" maxlength="1000"></label><label>Environment<input id="meta-environment" maxlength="1000"></label><label>Resource name<input id="meta-resourceName" maxlength="1000"></label><label>Tags<input id="meta-tags" maxlength="1000" placeholder="team=platform, env=dev"></label><label>Notes<textarea id="meta-notes" maxlength="1000" rows="3"></textarea></label><button id="meta-apply-inside" hidden>Apply to everything inside</button></details></section><section id="edge-properties" class="properties" aria-label="Connection properties" hidden><p class="section-label">SELECTED CONNECTION</p><label>Label<input id="edge-label" maxlength="1000"></label><label>From<select id="edge-source"></select></label><label>Source port<select id="edge-sourcePort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>To<select id="edge-target"></select></label><label>Target port<select id="edge-targetPort"><option value="">Auto</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label><label>Route<select id="edge-routing"><option value="horizontal">Horizontal first</option><option value="vertical">Vertical first</option></select></label><label>Bend offset<input id="edge-bend" type="number" min="-1000000" max="1000000" step="10"></label><div class="property-actions"><button id="edge-active">Make active route</button><button id="edge-all-routes">Show all routes</button></div><details><summary>Journey traffic rule</summary><label>Action<select id="rule-action"><option value="none">Unrestricted</option><option value="allow">Allow matching traffic</option><option value="deny">Deny all traffic</option></select></label><label>Protocol<select id="rule-protocol"><option value="any">Any</option><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Port (blank = any)<input id="rule-port" type="number" min="1" max="65535"></label><label>Source CIDR (blank = any)<input id="rule-source" placeholder="0.0.0.0/0"></label><label>Direction<select id="rule-direction"><option value="any">Any</option><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="rule-apply">Apply rule</button><p id="rule-result" class="muted" role="status"></p></details><button id="delete-edge" class="delete-button">Delete connection</button></section><div class="panel-foot"><span class="offline-dot"></span> Offline workspace <span class="forge-wordmark">SOLAR FORGE</span></div></aside>
   <nav class="canvas-controls" aria-label="Canvas controls"><div class="zoom-dock floating-dock" aria-label="Zoom controls"><button id="zoom-out" class="small-icon" aria-label="Zoom out">${icon('minus')}</button><span id="zoom-level">100%</span><button id="zoom-in" class="small-icon" aria-label="Zoom in">${icon('plus')}</button><span class="dock-divider"></span><button id="fit">Fit</button><span class="dock-divider"></span><button id="help" class="small-icon" aria-label="Keyboard help" aria-expanded="false">${icon('help')}</button></div>
@@ -80,7 +103,7 @@ root.innerHTML = `
   <div class="view-dock floating-dock" aria-label="View controls"><button id="journey" class="journey-button" aria-pressed="false" title="Walk a person through the data flow (P)">${icon('user')}<span>Journey</span></button><button id="traffic-settings" title="Configure journey traffic">Traffic</button><button id="flow" aria-pressed="true" title="Animate data flow along connections">${icon('flow')}<span>Flow</span></button><button id="snap" aria-pressed="true" title="Snap positions to a 10-unit grid">Snap</button><span class="dock-divider"></span><button id="iso" aria-pressed="true">2.5D</button><button id="top" aria-pressed="false">Plan</button><span class="dock-divider"></span><button id="delete" class="delete-button" disabled>${icon('trash')}<span>Delete</span></button></div></nav>
   <section id="gif-panel" class="popover help-panel" aria-label="GIF recording settings" hidden><h2 id="recording-title">Journey GIF</h2><label id="video-format-row" hidden>Video format<select id="video-format"><option value="webm">WebM</option><option value="mp4">MP4</option></select></label><p id="video-help" hidden>Up to 30 fps, 1280 × 720, full colour. Format availability depends on your browser. Decision forks use their first branch.</p><label>Duration (seconds)<input id="gif-duration" type="number" min="2" max="120" step="1" value="12"></label><label id="gif-dither-row" class="checkbox-label"><input id="gif-dither" type="checkbox" checked> Dither gradients</label><p id="gif-help">Up to 8 frames per second, 640 × 480. An adaptive palette preserves theme colours. Decision forks use their first branch.</p><button id="gif-record">Record GIF</button><p>Press Esc to cancel recording.</p></section>
   <section id="traffic-panel" class="popover help-panel" aria-label="Journey traffic" hidden><h2>Journey traffic</h2><label>Saved scenario<select id="traffic-scenario"></select></label><div class="property-actions"><button id="scenario-use">Use scenario</button><button id="scenario-delete">Delete</button></div><label>Scenario name<input id="scenario-name" maxlength="100"></label><label>Start (optional)<select id="scenario-source"></select></label><label>Destination (optional)<select id="scenario-target"></select></label><button id="scenario-save">Save / update scenario</button><p>Rules on connections allow matching traffic. Blocked attempts flash red and stop at the source. This illustrates configured paths, not a full AWS policy simulation.</p><label>Protocol<select id="traffic-protocol"><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option></select></label><label>Destination port<input id="traffic-port" type="number" min="1" max="65535" value="443"></label><label>Source IPv4<input id="traffic-source" value="203.0.113.10"></label><label>Direction<select id="traffic-direction"><option value="ingress">Ingress</option><option value="egress">Egress</option></select></label><button id="traffic-apply">Apply traffic</button><p>For private egress in the demo, select a private worker, use source 10.0.10.10 and Egress, then play Journey.</p></section>
-  <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add · Enter drops it <kbd>C</kbd> Connect</p><p><kbd>T</kbd> Text <kbd>N</kbd> Note <kbd>P</kbd> Journey</p><p>Double-click to rename · <kbd>Ctrl K</kbd> Commands</p><p><kbd>Esc</kbd> Deselect · stop</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><label class="quality-label">Rendering quality<select id="quality"><option value="1">Efficient · 1×</option><option value="1.5">Balanced · 1.5×</option><option value="2" selected>Sharp · match display</option></select></label><p>Drag empty canvas to select. Shift-drag adds.<br>Hold Ctrl while dragging to skip guides.<br>Scroll to zoom. Right-drag to pan.</p></section>
+  <section id="help-panel" class="popover help-panel" aria-label="Keyboard shortcuts" hidden><h2>Make room for your ideas.</h2><p><kbd>V</kbd> Select <kbd>M</kbd> Pan <kbd>F</kbd> Fit view</p><p><kbd>/</kbd> Add · Enter drops it <kbd>C</kbd> Connect</p><p><kbd>T</kbd> Text <kbd>N</kbd> Note <kbd>D</kbd> Sketch <kbd>P</kbd> Journey</p><p>Double-click to rename · <kbd>Ctrl K</kbd> Commands</p><p><kbd>Esc</kbd> Deselect · stop</p><p><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo</p><label class="quality-label">Rendering quality<select id="quality"><option value="1">Efficient · 1×</option><option value="1.5">Balanced · 1.5×</option><option value="2" selected>Sharp · match display</option></select></label><p>Drag empty canvas to select. Shift-drag adds.<br>Hold Ctrl while dragging to skip guides.<br>Scroll to zoom. Right-drag to pan.<br>Pen: drag with a barrel button held to pan; the eraser end deletes.</p></section>
   <section id="context-menu" class="popover context-menu" aria-label="Selection actions" hidden><button data-action="duplicate">Duplicate</button><button data-action="tool-group">Group</button><button data-action="ungroup">Ungroup</button><div class="align-row" data-multi><button data-align="left" title="Align left edges">⇤</button><button data-align="center" title="Align centres horizontally">↔</button><button data-align="right" title="Align right edges">⇥</button><button data-align="top" title="Align top edges">⤒</button><button data-align="middle" title="Align middles">↕</button><button data-align="bottom" title="Align bottom edges">⤓</button></div><div class="align-row" data-multi><button data-align="distribute-x" title="Distribute horizontally">⋯ Space evenly ↔</button><button data-align="distribute-z" title="Distribute vertically">⋮ ↕</button></div><button data-action="edge-active">Make active route</button><button data-action="edge-all-routes">Show all routes</button><button data-action="delete">Delete</button><button data-action="fit">Fit view</button></section>
   <div id="status" class="status" role="status">Ready</div><span id="count" class="board-count"></span>`;
 function element(id: string): HTMLElement {
@@ -986,7 +1009,7 @@ element('ground-toggle').onclick = () => {
 };
 function selectTool(tool: Tool): void {
   scene.setTool(tool);
-  for (const name of ['select', 'pan', 'connect', 'text', 'note']) {
+  for (const name of ['select', 'pan', 'connect', 'sketch', 'text', 'note']) {
     const button = element(`tool-${name}`);
     button.classList.toggle('active', name === tool);
     button.setAttribute('aria-pressed', String(name === tool));
@@ -1001,6 +1024,12 @@ element('tool-text').onclick = () => {
 element('tool-note').onclick = () => {
   selectTool('note');
   notify('Click the board to pin a sticky note.');
+};
+element('tool-sketch').onclick = () => {
+  selectTool('sketch');
+  notify(
+    'Draw a box, diamond or oval to add a shape, or a line between two components to connect them.',
+  );
 };
 element('tool-connect').onclick = () => {
   selectTool('connect');
@@ -1551,9 +1580,17 @@ scene.onMoves = (moves) => {
   commit({ type: 'graph', label: 'Move selection', nodes });
 };
 scene.onConnect = (source, sourcePort, target, targetPort) => {
+  if (connect(source, sourcePort, target, targetPort)) selectTool('select');
+};
+function connect(
+  source: string,
+  sourcePort: Port | undefined,
+  target: string,
+  targetPort: Port | undefined,
+): boolean {
   if (source === target) {
     notify('Choose a different target component.');
-    return;
+    return false;
   }
   const id = crypto.randomUUID();
   const value: DiagramEdge = { id, source, target, label: '' };
@@ -1564,8 +1601,502 @@ scene.onConnect = (source, sourcePort, target, targetPort) => {
     label: 'Connect components',
     edges: [{ id, value }],
   });
-  selectTool('select');
+  return true;
+}
+/** Turn a sketch-tool stroke into a flowchart shape or a connection. */
+scene.onSketch = (stroke) => {
+  const sketch = recognizeSketch(stroke.points);
+  if (sketch.kind === 'none') {
+    // A tap selects, as with the select tool; only real strokes get a hint.
+    if (stroke.points.length < 3) scene.select(stroke.from?.id);
+    else
+      notify(
+        'Could not recognise that. Draw a box, diamond or oval, or a line between two components.',
+      );
+    return;
+  }
+  if (sketch.kind === 'line') {
+    const { from, to } = stroke;
+    if (from && to && from.id !== to.id)
+      connect(from.id, from.port, to.id, to.port);
+    else
+      notify(
+        'Start and end a line on two different components to connect them.',
+      );
+    return;
+  }
+  const service = services.find((s) => s.id === `flow.${sketch.shape}`);
+  if (!service) return;
+  const snap = (value: number) =>
+    scene.snapping ? Math.round(value / 10) * 10 : Math.round(value);
+  const id = crypto.randomUUID();
+  history.execute({
+    type: 'insert',
+    node: {
+      id,
+      kind: service.kind,
+      serviceId: service.id,
+      shape: sketch.shape,
+      label: service.label,
+      x: snap(sketch.x),
+      z: snap(sketch.z),
+      width: Math.max(30, snap(sketch.width)),
+      depth: Math.max(30, snap(sketch.depth)),
+      color: service.color,
+    },
+  });
+  deferInspect(() => scene.load(current));
+  scene.select(id);
+  updateHeader();
+  notify(`${service.label} added. Double-click to rename it.`);
 };
+/** The pen's eraser end: delete what it passed over in one undoable step. */
+scene.onErase = (nodes, edges) => {
+  const edit = deleteNodes(current, new Set(nodes));
+  if (edit.type !== 'graph') return;
+  const removed = new Set(edit.edges?.map((e) => e.id));
+  const extra = edges
+    .filter((id) => !removed.has(id))
+    .map((id) => ({ id, value: null }));
+  commit(
+    {
+      ...edit,
+      label: 'Erase',
+      edges: [...(edit.edges ?? []), ...extra],
+    },
+    [],
+  );
+};
+let penHintShown = false;
+scene.onPenInput = (pen) => {
+  document.body.classList.toggle('pen-input', pen);
+  if (pen && !penHintShown && !tabletMode) {
+    penHintShown = true;
+    notify(
+      'Pen detected. Tablet mode (top bar) goes full screen on the pen display.',
+    );
+  }
+};
+let tabletMode = false;
+let layersBeforeTablet = true;
+async function setTabletMode(on: boolean): Promise<void> {
+  if (on === tabletMode) return;
+  tabletMode = on;
+  document.body.classList.toggle('tablet-mode', on);
+  element('tablet-mode').setAttribute('aria-pressed', String(on));
+  if (on) {
+    layersBeforeTablet = layersVisible;
+    showLayers(false);
+  } else showLayers(layersBeforeTablet);
+  try {
+    const monitor = await setTabletFullscreen(on);
+    notify(
+      on
+        ? `Tablet mode${monitor ? ` on ${monitor.replace(/^desc:/, '')}` : ''}. Tap the tablet button to leave.`
+        : 'Tablet mode off',
+    );
+  } catch (error) {
+    notify(
+      `Full screen unavailable: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+element('tablet-mode').onclick = () => void setTabletMode(!tabletMode);
+
+// Tablet buttons and wheels: combos learnt in Settings run app actions.
+const tabletBindingsKey = 'solar-forge-tablet-buttons';
+// Defaults are added once, so clearing one later sticks.
+const tabletDefaultsKey = 'solar-forge-tablet-defaults';
+let tabletBindings: TabletBindings = (() => {
+  try {
+    const saved = parseBindings(localStorage.getItem(tabletBindingsKey));
+    if (localStorage.getItem(tabletDefaultsKey) === '1') return saved;
+    const next = withDefaults(saved);
+    localStorage.setItem(tabletBindingsKey, JSON.stringify(next));
+    localStorage.setItem(tabletDefaultsKey, '1');
+    return next;
+  } catch {
+    return withDefaults({});
+  }
+})();
+let learningAction: TabletAction | undefined;
+function saveTabletBindings(next: TabletBindings): void {
+  tabletBindings = next;
+  try {
+    localStorage.setItem(tabletBindingsKey, JSON.stringify(next));
+  } catch {
+    notify('Button mappings changed for this session.');
+  }
+  renderTabletBindings();
+}
+function renderTabletBindings(): void {
+  const list = element('tablet-bindings');
+  list.replaceChildren();
+  let group = '';
+  for (const action of tabletActions) {
+    if (action.group !== group) {
+      group = action.group;
+      const caption = document.createElement('p');
+      caption.className = 'section-label';
+      caption.textContent = group.toUpperCase();
+      list.append(caption);
+    }
+    const row = document.createElement('div');
+    row.className = 'binding-row';
+    const label = document.createElement('span');
+    label.textContent = action.label;
+    const combo = document.createElement('kbd');
+    const learning = learningAction === action.id;
+    combo.textContent = learning
+      ? 'Press a control…'
+      : (tabletBindings[action.id] ?? '—');
+    combo.classList.toggle('unbound', !learning && !tabletBindings[action.id]);
+    const assign = document.createElement('button');
+    assign.textContent = learning ? 'Cancel' : 'Assign';
+    assign.setAttribute('aria-label', `${assign.textContent} ${action.label}`);
+    assign.onclick = () => {
+      learningAction = learning ? undefined : action.id;
+      renderTabletBindings();
+    };
+    const clear = document.createElement('button');
+    clear.className = 'small-icon';
+    clear.innerHTML = icon('close');
+    clear.setAttribute('aria-label', `Clear ${action.label}`);
+    clear.disabled = !tabletBindings[action.id];
+    clear.onclick = () => {
+      const next = { ...tabletBindings };
+      delete next[action.id];
+      saveTabletBindings(next);
+    };
+    row.append(label, combo, assign, clear);
+    list.append(row);
+  }
+}
+function showSettings(show: boolean): void {
+  element('settings-panel').hidden = !show;
+  element('settings').setAttribute('aria-expanded', String(show));
+  if (!show) learningAction = undefined;
+  renderTabletBindings();
+}
+element('settings').onclick = () =>
+  showSettings(element('settings-panel').hidden);
+element('close-settings').onclick = () => showSettings(false);
+element('tablet-bindings-reset').onclick = () => {
+  learningAction = undefined;
+  saveTabletBindings({});
+  notify('Tablet button mappings cleared.');
+};
+
+/** Wheel turns open the Components menu, then move through its list. */
+function stepComponents(direction: 1 | -1): void {
+  if (element('component-palette').hidden) showComponents(true);
+  else highlightService(highlighted + direction);
+}
+/** Add the highlighted component; opens the menu first if it is closed. */
+function addHighlightedComponent(): void {
+  if (element('component-palette').hidden) showComponents(true);
+  else serviceButtons()[highlighted]?.click();
+}
+function runTabletAction(action: TabletAction): void {
+  // A tool's button pressed again goes back to Select.
+  if (
+    [
+      'tool-pan',
+      'tool-connect',
+      'tool-sketch',
+      'tool-text',
+      'tool-note',
+    ].includes(action) &&
+    element(action).getAttribute('aria-pressed') === 'true'
+  ) {
+    selectTool('select');
+    return;
+  }
+  switch (action) {
+    case 'wheel-next':
+      stepComponents(1);
+      break;
+    case 'wheel-previous':
+      stepComponents(-1);
+      break;
+    case 'pick':
+      addHighlightedComponent();
+      break;
+    case 'deselect':
+      if (scene.journeyPlaying) scene.stopJourney();
+      scene.cancelInteraction();
+      selectTool('select');
+      scene.select(undefined);
+      break;
+    case 'tool-select':
+      selectTool('select');
+      break;
+    case 'tool-pan':
+      selectTool('pan');
+      break;
+    case 'tool-add':
+      showComponents(true);
+      break;
+    case 'undo':
+      travelHistory(false);
+      break;
+    case 'redo':
+      travelHistory(true);
+      break;
+    case 'delete':
+      deleteSelection();
+      break;
+    case 'zoom-in':
+      scene.zoomBy(1.2);
+      break;
+    case 'zoom-out':
+      scene.zoomBy(1 / 1.2);
+      break;
+    case 'fit':
+      scene.fit();
+      break;
+    case 'journey':
+      toggleJourney();
+      break;
+    case 'tablet-mode':
+      void setTabletMode(!tabletMode);
+      break;
+    default:
+      element(action).click();
+  }
+}
+// Kamvas wheels: turning steps the highlight, pressing selects it.
+const dialKey = 'solar-forge-tablet-dial';
+const dial = (() => {
+  const fallback = { sensitivity: 7, reverse: false };
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(dialKey) ?? '{}');
+    if (!saved || typeof saved !== 'object') return fallback;
+    const { sensitivity, reverse } = saved as Record<string, unknown>;
+    return {
+      sensitivity:
+        typeof sensitivity === 'number' &&
+        Number.isInteger(sensitivity) &&
+        sensitivity >= 1 &&
+        sensitivity <= dialLevels.length
+          ? sensitivity
+          : fallback.sensitivity,
+      reverse: reverse === true,
+    };
+  } catch {
+    return fallback;
+  }
+})();
+function saveDial(): void {
+  try {
+    localStorage.setItem(dialKey, JSON.stringify(dial));
+  } catch {
+    notify('Wheel settings changed for this session.');
+  }
+}
+inputElement('dial-sensitivity').value = String(dial.sensitivity);
+inputElement('dial-reverse').checked = dial.reverse;
+inputElement('dial-sensitivity').oninput = () => {
+  dial.sensitivity = Number(inputElement('dial-sensitivity').value);
+  saveDial();
+};
+inputElement('dial-reverse').onchange = () => {
+  dial.reverse = inputElement('dial-reverse').checked;
+  saveDial();
+};
+const dialMessages: Record<DialStatus, string> = {
+  connected:
+    'Wheels connected. Turn a wheel to zoom. Press its centre to open Components, turn to scroll, and press again to add the highlighted one.',
+  permission:
+    'The tablet is plugged in, but the app is not allowed to read its wheels. Install the tablet permission rule (see the user guide), then unplug and replug the tablet.',
+  absent:
+    'No Huion tablet found. The wheels work in the desktop app with the tablet plugged in.',
+};
+let dialPending = 0;
+let dialLastTurn = 0;
+void watchTabletDial(
+  (event) => {
+    if (event.kind === 'pen') {
+      if (!event.pressed) return;
+      const action = actionForCombo(tabletBindings, penSideButton);
+      if (learningAction) learnCombo(penSideButton);
+      else if (action) runTabletAction(action);
+      return;
+    }
+    // Press opens Components, or adds the highlighted entry when it is open.
+    if (event.kind === 'press') {
+      addHighlightedComponent();
+      dialPending = 0;
+      dialLastTurn = 0;
+      return;
+    }
+    const now = performance.now();
+    const fresh = now - dialLastTurn > 350;
+    dialLastTurn = now;
+    const result = dialSteps(
+      dialPending,
+      dial.reverse ? -event.delta : event.delta,
+      dialLevels[dial.sensitivity - 1] ?? 10,
+      fresh,
+    );
+    dialPending = result.pending;
+    if (!result.steps) return;
+    // Turning scrolls the open menu and zooms the board otherwise.
+    if (!element('component-palette').hidden)
+      highlightService(highlighted + result.steps);
+    else scene.zoomBy(1.1 ** result.steps);
+  },
+  (status) => {
+    element('dial-status').textContent = dialMessages[status];
+  },
+).catch((error: unknown) => {
+  element('dial-status').textContent =
+    `Wheels unavailable: ${error instanceof Error ? error.message : String(error)}`;
+});
+function learnCombo(combo: string): void {
+  const action = learningAction;
+  if (!action) return;
+  learningAction = undefined;
+  if (combo === 'Escape') {
+    renderTabletBindings();
+    return;
+  }
+  const result = assignCombo(tabletBindings, action, combo);
+  saveTabletBindings(result.bindings);
+  const label = (id: TabletAction) =>
+    tabletActions.find((a) => a.id === id)?.label ?? id;
+  notify(
+    [
+      `${combo} → ${label(action)}.`,
+      result.replaced ? `Removed from ${label(result.replaced)}.` : '',
+      isBuiltInCombo(combo)
+        ? `${combo} is also a built-in shortcut; the mapping now replaces it.`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
+}
+// Registered before the other key handlers so a mapped combo wins.
+window.addEventListener(
+  'keydown',
+  (event) => {
+    if (recordingGif) return;
+    const combo = comboFromEvent(event);
+    if (learningAction) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!combo || event.repeat) return;
+      learnCombo(combo);
+      return;
+    }
+    if (!combo) return;
+    const action = actionForCombo(tabletBindings, combo);
+    if (!action) return;
+    // Plain keys typed into a field stay text.
+    if (
+      isTextTarget(event.target) &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey
+    )
+      return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.repeat && !repeatingActions.has(action)) return;
+    runTabletAction(action);
+  },
+  { capture: true },
+);
+// Pen side buttons and extra mouse buttons arrive as clicks, not keys. WebKit
+// may report one only as a change in the held-buttons mask of a move, so the
+// mask is compared too. Bits after the first: right, middle, back, forward,
+// eraser, matching button numbers 2, 1, 3, 4, 5.
+const maskButtons = [
+  [2, 2],
+  [4, 1],
+  [8, 3],
+  [16, 4],
+  [32, 5],
+] as const;
+const heldButtons = new Map<number, number>();
+let swallowContextMenu = false;
+let lastPointerBinding = 0;
+function pressedButton(event: PointerEvent): number | undefined {
+  const before = heldButtons.get(event.pointerId) ?? 0;
+  heldButtons.set(event.pointerId, event.buttons);
+  if (event.button >= 1 && event.type !== 'pointerup') return event.button;
+  const added = event.buttons & ~before;
+  return maskButtons.find(([bit]) => added & bit)?.[1];
+}
+function bindPointerButton(
+  event: Event,
+  button: number,
+  pointerType: string,
+): boolean {
+  const combo = comboFromPointer({ button, pointerType });
+  if (!combo) return false;
+  const action = learningAction
+    ? undefined
+    : actionForCombo(tabletBindings, combo);
+  if (!learningAction && !action) return false;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  swallowContextMenu = true;
+  lastPointerBinding = performance.now();
+  if (learningAction) learnCombo(combo);
+  else if (action) runTabletAction(action);
+  return true;
+}
+function pointerBinding(event: PointerEvent): void {
+  if (recordingGif) return;
+  const button = pressedButton(event);
+  if (button !== undefined) bindPointerButton(event, button, event.pointerType);
+}
+window.addEventListener('pointerdown', pointerBinding, { capture: true });
+window.addEventListener('pointermove', pointerBinding, { capture: true });
+window.addEventListener(
+  'pointerup',
+  (event) => {
+    heldButtons.set(event.pointerId, event.buttons);
+  },
+  { capture: true },
+);
+// Fallback for buttons that produce mouse events without pointer events.
+for (const type of ['mousedown', 'auxclick'] as const)
+  window.addEventListener(
+    type,
+    (event) => {
+      if (recordingGif || performance.now() - lastPointerBinding < 300) {
+        if (swallowContextMenu) event.preventDefault();
+        return;
+      }
+      bindPointerButton(event, event.button, 'mouse');
+    },
+    { capture: true },
+  );
+window.addEventListener(
+  'contextmenu',
+  (event) => {
+    if (learningAction) {
+      event.preventDefault();
+      return;
+    }
+    if (!swallowContextMenu) return;
+    swallowContextMenu = false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  },
+  { capture: true },
+);
+window.addEventListener(
+  'pointerup',
+  () => {
+    // Clear after this release's contextmenu, which follows pointerup.
+    if (swallowContextMenu) setTimeout(() => (swallowContextMenu = false), 0);
+  },
+  { capture: true },
+);
 field('quality').onchange = () => {
   const ratio = Number(field('quality').value);
   scene.setQuality(ratio);
@@ -2462,6 +2993,7 @@ window.addEventListener('keydown', (event) => {
     element('traffic-panel').hidden = true;
     element('gif-panel').hidden = true;
     element('theme-menu').hidden = true;
+    showSettings(false);
     element('menu').setAttribute('aria-expanded', 'false');
     element('help').setAttribute('aria-expanded', 'false');
     scene.select(undefined);
@@ -2505,6 +3037,7 @@ window.addEventListener('keydown', (event) => {
   if (event.key.toLowerCase() === 'p') toggleJourney();
   if (event.key.toLowerCase() === 't') element('tool-text').click();
   if (event.key.toLowerCase() === 'n') element('tool-note').click();
+  if (event.key.toLowerCase() === 'd') element('tool-sketch').click();
   if (event.key === 'Enter' && selected) {
     event.preventDefault();
     openEditor({ kind: 'node', id: selected });

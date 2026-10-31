@@ -28,6 +28,7 @@ package() {
   install -Dm755 "${CARGO_TARGET_DIR:-src-tauri/target}/release/solar-forge-diagrams" "$pkgdir/usr/bin/solar-forge-diagrams"
   install -Dm644 packaging/linux/com.solarforge.diagrams.desktop "$pkgdir/usr/share/applications/com.solarforge.diagrams.desktop"
   install -Dm644 assets/solar-forge.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/com.solarforge.diagrams.svg"
+  install -Dm644 packaging/linux/70-solar-forge-huion.rules "$pkgdir/usr/lib/udev/rules.d/70-solar-forge-huion.rules"
   install -Dm644 packaging/linux/com.solarforge.diagrams.xml "$pkgdir/usr/share/mime/packages/com.solarforge.diagrams.xml"
   install -Dm644 assets/aws/NOTICE.md "$pkgdir/usr/share/licenses/$pkgname/AWS-NOTICE.md"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
