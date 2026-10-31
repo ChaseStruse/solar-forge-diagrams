@@ -85,6 +85,37 @@ Everything runs locally. Import never runs Terraform, Docker, shell code, CloudF
 
 Start with the files in [examples/infrastructure](../examples/infrastructure): `vpc.tf`, `cloudformation.yaml`, and `docker-compose.yaml`. AWS imports include one Internet actor outside the resource boundaries for external reachability checks, without inventing connections or permissions. Unsupported AWS resource types remain as generic labeled boxes. Missing addresses and unsupported network settings can be completed in **Resource networking** before checking flows. Incomplete imported settings remain marked until you explicitly confirm you have supplied them.
 
+## Pen tablets and tablet mode
+
+A pen works anywhere: while it is in use, resize handles, port dots, connection hit areas and the tool rail grow, and a tap no longer nudges the component under it. A barrel button that sends a right or middle click (the usual default) works like those mouse buttons: hold it and drag to pan. If your pen has an eraser end, rub it over components and connections to delete them in one undoable step. Boundaries are never erased this way.
+
+The **Sketch** tool (`D`) turns pen strokes into diagram parts:
+
+- a box becomes a process shape, a diamond a decision and an oval a terminal, each sized and placed where you drew it;
+- a line that starts on one component and ends on another connects them, using the nearest sides;
+- a tap selects, as with the Select tool.
+
+**Tablet mode** (tablet button in the top bar) goes full screen with larger controls and hides the Layers panel and keyboard hints. Under Hyprland the window first moves to the monitor the pen is mapped to with `input:tablet:output`, and goes back to its previous monitor when you leave tablet mode. Without that setting, it goes full screen where it is.
+
+### Tablet buttons and wheels
+
+Open **Settings** (gear in the top bar) and choose the **Tablet buttons** tab. Choose **Assign** next to an action, then press the tablet control you want for it. The Kamvas pen's side button can be assigned too, and starts mapped to the **Pan tool**. Hyprland passes the pen to apps as a plain mouse without its side button, so the desktop app reads the button from the tablet, using the same permission rule as the wheels. Extra mouse buttons (middle, right, back, forward) can be assigned as well; the pen tip and left button can't. A tool's button pressed again returns to the Select tool. Esc cancels. Assigning a control that already has an action moves it to the new one. The × button clears one mapping and **Clear all** clears all of them. Mappings are kept on this computer.
+
+**Huion Kamvas wheels** work without any mapping in the desktop app. Turning either wheel zooms the board. Pressing a wheel's centre opens the **Components** menu; while it is open, turning moves the highlight through the list, and pressing again adds the highlighted component to the board and closes the menu. Type in the search box first to narrow the list, or press Esc to close the menu. **Wheel sensitivity** sets how far you turn per step, and **Reverse wheel direction** swaps the directions. The two wheels do the same thing because the tablet reports them identically.
+
+Without Huion's driver the wheels don't send key presses, so the app reads them straight from the tablet. That needs a one-time permission rule, which the Omarchy package installs. For a build you run yourself, install it with:
+
+```
+sudo install -Dm644 packaging/linux/70-solar-forge-huion.rules /usr/lib/udev/rules.d/70-solar-forge-huion.rules
+sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
+```
+
+The Wheels line in Settings shows whether the app can read the wheels.
+
+On other tablets whose wheels send key combos, map one direction to **Next in Components menu**, the other to **Previous in Components menu**, and the centre button to **Add highlighted component**.
+
+Most tablets send ordinary key combos from their buttons, so the app can't tell a tablet button from the same keys typed on a keyboard. If a button sends a combo the app already uses, such as `Ctrl+Z`, the mapping replaces that shortcut, and the app warns you when you assign it. Combos your window manager handles first, such as many `Super` shortcuts in Hyprland, never reach the app. A control that sends nothing the app can see, such as a wheel that sends scroll events, can't be assigned.
+
 ## Tidy a board
 
 Choose **File menu → Automatic layout** or find it with Ctrl+K. The engine packs the innermost groups first, resizes their parents, and layers sibling components using their connections. Region → VPC → availability zone → subnet containment is retained. Siblings get space for captions, dimensions of service boxes are preserved, and cyclic connections share a final layer without overlapping boxes. Layout is deterministic and undoable. Existing manual port/bend overrides are cleared so connections route against the new positions. This does not guarantee that every connector or connector label is free of crossings on a dense board.

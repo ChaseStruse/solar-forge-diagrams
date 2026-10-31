@@ -1131,6 +1131,68 @@ textarea:focus-visible {
   background: var(--hover);
   border-color: var(--accent);
 }
+.settings-panel {
+  top: 58px;
+  right: 220px;
+  width: 400px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 80px);
+  overflow-y: auto;
+}
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-tabs [role="tab"] {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 6px 8px;
+}
+.settings-tabs [aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--accent-text);
+}
+.dial-row {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+#settings-tablet .check-row {
+  margin-bottom: 6px;
+}
+.tablet-bindings .section-label {
+  margin: 14px 0 6px;
+}
+.binding-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.binding-row kbd,
+.tablet-mode .binding-row kbd {
+  display: inline-block;
+  min-width: 52px;
+  text-align: center;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+}
+.binding-row kbd {
+  max-width: 190px;
+  white-space: normal;
+}
+.binding-row kbd.unbound {
+  color: var(--faint);
+}
 .theme-menu {
   top: 58px;
   right: 270px;
@@ -1538,4 +1600,63 @@ input[type="color"] {
 .font-picker select {
   width: auto;
   flex: 0 1 60%;
+}
+/* Pen input: bigger rail targets while a pen is driving. */
+.pen-input .tool {
+  height: 48px;
+  width: 46px;
+}
+.pen-input .tool-rail {
+  width: 60px;
+}
+/* Tablet mode: full screen on the pen display, chrome sized for a pen tip. */
+.tablet-mode #features,
+.tablet-mode #examples,
+.tablet-mode #copy-image,
+.tablet-mode #toggle-layers,
+.tablet-mode #help,
+.tablet-mode .heading-divider,
+.tablet-mode #save-state,
+.tablet-mode kbd {
+  display: none;
+}
+.tablet-mode .icon-button,
+.tablet-mode .quiet-button,
+.tablet-mode .export-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.tablet-mode #tablet-mode {
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+.tablet-mode .tool-rail {
+  width: 68px;
+  gap: 6px;
+}
+.tablet-mode .tool {
+  height: 52px;
+  width: 52px;
+  padding: 13px;
+}
+.tablet-mode .floating-dock {
+  height: 60px;
+}
+.tablet-mode .small-icon {
+  width: 42px;
+  height: 42px;
+  padding: 11px;
+}
+.tablet-mode .view-dock button,
+.tablet-mode .zoom-dock > button:not(.small-icon) {
+  min-height: 42px;
+  padding: 9px 13px;
+}
+.tablet-mode .popover button,
+.tablet-mode .context-menu button {
+  min-height: 44px;
+}
+.tablet-mode .status {
+  font-size: 14px;
 }

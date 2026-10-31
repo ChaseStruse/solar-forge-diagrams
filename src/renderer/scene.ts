@@ -150,7 +150,19 @@ export type EditTarget =
   | { kind: 'node'; id: string }
   | { kind: 'edge'; id: string }
   | { kind: 'empty'; x: number; z: number };
-export type Tool = 'select' | 'pan' | 'connect' | 'text' | 'note';
+export type Tool = 'select' | 'pan' | 'connect' | 'text' | 'note' | 'sketch';
+/** One finished pen stroke on the board, with the components under its ends. */
+export interface SketchStroke {
+  points: { x: number; z: number }[];
+  from?: { id: string; port: Port };
+  to?: { id: string; port: Port };
+}
+/** Pointer Events button number for a pen's eraser end. */
+const ERASER_BUTTON = 5;
+/** Pen-sized hit targets: handles and connection slop grow by this much. */
+const PEN_SCALE = 1.75;
+/** Screen pixels a pen may wobble on a tap before it counts as a drag. */
+const PEN_TAP_SLOP = 6;
 export class DiagramScene {
   /** Settles once the icons of the current board have loaded. */
   public ready: Promise<void> = Promise.resolve();
@@ -285,6 +297,28 @@ export class DiagramScene {
     gapSize: 7,
   });
   private preview: LineSegments2 | undefined;
+  private readonly inkMaterial = new LineMaterial({
+    color: '#ffc778',
+    linewidth: 3,
+    transparent: true,
+    opacity: 0.9,
+    depthTest: false,
+  });
+  private ink: LineSegments2 | undefined;
+  /** The pen stroke being drawn with the sketch tool. */
+  private stroke:
+    | {
+        points: { x: number; z: number }[];
+        last: ScreenPoint;
+        from: string | undefined;
+      }
+    | undefined;
+  /** Nodes and connections the eraser has passed over in this stroke. */
+  private erasing: { nodes: Set<string>; edges: Set<string> } | undefined;
+  /** The last pointer was a pen: handles and hit areas are pen-sized. */
+  private penInput = false;
+  /** Where a pen drag started, until it moves far enough to be a drag. */
+  private dragSlop: ScreenPoint | undefined;
   private selectedEdge: string | undefined;
   private hoveredEdge: string | undefined;
   private edgeColors: Float32Array<ArrayBufferLike> = new Float32Array();
@@ -326,6 +360,12 @@ export class DiagramScene {
     }[],
   ) => void = () => {};
   public onContextMenu: (x: number, y: number) => void = () => {};
+  /** A finished sketch-tool stroke, for the editor to recognise. */
+  public onSketch: (stroke: SketchStroke) => void = () => {};
+  /** Nodes and connections rubbed out with a pen's eraser end. */
+  public onErase: (nodes: string[], edges: string[]) => void = () => {};
+  /** A pen touched the board for the first time, or a mouse took over. */
+  public onPenInput: (pen: boolean) => void = () => {};
   /** One completed resize; children shift so they stay put in world space. */
   public onResize: (changes: ResizeChange[]) => void = () => {};
   private resizing:
@@ -541,6 +581,7 @@ export class DiagramScene {
     this.portMaterial.color.set(palette.port);
     this.handleMaterial.color.set(palette.handle);
     this.previewMaterial.color.set(palette.edgeSelected);
+    this.inkMaterial.color.set(palette.edgeSelected);
     this.flowMaterial.color.set(palette.flow);
     this.guideMaterial.color.set(palette.guide);
     this.haloMaterial.opacity = palette.haloOpacity;
@@ -608,6 +649,9 @@ export class DiagramScene {
     this.pan = undefined;
     this.connectionStart = undefined;
     this.clearPreview();
+    this.stroke = undefined;
+    this.erasing = undefined;
+    this.clearInk();
     this.stopJourney();
     this.hoveredEdge = undefined;
     this.selectedEdge = undefined;
@@ -936,7 +980,9 @@ export class DiagramScene {
           ? 'text'
           : this.tool === 'note'
             ? 'copy'
-            : 'default';
+            : this.tool === 'sketch'
+              ? 'crosshair'
+              : 'default';
   }
   public finishInteraction(): void {
     this.up();
@@ -978,7 +1024,10 @@ export class DiagramScene {
     return this.ray.ray.intersectPlane(this.plane, this.point) ?? undefined;
   }
   private down = (event: PointerEvent): void => {
-    if (this.activePointer !== undefined || event.button > 2) return;
+    this.notePointer(event);
+    const eraser = event.button === ERASER_BUTTON;
+    if (this.activePointer !== undefined || (event.button > 2 && !eraser))
+      return;
     // Claim canvas gestures before WebKit/GTK can interpret an unhandled drag.
     event.preventDefault();
     const point = this.locate(event);
@@ -993,6 +1042,20 @@ export class DiagramScene {
       this.tool === 'pan'
     ) {
       this.pan = { x: point.x, z: point.z };
+      return;
+    }
+    if (eraser) {
+      this.erasing = { nodes: new Set(), edges: new Set() };
+      this.eraseAt(event);
+      return;
+    }
+    if (this.tool === 'sketch') {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.stroke = {
+        points: [{ x: point.x, z: point.z }],
+        last: { x: event.clientX - rect.left, y: event.clientY - rect.top },
+        from: this.nodeAt(),
+      };
       return;
     }
     if (this.tool === 'text' || this.tool === 'note') {
@@ -1097,6 +1160,8 @@ export class DiagramScene {
         }
         return false;
       };
+      if (event.pointerType === 'pen')
+        this.dragSlop = { x: event.clientX, y: event.clientY };
       this.drag = {
         id: node.id,
         x: point.x,
@@ -1142,7 +1207,7 @@ export class DiagramScene {
       this.camera.matrixWorldInverse,
     );
     let best: string | undefined;
-    let bestDistance = 7;
+    let bestDistance = this.penInput ? 7 * PEN_SCALE : 7;
     for (const [id, index] of this.edges) {
       for (let segment = 0; segment < 5; segment++) {
         const offset = index * 14 + segment * 2;
@@ -1191,12 +1256,21 @@ export class DiagramScene {
   }
   private move = (event: PointerEvent): void => {
     if (this.activePointer === undefined) {
+      this.notePointer(event);
       this.hover(event);
       return;
     }
     if (event.pointerId !== this.activePointer) return;
     event.preventDefault();
     this.inMotion();
+    if (this.erasing) {
+      this.eraseAt(event);
+      return;
+    }
+    if (this.stroke) {
+      this.extendStroke(event);
+      return;
+    }
     if (this.marquee) {
       const bounds = this.renderer.domElement.getBoundingClientRect();
       this.marquee.end = {
@@ -1263,6 +1337,17 @@ export class DiagramScene {
     if (!this.drag) return;
     const tile = this.tiles.get(this.drag.id);
     if (!tile) return;
+    // A pen tap wobbles a little; do not nudge the node until it really moves.
+    if (this.dragSlop) {
+      if (
+        Math.hypot(
+          event.clientX - this.dragSlop.x,
+          event.clientY - this.dragSlop.y,
+        ) < PEN_TAP_SLOP
+      )
+        return;
+      this.dragSlop = undefined;
+    }
     const step = this.snapping ? 10 : 1;
     let dx = Math.round((point.x - this.drag.x) / step) * step;
     let dz = Math.round((point.z - this.drag.z) / step) * step;
@@ -1383,6 +1468,100 @@ export class DiagramScene {
         tile.node.depth / root.userData.depth,
       );
   }
+  /** Track whether a pen or a mouse is driving, and size handles to match. */
+  private notePointer(event: PointerEvent): void {
+    const pen = event.pointerType === 'pen';
+    if (pen === this.penInput) return;
+    this.penInput = pen;
+    this.onPenInput(pen);
+    this.invalidate();
+  }
+  private extendStroke(event: PointerEvent): void {
+    const stroke = this.stroke;
+    if (!stroke) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const screen = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+    // Skip sub-pixel jitter; the recogniser resamples anyway.
+    if (Math.hypot(screen.x - stroke.last.x, screen.y - stroke.last.y) < 2)
+      return;
+    const point = this.locate(event);
+    if (!point) return;
+    stroke.last = screen;
+    stroke.points.push({ x: point.x, z: point.z });
+    this.showInk(stroke.points);
+  }
+  private finishStroke(
+    stroke: NonNullable<DiagramScene['stroke']>,
+  ): SketchStroke {
+    const result: SketchStroke = { points: stroke.points };
+    const first = stroke.points[0];
+    const last = stroke.points.at(-1);
+    const from = stroke.from ? this.nodeIndex.get(stroke.from) : undefined;
+    if (from && first)
+      result.from = {
+        id: from.id,
+        port: nearestPort(from, first, this.nodeIndex),
+      };
+    if (last) {
+      // Ray from the last point, so a stroke ending on a tile's top counts.
+      const projected = this.scratchA
+        .set(last.x, 0, last.z)
+        .project(this.camera);
+      this.pointer.set(projected.x, projected.y);
+      this.ray.setFromCamera(this.pointer, this.camera);
+      const id = this.nodeAt();
+      const to = id ? this.nodeIndex.get(id) : undefined;
+      if (to)
+        result.to = { id: to.id, port: nearestPort(to, last, this.nodeIndex) };
+    }
+    return result;
+  }
+  private showInk(points: readonly { x: number; z: number }[]): void {
+    if (points.length < 2) return;
+    const positions: number[] = [];
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1] as { x: number; z: number };
+      const b = points[i] as { x: number; z: number };
+      positions.push(a.x, 30, a.z, b.x, 30, b.z);
+    }
+    this.clearInk();
+    this.ink = new LineSegments2(
+      new LineSegmentsGeometry().setPositions(positions),
+      this.inkMaterial,
+    );
+    this.ink.frustumCulled = false;
+    this.ink.renderOrder = 12;
+    this.scene.add(overlay(this.ink));
+    this.invalidate();
+  }
+  private clearInk(): void {
+    if (!this.ink) return;
+    this.scene.remove(this.ink);
+    this.ink.geometry.dispose();
+    this.ink = undefined;
+    this.invalidate();
+  }
+  /** Mark whatever the eraser is over; boundaries are left alone. */
+  private eraseAt(event: PointerEvent): void {
+    const erasing = this.erasing;
+    if (!erasing || !this.locate(event)) return;
+    const edge = this.edgeAt(event);
+    if (edge) erasing.edges.add(edge);
+    const hits = this.ray.intersectObjects(this.pickables, false);
+    const id: unknown = hits.find((h) => {
+      const hit: unknown = h.object.userData.nodeId;
+      return (
+        typeof hit === 'string' && this.nodeIndex.get(hit)?.kind !== 'group'
+      );
+    })?.object.userData.nodeId;
+    if (typeof id === 'string' && !erasing.nodes.has(id)) {
+      erasing.nodes.add(id);
+      this.selectMany([...erasing.nodes]);
+    }
+  }
   private showPreview(point: Vector3): void {
     const start = this.connectionStart;
     const tile = start ? this.tiles.get(start.id) : undefined;
@@ -1457,13 +1636,14 @@ export class DiagramScene {
     if (!tile) return;
     const { x, y, z } = tile.group.position;
     const top = y + (tile.node.kind === 'group' ? 2 : 13);
+    const scale = this.penInput ? PEN_SCALE : 1;
     const halfW = tile.node.width / 2;
     const halfD = tile.node.depth / 2;
     for (const handle of this.ports.children) {
       const resize: unknown = handle.userData.resize;
       const port: unknown = handle.userData.port;
       handle.position.set(x, top, z);
-      const pixel = this.pixelSize(handle.position);
+      const pixel = this.pixelSize(handle.position) * scale;
       if (Array.isArray(resize)) {
         const [sx, sz] = resize as [number, number];
         handle.position.set(x + sx * halfW, top, z + sz * halfD);
@@ -1505,6 +1685,23 @@ export class DiagramScene {
   }
   private up = (event?: PointerEvent): void => {
     if (event && event.pointerId !== this.activePointer) return;
+    this.dragSlop = undefined;
+    if (this.erasing) {
+      const { nodes, edges } = this.erasing;
+      this.erasing = undefined;
+      this.releasePointer();
+      if (nodes.size || edges.size) this.onErase([...nodes], [...edges]);
+      return;
+    }
+    if (this.stroke) {
+      if (event) this.extendStroke(event);
+      const stroke = this.stroke;
+      this.stroke = undefined;
+      this.releasePointer();
+      this.clearInk();
+      this.onSketch(this.finishStroke(stroke));
+      return;
+    }
     if (this.marquee) {
       if (event) this.move(event);
       const marquee = this.marquee;
@@ -1585,6 +1782,13 @@ export class DiagramScene {
   };
   public cancelInteraction = (): void => {
     this.marquee = undefined;
+    this.dragSlop = undefined;
+    this.stroke = undefined;
+    this.clearInk();
+    if (this.erasing) {
+      this.erasing = undefined;
+      this.selectMany([]);
+    }
     this.selectionBox.hidden = true;
     this.releasePointer();
     if (this.resizing) {
@@ -2316,6 +2520,8 @@ export class DiagramScene {
       geometry.dispose();
     this.clearPreview();
     this.previewMaterial.dispose();
+    this.clearInk();
+    this.inkMaterial.dispose();
     this.portGeometry.dispose();
     this.portMaterial.dispose();
     this.handleGeometry.dispose();

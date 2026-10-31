@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod dial;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
@@ -540,6 +542,98 @@ async fn export_svg(
     .map_err(|e| e.to_string())?
 }
 
+/// Monitor to return to when tablet mode ends.
+#[derive(Default)]
+struct TabletMode {
+    previous_monitor: Mutex<Option<String>>,
+}
+
+/// Run `hyprctl` under Hyprland; `None` elsewhere or on failure.
+fn hyprctl(args: &[&str]) -> Option<String> {
+    std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE")?;
+    let output = std::process::Command::new("hyprctl")
+        .args(args)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+fn hyprctl_json(args: &[&str]) -> Option<serde_json::Value> {
+    serde_json::from_str(&hyprctl(args)?).ok()
+}
+
+/// The monitor Hyprland maps the pen to (`input:tablet:output`), if set.
+fn pen_monitor() -> Option<String> {
+    let option = hyprctl_json(&["-j", "getoption", "input:tablet:output"])?;
+    let name = option.get("str")?.as_str()?.trim();
+    (!name.is_empty() && name != "[[EMPTY]]").then(|| name.to_owned())
+}
+
+/// Name of the monitor showing the focused window, when that window is ours.
+fn own_window_monitor() -> Option<String> {
+    let active = hyprctl_json(&["-j", "activewindow"])?;
+    if active.get("pid")?.as_u64()? != u64::from(std::process::id()) {
+        return None;
+    }
+    let id = active.get("monitor")?.as_i64()?;
+    hyprctl_json(&["-j", "monitors"])?
+        .as_array()?
+        .iter()
+        .find(|monitor| monitor.get("id").and_then(|v| v.as_i64()) == Some(id))?
+        .get("name")?
+        .as_str()
+        .map(str::to_owned)
+}
+
+/// Move the focused window to a monitor. The caller has checked that it is ours.
+fn move_to_monitor(monitor: &str) -> bool {
+    // JSON string quoting is valid Lua for the names Hyprland reports.
+    let Ok(quoted) = serde_json::to_string(monitor) else {
+        return false;
+    };
+    hyprctl(&[
+        "dispatch",
+        &format!("hl.dsp.window.move({{ monitor = {quoted} }})"),
+    ])
+    .is_some()
+}
+
+/// Tablet mode: full screen on the pen display. Under Hyprland the window first
+/// moves to the monitor the pen is mapped to, and back again on exit. Returns
+/// that monitor's name when the window was moved.
+#[tauri::command]
+fn set_tablet_mode(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, TabletMode>,
+    enabled: bool,
+) -> Result<Option<String>, String> {
+    let mut previous = state
+        .previous_monitor
+        .lock()
+        .map_err(|_| "Tablet mode state is unavailable")?;
+    let mut moved = None;
+    if enabled {
+        if let (Some(pen), Some(current)) = (pen_monitor(), own_window_monitor()) {
+            if move_to_monitor(&pen) {
+                *previous = Some(current);
+                moved = Some(pen);
+            }
+        }
+        window.set_fullscreen(true).map_err(|e| e.to_string())?;
+    } else {
+        window.set_fullscreen(false).map_err(|e| e.to_string())?;
+        if let Some(monitor) = previous.take() {
+            if own_window_monitor().is_some() {
+                move_to_monitor(&monitor);
+            }
+        }
+    }
+    Ok(moved)
+}
+
 #[tauri::command]
 fn diagnostic_mode() -> bool {
     cfg!(any(debug_assertions, feature = "diagnostics"))
@@ -600,6 +694,7 @@ fn main() {
             }
         }))
         .manage(FileSessions::default())
+        .manage(TabletMode::default())
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             fs::create_dir_all(&directory)?;
@@ -621,6 +716,8 @@ fn main() {
                     }
                 })?;
             }
+            #[cfg(target_os = "linux")]
+            dial::start(app.handle().clone());
             queue_arguments(
                 app.handle(),
                 std::env::args().collect(),
@@ -630,6 +727,8 @@ fn main() {
         })
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            set_tablet_mode,
+            dial::tablet_dial_status,
             open_document,
             open_infrastructure,
             save_document,
