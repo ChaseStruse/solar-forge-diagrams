@@ -12,7 +12,12 @@ fi
 archive=${archives[0]}
 version=${archive##*/solar-forge-diagrams-}
 version=${version%.tar.gz}
-work=$(mktemp -d)
+# A fixed path, not mktemp: makepkg puts $srcdir into RUSTFLAGS
+# (--remap-path-prefix), and a new path each run changes the flags, which
+# makes cargo rebuild every dependency despite the cached target directory.
+work=/home/builder/work
+rm -rf -- "$work"
+mkdir -p -- "$work"
 tar -xzf "$archive" -C "$work"
 source="$work/solar-forge-diagrams-$version"
 recipe="$work/recipe"
