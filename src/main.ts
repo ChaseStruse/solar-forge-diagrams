@@ -83,6 +83,7 @@ import {
 import { DiagramScene, type EditTarget, type Tool } from './renderer/scene';
 import { applyThemeCss, findTheme, type ScenePalette, themes } from './themes';
 import { icon } from './ui/icons';
+import { dismissSplash, removeSplash } from './ui/splash';
 import { renderAmbient } from './ui/theme-fx';
 
 const root = document.querySelector<HTMLDivElement>('#app');
@@ -192,6 +193,7 @@ const cameraKeys = new CameraKeys((dx, dy) => scene.panByPixels(dx, dy));
 try {
   scene = new DiagramScene(element('canvas'), current, theme.scene);
 } catch (error) {
+  removeSplash();
   notify(
     `Graphics unavailable: ${error instanceof Error ? error.message : String(error)}`,
   );
@@ -3088,6 +3090,7 @@ function adaptViewport(): void {
 window.addEventListener('resize', adaptViewport);
 populateServices();
 updateHeader();
+void dismissSplash();
 adaptViewport();
 scene.fit();
 notify(
