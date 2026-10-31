@@ -21,8 +21,12 @@ Open **Examples** in the top bar, **File menu → Browse examples…**, or searc
 | AWS | Containers | Container service; Container image delivery |
 | Kubernetes | Applications | Kubernetes · web application; Internal service communication |
 | General | Flowcharts | Simple flowchart; Approval workflow |
+| Feature tours | Boards | Building blocks; Detail diagrams |
+| Feature tours | Journeys and traffic | Network flow; Journeys and forks |
 
 The private worker example includes saved Traffic scenarios for allowed outbound HTTPS and denied SSH/inbound access. Container image delivery distinguishes build/deploy dependencies from web requests. Internal Kubernetes communication shows frontend-to-backend service routing. Approval workflow includes approve/revise branches and a revision loop for trying Journey decisions.
+
+**Feature tours** are small boards made to teach the app rather than model a real system. Each has a sticky note with numbered steps: **Building blocks** covers nested boundaries, two-way lanes, dependency arrows and moving the view; **Detail diagrams** opens boards inside tiles, two levels deep; **Network flow** switches saved Traffic scenarios to see connection rules allow or block HTTPS and SSH; **Journeys and forks** shows a decision that asks, a fork that takes every branch and an active route.
 
 Open Components (`/`) to find flowchart shapes, AWS services, actors (User, Internet), text, sticky notes or architecture boundaries. Search service abbreviations, categories and aliases such as `k8s`, `queue` or `database`; the first match is highlighted, arrows move the highlight and Enter drops it on the board in a free slot near the centre of the view. Service tiles use the official AWS colour of their category, matching the icon. Click a component or a Layers row to select it; Shift-click adds/removes selection and Ctrl+A selects the board. In Select mode, left-drag empty canvas to draw a selection rectangle; Shift-drag adds to the existing selection. Drag either direction. An unselected boundary's interior also supports rectangle selection; click it to select the boundary, then drag to move it. Drag selected components, or use arrow keys to nudge (Shift for larger steps; with nothing selected they move the view). Snap toggles the ten-unit grid. While dragging, smart guides pull edges and centres into line with nearby tiles and show a dashed guide; hold Ctrl to place freely. Right-click a multi-selection (or use Ctrl+K) to align left/centre/right/top/middle/bottom or distribute evenly.
 
