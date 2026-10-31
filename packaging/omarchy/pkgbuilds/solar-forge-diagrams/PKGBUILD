@@ -8,6 +8,9 @@ arch=('x86_64')
 license=('MIT' 'Apache-2.0' 'LicenseRef-AWS-Architecture-Icons')
 depends=('webkit2gtk-4.1' 'gtk3' 'xdg-desktop-portal')
 makedepends=('rust' 'bun' 'pkgconf' 'python')
+# Cargo's release profile strips the binary and sets its own LTO, so makepkg's
+# debug info (and the -debug package it feeds) and C LTO flags only add build time.
+options=('!debug' '!lto')
 optdepends=('xdg-desktop-portal-gtk: file chooser backend when not provided by your desktop'
             'wl-clipboard: copy diagram images to the clipboard on Wayland'
             'xclip: copy diagram images to the clipboard on X11')
