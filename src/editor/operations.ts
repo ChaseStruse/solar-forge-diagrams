@@ -334,3 +334,11 @@ export function alignNodes(
     }),
   };
 }
+
+/** Default board size of a new node of each kind. */
+export function defaultSize(kind: DiagramNode['kind']): [number, number] {
+  if (kind === 'group') return [500, 320];
+  if (kind === 'text') return [280, 60];
+  if (kind === 'note') return [220, 170];
+  return [160, 100];
+}

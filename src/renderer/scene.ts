@@ -6,7 +6,6 @@ import {
   DirectionalLight,
   DynamicDrawUsage,
   EdgesGeometry,
-  ExtrudeGeometry,
   FogExp2,
   GridHelper,
   Group,
@@ -20,7 +19,6 @@ import {
   Plane,
   Raycaster,
   Scene,
-  Shape,
   SphereGeometry,
   Vector2,
   Vector3,
@@ -37,15 +35,13 @@ import type {
   DiagramNode,
   Port,
 } from '../domain/document';
-import { worldPosition } from '../domain/document';
+import { isPort, worldPosition } from '../domain/document';
 import { inactiveEdges } from '../domain/journey';
 import {
   type Fans,
   fansOf,
-  nearestPort,
   type Obstacle,
   obstaclesOf,
-  type Point,
   portPosition,
   routeEdge,
   routeMidpoint,
@@ -54,13 +50,13 @@ import { defaultTheme, type ScenePalette } from '../themes';
 import { createAnnotation, NOTE_HEIGHT } from './annotations';
 import { AntialiasPass, OVERLAY_LAYER, overlay } from './antialias';
 import { createBackdrop } from './backdrop';
+import { drawCaption } from './caption';
+import { createFlowGeometries } from './flow-shapes';
 import { JourneyPlayer } from './journey';
 import { LabelAtlas, rasterBucket } from './labels';
-import {
-  nodesInSelectionRect,
-  type ScreenPoint,
-  selectionRect,
-} from './selection';
+import { type GestureBoard, PointerGestures } from './pointer-gestures';
+import { nodesInSelectionRect } from './selection';
+import type { Rect } from './smart-guides';
 import { TileBodies } from './tile-bodies';
 import { TileDetails } from './tile-details';
 import { BoardView, type ViewMode } from './view';
@@ -72,12 +68,6 @@ const FOG_DENSITY = 0.00012;
 /** Marching-dash defaults; themes may override them via flowStyle. */
 const DEFAULT_FLOW = { width: 3.6, dash: 12, gap: 38, speed: 40 };
 
-interface Rect {
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-}
 interface Box {
   x: number;
   z: number;
@@ -89,11 +79,6 @@ export interface ResizeChange {
   from: Partial<Box>;
   to: Partial<Box>;
 }
-const isPort = (value: unknown): value is Port =>
-  value === 'north' ||
-  value === 'east' ||
-  value === 'south' ||
-  value === 'west';
 function segmentDistance(
   px: number,
   py: number,
@@ -109,12 +94,6 @@ function segmentDistance(
     ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / length))
     : 0;
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
-}
-/** Both views keep +X screen-right and +Z screen-down, so cursors map directly. */
-function resizeCursor(sx: number, sz: number, _mode: ViewMode): string {
-  if (!sx) return 'ns-resize';
-  if (!sz) return 'ew-resize';
-  return sx * sz > 0 ? 'nwse-resize' : 'nesw-resize';
 }
 
 interface Tile {
@@ -157,12 +136,8 @@ export interface SketchStroke {
   from?: { id: string; port: Port };
   to?: { id: string; port: Port };
 }
-/** Pointer Events button number for a pen's eraser end. */
-const ERASER_BUTTON = 5;
 /** Pen-sized hit targets: handles and connection slop grow by this much. */
 const PEN_SCALE = 1.75;
-/** Screen pixels a pen may wobble on a tap before it counts as a drag. */
-const PEN_TAP_SLOP = 6;
 export class DiagramScene {
   /** Settles once the icons of the current board have loaded. */
   public ready: Promise<void> = Promise.resolve();
@@ -285,40 +260,6 @@ export class DiagramScene {
   });
   /** Selection affordances: resize squares on the outline, connect dots outside it. */
   private readonly ports = new Group();
-  private connectionStart: { id: string; port?: Port } | undefined;
-  private readonly previewMaterial = new LineMaterial({
-    color: '#ffc778',
-    linewidth: 2,
-    transparent: true,
-    opacity: 0.85,
-    depthTest: false,
-    dashed: true,
-    dashSize: 10,
-    gapSize: 7,
-  });
-  private preview: LineSegments2 | undefined;
-  private readonly inkMaterial = new LineMaterial({
-    color: '#ffc778',
-    linewidth: 3,
-    transparent: true,
-    opacity: 0.9,
-    depthTest: false,
-  });
-  private ink: LineSegments2 | undefined;
-  /** The pen stroke being drawn with the sketch tool. */
-  private stroke:
-    | {
-        points: { x: number; z: number }[];
-        last: ScreenPoint;
-        from: string | undefined;
-      }
-    | undefined;
-  /** Nodes and connections the eraser has passed over in this stroke. */
-  private erasing: { nodes: Set<string>; edges: Set<string> } | undefined;
-  /** The last pointer was a pen: handles and hit areas are pen-sized. */
-  private penInput = false;
-  /** Where a pen drag started, until it moves far enough to be a drag. */
-  private dragSlop: ScreenPoint | undefined;
   private selectedEdge: string | undefined;
   private hoveredEdge: string | undefined;
   private edgeColors: Float32Array<ArrayBufferLike> = new Float32Array();
@@ -368,54 +309,6 @@ export class DiagramScene {
   public onPenInput: (pen: boolean) => void = () => {};
   /** One completed resize; children shift so they stay put in world space. */
   public onResize: (changes: ResizeChange[]) => void = () => {};
-  private resizing:
-    | {
-        id: string;
-        sx: number;
-        sz: number;
-        start: Point;
-        from: Box;
-        children: { node: DiagramNode; x: number; z: number }[];
-      }
-    | undefined;
-  private dragOrigins: { node: DiagramNode; x: number; z: number }[] = [];
-  private drag:
-    | {
-        id: string;
-        x: number;
-        z: number;
-        startX: number;
-        startZ: number;
-        /** World box of the grabbed node at drag start. */
-        box: Rect;
-        /** Boxes of everything not moving, for alignment guides. */
-        others: Rect[];
-      }
-    | undefined;
-  private readonly guideMaterial = new LineMaterial({
-    color: '#ff2a6d',
-    linewidth: 1.5,
-    transparent: true,
-    opacity: 0.9,
-    depthTest: false,
-    dashed: true,
-    dashSize: 8,
-    gapSize: 6,
-  });
-  private guides: LineSegments2 | undefined;
-  private pan: { x: number; z: number } | undefined;
-  private activePointer: number | undefined;
-  private readonly selectionBox = document.createElement('div');
-  private marquee:
-    | {
-        start: ScreenPoint;
-        end: ScreenPoint;
-        initial: readonly string[];
-        additive: boolean;
-        clickId: string | undefined;
-        active: boolean;
-      }
-    | undefined;
   private selected: string | undefined;
   private disposed = false;
   /** Disposers for detached boards, run once the next frame is drawn. */
@@ -515,10 +408,12 @@ export class DiagramScene {
       'Architecture diagram canvas',
     );
     this.host.append(this.renderer.domElement);
-    this.selectionBox.className = 'selection-box';
-    this.selectionBox.hidden = true;
-    this.selectionBox.setAttribute('aria-hidden', 'true');
-    this.host.append(this.selectionBox);
+    this.gestures = new PointerGestures(
+      this.gestureBoard(),
+      this,
+      this.scene,
+      this.host,
+    );
     this.scene.add(this.ports);
     this.scene.add(this.content, this.ambient);
     const light = new DirectionalLight('#ffe5bf', 2);
@@ -527,27 +422,9 @@ export class DiagramScene {
     this.applyPalette(palette);
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
-    this.renderer.domElement.addEventListener('pointerdown', this.down);
-    this.renderer.domElement.addEventListener('pointermove', this.move);
-    this.renderer.domElement.addEventListener('pointerup', this.up);
-    this.renderer.domElement.addEventListener('pointercancel', this.cancel);
-    this.renderer.domElement.addEventListener(
-      'lostpointercapture',
-      this.lostCapture,
-    );
-    this.renderer.domElement.addEventListener(
-      'mousedown',
-      this.preventNativeDrag,
-    );
-    this.renderer.domElement.addEventListener(
-      'dragstart',
-      this.preventNativeDrag,
-    );
     this.renderer.domElement.addEventListener('wheel', this.wheel, {
       passive: false,
     });
-    this.renderer.domElement.addEventListener('contextmenu', this.context);
-    this.renderer.domElement.addEventListener('dblclick', this.doubleClick);
     this.renderer.domElement.addEventListener(
       'webglcontextlost',
       this.contextLost,
@@ -580,10 +457,8 @@ export class DiagramScene {
     this.scene.add(this.grid);
     this.portMaterial.color.set(palette.port);
     this.handleMaterial.color.set(palette.handle);
-    this.previewMaterial.color.set(palette.edgeSelected);
-    this.inkMaterial.color.set(palette.edgeSelected);
+    this.gestures.setPalette(palette);
     this.flowMaterial.color.set(palette.flow);
-    this.guideMaterial.color.set(palette.guide);
     this.haloMaterial.opacity = palette.haloOpacity;
     const width = palette.edgeWidth ?? 1.6;
     this.edgeMaterial.linewidth = width;
@@ -640,18 +515,7 @@ export class DiagramScene {
   public load(document: DiagramDocument): void {
     // History may already have changed parent IDs. Do not refresh the old scene
     // against that edited graph while replacing its node index.
-    this.releasePointer();
-    this.marquee = undefined;
-    this.selectionBox.hidden = true;
-    this.drag = undefined;
-    this.dragOrigins = [];
-    this.resizing = undefined;
-    this.pan = undefined;
-    this.connectionStart = undefined;
-    this.clearPreview();
-    this.stroke = undefined;
-    this.erasing = undefined;
-    this.clearInk();
+    this.gestures.reset();
     this.stopJourney();
     this.hoveredEdge = undefined;
     this.selectedEdge = undefined;
@@ -1007,9 +871,14 @@ export class DiagramScene {
               ? 'crosshair'
               : 'default';
   }
+  /** Complete a drag, resize or stroke in progress, reporting its result. */
   public finishInteraction(): void {
-    this.up();
+    this.gestures.finish();
   }
+  /** Abandon a gesture in progress and put the board back as it was. */
+  public cancelInteraction = (): void => {
+    this.gestures.cancel();
+  };
   public fit(): void {
     this.fitted = true;
     let minX = Infinity;
@@ -1037,7 +906,98 @@ export class DiagramScene {
     else this.invalidate();
   }
 
-  private locate(event: PointerEvent | WheelEvent): Vector3 | undefined {
+  /** Pointer input: drag, resize, marquee, connect, sketch, erase, pan. */
+  private readonly gestures: PointerGestures;
+  /** The narrow view of this scene that pointer gestures work through. */
+  private gestureBoard(): GestureBoard {
+    const scene = this;
+    return {
+      get canvas() {
+        return scene.renderer.domElement;
+      },
+      get tool() {
+        return scene.tool;
+      },
+      get snapping() {
+        return scene.snapping;
+      },
+      get nodeIndex() {
+        return scene.nodeIndex;
+      },
+      get selection() {
+        return scene.selection;
+      },
+      get selected() {
+        return scene.selected;
+      },
+      get selectedIds() {
+        return scene.selectedIds;
+      },
+      get selectedEdge() {
+        return scene.selectedEdge;
+      },
+      locate: (event) => this.locate(event),
+      aimAt: (x, z) => {
+        const projected = this.scratchA.set(x, 0, z).project(this.camera);
+        this.pointer.set(projected.x, projected.y);
+        this.ray.setFromCamera(this.pointer, this.camera);
+      },
+      nodeAt: () => this.nodeAt(),
+      handleAt: () => this.handleAt(),
+      pickNodes: () => this.ray.intersectObjects(this.pickables, false),
+      edgeAt: (event) => this.edgeAt(event),
+      nodesInScreenRect: (rect) =>
+        nodesInSelectionRect(
+          this.nodeIndex,
+          this.camera,
+          this.width,
+          this.height,
+          rect,
+        ),
+      viewportSize: () => ({ width: this.width, height: this.height }),
+      pixelSize: (point) => this.pixelSize(point),
+      tileNode: (id) => this.tiles.get(id)?.node,
+      tilePosition: (id) => this.tiles.get(id)?.group.position,
+      tileNodes: () => [...this.tiles.values()].map((tile) => tile.node),
+      worldRect: (id) => this.worldRect(this.tiles.get(id)),
+      applySize: (id) => {
+        const tile = this.tiles.get(id);
+        if (tile) this.applySize(tile);
+      },
+      refreshPositions: (ids) => this.refreshPositions(ids),
+      updatePositions: () => this.updatePositions(),
+      panBoard: (dx, dz) => {
+        this.fitted = false;
+        this.target.x += dx;
+        this.target.z += dz;
+        this.setView(this.mode);
+      },
+      setCursor: (cursor) => {
+        this.renderer.domElement.style.cursor = cursor;
+      },
+      toolCursor: () => this.toolCursor(),
+      hoverEdge: (edge) => {
+        if (edge === this.hoveredEdge) return;
+        const previous = this.hoveredEdge;
+        this.hoveredEdge = edge;
+        if (previous) this.paintEdge(previous);
+        if (edge) this.paintEdge(edge);
+        this.invalidate();
+      },
+      select: (id, additive) => this.select(id, additive),
+      selectEdge: (id) => this.selectEdge(id),
+      selectMany: (ids) => this.selectMany(ids),
+      setPrimary: (id) => {
+        this.selected = id;
+      },
+      inMotion: () => this.inMotion(),
+      invalidate: () => this.invalidate(),
+    };
+  }
+  private locate(event: {
+    clientX: number;
+    clientY: number;
+  }): Vector3 | undefined {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.set(
       ((event.clientX - rect.left) / this.width) * 2 - 1,
@@ -1046,158 +1006,6 @@ export class DiagramScene {
     this.ray.setFromCamera(this.pointer, this.camera);
     return this.ray.ray.intersectPlane(this.plane, this.point) ?? undefined;
   }
-  private down = (event: PointerEvent): void => {
-    this.notePointer(event);
-    const eraser = event.button === ERASER_BUTTON;
-    if (this.activePointer !== undefined || (event.button > 2 && !eraser))
-      return;
-    // Claim canvas gestures before WebKit/GTK can interpret an unhandled drag.
-    event.preventDefault();
-    const point = this.locate(event);
-    if (!point) return;
-    this.activePointer = event.pointerId;
-    if (event.isTrusted)
-      this.renderer.domElement.setPointerCapture(event.pointerId);
-    if (
-      event.button === 1 ||
-      event.button === 2 ||
-      event.altKey ||
-      this.tool === 'pan'
-    ) {
-      this.pan = { x: point.x, z: point.z };
-      return;
-    }
-    if (eraser) {
-      this.erasing = { nodes: new Set(), edges: new Set() };
-      this.eraseAt(event);
-      return;
-    }
-    if (this.tool === 'sketch') {
-      const rect = this.renderer.domElement.getBoundingClientRect();
-      this.stroke = {
-        points: [{ x: point.x, z: point.z }],
-        last: { x: event.clientX - rect.left, y: event.clientY - rect.top },
-        from: this.nodeAt(),
-      };
-      return;
-    }
-    if (this.tool === 'text' || this.tool === 'note') {
-      this.releasePointer();
-      this.onPlace(this.tool, Math.round(point.x), Math.round(point.z));
-      return;
-    }
-    const handle = this.handleAt();
-    if (handle) {
-      const id: unknown = handle.userData.nodeId;
-      const node =
-        typeof id === 'string' ? this.tiles.get(id)?.node : undefined;
-      const resize: unknown = handle.userData.resize;
-      if (node && Array.isArray(resize)) {
-        const [sx, sz] = resize as [number, number];
-        this.resizing = {
-          id: node.id,
-          sx,
-          sz,
-          start: { x: point.x, z: point.z },
-          from: { x: node.x, z: node.z, width: node.width, depth: node.depth },
-          children: [...this.tiles.values()]
-            .filter((tile) => tile.node.parentId === node.id)
-            .map(({ node: child }) => ({
-              node: child,
-              x: child.x,
-              z: child.z,
-            })),
-        };
-        return;
-      }
-      const port: unknown = handle.userData.port;
-      if (node && isPort(port)) {
-        this.connectionStart = { id: node.id, port };
-        this.showPreview(point);
-        return;
-      }
-    }
-    if (this.tool === 'select') {
-      const edge = this.edgeAt(event);
-      if (edge) {
-        this.selectEdge(edge);
-        this.releasePointer();
-        return;
-      }
-    }
-    const id = this.nodeAt();
-    if (this.tool === 'connect') {
-      if (id) {
-        if (this.connectionStart) {
-          this.onConnect(this.connectionStart.id, undefined, id, undefined);
-          this.connectionStart = undefined;
-          this.clearPreview();
-        } else {
-          this.select(id);
-          this.connectionStart = { id };
-          this.showPreview(point);
-        }
-      }
-      return;
-    }
-    const hitNode = id ? this.tiles.get(id)?.node : undefined;
-    if (!id || (hitNode?.kind === 'group' && !this.selectedIds.has(id))) {
-      const rect = this.renderer.domElement.getBoundingClientRect();
-      const start = {
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
-      };
-      this.marquee = {
-        start,
-        end: start,
-        initial: this.selection,
-        additive: event.shiftKey,
-        clickId: id,
-        active: false,
-      };
-      return;
-    }
-    if (event.shiftKey || !this.selectedIds.has(id))
-      this.select(id, event.shiftKey);
-    else this.selected = id;
-    const node = this.selected
-      ? this.tiles.get(this.selected)?.node
-      : undefined;
-    if (node) {
-      this.dragOrigins = [...this.tiles.values()]
-        .filter((tile) => {
-          if (!this.selectedIds.has(tile.node.id)) return false;
-          let parent = tile.node.parentId;
-          while (parent) {
-            if (this.selectedIds.has(parent)) return false;
-            parent = this.nodeIndex.get(parent)?.parentId;
-          }
-          return true;
-        })
-        .map(({ node }) => ({ node, x: node.x, z: node.z }));
-      const moving = new Set(this.dragOrigins.map((o) => o.node.id));
-      const movingOrInside = (tile: Tile) => {
-        for (let id: string | undefined = tile.node.id; id; ) {
-          if (moving.has(id)) return true;
-          id = this.nodeIndex.get(id)?.parentId;
-        }
-        return false;
-      };
-      if (event.pointerType === 'pen')
-        this.dragSlop = { x: event.clientX, y: event.clientY };
-      this.drag = {
-        id: node.id,
-        x: point.x,
-        z: point.z,
-        startX: node.x,
-        startZ: node.z,
-        box: this.worldRect(this.tiles.get(node.id)),
-        others: [...this.tiles.values()]
-          .filter((tile) => !movingOrInside(tile))
-          .map((tile) => this.worldRect(tile)),
-      };
-    }
-  };
   /** Topmost node under the last located ray; services win over boundaries. */
   private nodeAt(): string | undefined {
     const hits = this.ray.intersectObjects(this.pickables, false);
@@ -1230,7 +1038,7 @@ export class DiagramScene {
       this.camera.matrixWorldInverse,
     );
     let best: string | undefined;
-    let bestDistance = this.penInput ? 7 * PEN_SCALE : 7;
+    let bestDistance = this.gestures.penInput ? 7 * PEN_SCALE : 7;
     for (const [id, index] of this.edges) {
       for (let segment = 0; segment < 5; segment++) {
         const offset = index * 14 + segment * 2;
@@ -1253,138 +1061,6 @@ export class DiagramScene {
     }
     return best;
   }
-  private hover(event: PointerEvent): void {
-    if (!this.locate(event)) return;
-    const handle = this.handleAt();
-    const resize: unknown = handle?.userData.resize;
-    let cursor = this.toolCursor();
-    let edge: string | undefined;
-    if (Array.isArray(resize)) {
-      const [sx, sz] = resize as [number, number];
-      cursor = resizeCursor(sx, sz, this.mode);
-    } else if (handle) cursor = 'crosshair';
-    else if (this.tool === 'select') {
-      edge = this.edgeAt(event);
-      if (edge) cursor = 'pointer';
-      else if (this.nodeAt()) cursor = 'move';
-    }
-    this.renderer.domElement.style.cursor = cursor;
-    if (edge !== this.hoveredEdge) {
-      const previous = this.hoveredEdge;
-      this.hoveredEdge = edge;
-      if (previous) this.paintEdge(previous);
-      if (edge) this.paintEdge(edge);
-      this.invalidate();
-    }
-  }
-  private move = (event: PointerEvent): void => {
-    if (this.activePointer === undefined) {
-      this.notePointer(event);
-      this.hover(event);
-      return;
-    }
-    if (event.pointerId !== this.activePointer) return;
-    event.preventDefault();
-    this.inMotion();
-    if (this.erasing) {
-      this.eraseAt(event);
-      return;
-    }
-    if (this.stroke) {
-      this.extendStroke(event);
-      return;
-    }
-    if (this.marquee) {
-      const bounds = this.renderer.domElement.getBoundingClientRect();
-      this.marquee.end = {
-        x: Math.max(0, Math.min(this.width, event.clientX - bounds.left)),
-        y: Math.max(0, Math.min(this.height, event.clientY - bounds.top)),
-      };
-      if (
-        Math.hypot(
-          this.marquee.end.x - this.marquee.start.x,
-          this.marquee.end.y - this.marquee.start.y,
-        ) >= 4
-      )
-        this.marquee.active = true;
-      if (this.marquee.active) {
-        const rect = selectionRect(this.marquee.start, this.marquee.end);
-        this.selectionBox.hidden = false;
-        Object.assign(this.selectionBox.style, {
-          left: `${rect.left}px`,
-          top: `${rect.top}px`,
-          width: `${rect.right - rect.left}px`,
-          height: `${rect.bottom - rect.top}px`,
-        });
-      }
-      return;
-    }
-    const point = this.locate(event);
-    if (!point) return;
-    if (this.connectionStart) {
-      this.showPreview(point);
-      return;
-    }
-    if (this.resizing) {
-      const { sx, sz, start, from } = this.resizing;
-      const tile = this.tiles.get(this.resizing.id);
-      if (!tile) return;
-      const step = this.snapping ? 10 : 1;
-      const size = (base: number, delta: number) =>
-        Math.max(30, Math.round((base + delta) / step) * step);
-      const node = tile.node;
-      if (sx) {
-        node.width = size(from.width, sx * (point.x - start.x));
-        node.x = from.x + (sx * (node.width - from.width)) / 2;
-      }
-      if (sz) {
-        node.depth = size(from.depth, sz * (point.z - start.z));
-        node.z = from.z + (sz * (node.depth - from.depth)) / 2;
-      }
-      // Children are stored relative to the centre; keep them fixed on screen.
-      for (const child of this.resizing.children) {
-        child.node.x = child.x - (node.x - from.x);
-        child.node.z = child.z - (node.z - from.z);
-      }
-      this.applySize(tile);
-      this.refreshPosition(node.id);
-      return;
-    }
-    if (this.pan) {
-      this.fitted = false;
-      this.target.x += this.pan.x - point.x;
-      this.target.z += this.pan.z - point.z;
-      this.setView(this.mode);
-      return;
-    }
-    if (!this.drag) return;
-    const tile = this.tiles.get(this.drag.id);
-    if (!tile) return;
-    // A pen tap wobbles a little; do not nudge the node until it really moves.
-    if (this.dragSlop) {
-      if (
-        Math.hypot(
-          event.clientX - this.dragSlop.x,
-          event.clientY - this.dragSlop.y,
-        ) < PEN_TAP_SLOP
-      )
-        return;
-      this.dragSlop = undefined;
-    }
-    const step = this.snapping ? 10 : 1;
-    let dx = Math.round((point.x - this.drag.x) / step) * step;
-    let dz = Math.round((point.z - this.drag.z) / step) * step;
-    if (!event.ctrlKey) {
-      const snapped = this.alignToNeighbours(this.drag, dx, dz);
-      dx = snapped.dx;
-      dz = snapped.dz;
-    } else this.showGuides([]);
-    for (const origin of this.dragOrigins) {
-      origin.node.x = origin.x + dx;
-      origin.node.z = origin.z + dz;
-    }
-    this.refreshPositions(this.dragOrigins.map((origin) => origin.node.id));
-  };
   private worldRect(tile: Tile | undefined): Rect {
     if (!tile) return { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
     const p = worldPosition(tile.node, this.nodeIndex);
@@ -1394,85 +1070,6 @@ export class DiagramScene {
       minZ: p.z - tile.node.depth / 2,
       maxZ: p.z + tile.node.depth / 2,
     };
-  }
-  /**
-   * Smart guides: pull the grabbed node's edges or centre onto a neighbour's
-   * when within a few pixels, and draw the line it snapped to.
-   */
-  private alignToNeighbours(
-    drag: NonNullable<DiagramScene['drag']>,
-    dx: number,
-    dz: number,
-  ): { dx: number; dz: number } {
-    const box = drag.box;
-    const threshold =
-      8 *
-      this.pixelSize(
-        new Vector3((box.minX + box.maxX) / 2, 0, (box.minZ + box.maxZ) / 2),
-      );
-    const lines = (min: number, max: number) => [min, (min + max) / 2, max];
-    let bestX: { diff: number; at: number; other: Rect } | undefined;
-    let bestZ: { diff: number; at: number; other: Rect } | undefined;
-    for (const other of drag.others) {
-      for (const a of lines(box.minX + dx, box.maxX + dx))
-        for (const b of lines(other.minX, other.maxX)) {
-          const diff = b - a;
-          if (
-            Math.abs(diff) < threshold &&
-            (!bestX || Math.abs(diff) < Math.abs(bestX.diff))
-          )
-            bestX = { diff, at: b, other };
-        }
-      for (const a of lines(box.minZ + dz, box.maxZ + dz))
-        for (const b of lines(other.minZ, other.maxZ)) {
-          const diff = b - a;
-          if (
-            Math.abs(diff) < threshold &&
-            (!bestZ || Math.abs(diff) < Math.abs(bestZ.diff))
-          )
-            bestZ = { diff, at: b, other };
-        }
-    }
-    if (bestX) dx += bestX.diff;
-    if (bestZ) dz += bestZ.diff;
-    const segments: number[] = [];
-    const y = 16;
-    if (bestX) {
-      const from = Math.min(box.minZ + dz, bestX.other.minZ) - 30;
-      const to = Math.max(box.maxZ + dz, bestX.other.maxZ) + 30;
-      segments.push(bestX.at, y, from, bestX.at, y, to);
-    }
-    if (bestZ) {
-      const from = Math.min(box.minX + dx, bestZ.other.minX) - 30;
-      const to = Math.max(box.maxX + dx, bestZ.other.maxX) + 30;
-      segments.push(from, y, bestZ.at, to, y, bestZ.at);
-    }
-    this.showGuides(segments);
-    return { dx, dz };
-  }
-  private showGuides(positions: number[]): void {
-    if (!positions.length) {
-      if (this.guides) {
-        this.scene.remove(this.guides);
-        this.guides.geometry.dispose();
-        this.guides = undefined;
-        this.invalidate();
-      }
-      return;
-    }
-    if (this.guides) {
-      this.scene.remove(this.guides);
-      this.guides.geometry.dispose();
-    }
-    this.guides = new LineSegments2(
-      new LineSegmentsGeometry().setPositions(positions),
-      this.guideMaterial,
-    );
-    this.guides.computeLineDistances();
-    this.guides.frustumCulled = false;
-    this.guides.renderOrder = 11;
-    this.scene.add(overlay(this.guides));
-    this.invalidate();
   }
   private applySize(tile: Tile): void {
     const mesh = tile.group.children[0];
@@ -1490,128 +1087,6 @@ export class DiagramScene {
         1,
         tile.node.depth / root.userData.depth,
       );
-  }
-  /** Track whether a pen or a mouse is driving, and size handles to match. */
-  private notePointer(event: PointerEvent): void {
-    const pen = event.pointerType === 'pen';
-    if (pen === this.penInput) return;
-    this.penInput = pen;
-    this.onPenInput(pen);
-    this.invalidate();
-  }
-  private extendStroke(event: PointerEvent): void {
-    const stroke = this.stroke;
-    if (!stroke) return;
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const screen = {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    };
-    // Skip sub-pixel jitter; the recogniser resamples anyway.
-    if (Math.hypot(screen.x - stroke.last.x, screen.y - stroke.last.y) < 2)
-      return;
-    const point = this.locate(event);
-    if (!point) return;
-    stroke.last = screen;
-    stroke.points.push({ x: point.x, z: point.z });
-    this.showInk(stroke.points);
-  }
-  private finishStroke(
-    stroke: NonNullable<DiagramScene['stroke']>,
-  ): SketchStroke {
-    const result: SketchStroke = { points: stroke.points };
-    const first = stroke.points[0];
-    const last = stroke.points.at(-1);
-    const from = stroke.from ? this.nodeIndex.get(stroke.from) : undefined;
-    if (from && first)
-      result.from = {
-        id: from.id,
-        port: nearestPort(from, first, this.nodeIndex),
-      };
-    if (last) {
-      // Ray from the last point, so a stroke ending on a tile's top counts.
-      const projected = this.scratchA
-        .set(last.x, 0, last.z)
-        .project(this.camera);
-      this.pointer.set(projected.x, projected.y);
-      this.ray.setFromCamera(this.pointer, this.camera);
-      const id = this.nodeAt();
-      const to = id ? this.nodeIndex.get(id) : undefined;
-      if (to)
-        result.to = { id: to.id, port: nearestPort(to, last, this.nodeIndex) };
-    }
-    return result;
-  }
-  private showInk(points: readonly { x: number; z: number }[]): void {
-    if (points.length < 2) return;
-    const positions: number[] = [];
-    for (let i = 1; i < points.length; i++) {
-      const a = points[i - 1] as { x: number; z: number };
-      const b = points[i] as { x: number; z: number };
-      positions.push(a.x, 30, a.z, b.x, 30, b.z);
-    }
-    this.clearInk();
-    this.ink = new LineSegments2(
-      new LineSegmentsGeometry().setPositions(positions),
-      this.inkMaterial,
-    );
-    this.ink.frustumCulled = false;
-    this.ink.renderOrder = 12;
-    this.scene.add(overlay(this.ink));
-    this.invalidate();
-  }
-  private clearInk(): void {
-    if (!this.ink) return;
-    this.scene.remove(this.ink);
-    this.ink.geometry.dispose();
-    this.ink = undefined;
-    this.invalidate();
-  }
-  /** Mark whatever the eraser is over; boundaries are left alone. */
-  private eraseAt(event: PointerEvent): void {
-    const erasing = this.erasing;
-    if (!erasing || !this.locate(event)) return;
-    const edge = this.edgeAt(event);
-    if (edge) erasing.edges.add(edge);
-    const hits = this.ray.intersectObjects(this.pickables, false);
-    const id: unknown = hits.find((h) => {
-      const hit: unknown = h.object.userData.nodeId;
-      return (
-        typeof hit === 'string' && this.nodeIndex.get(hit)?.kind !== 'group'
-      );
-    })?.object.userData.nodeId;
-    if (typeof id === 'string' && !erasing.nodes.has(id)) {
-      erasing.nodes.add(id);
-      this.selectMany([...erasing.nodes]);
-    }
-  }
-  private showPreview(point: Vector3): void {
-    const start = this.connectionStart;
-    const tile = start ? this.tiles.get(start.id) : undefined;
-    if (!start || !tile) return;
-    const from = start.port
-      ? portPosition(tile.node, start.port, this.nodeIndex)
-      : { x: tile.group.position.x, z: tile.group.position.z };
-    const y = tile.group.position.y + 14;
-    const positions = [from.x, y, from.z, point.x, y, point.z];
-    if (!this.preview) {
-      this.preview = new LineSegments2(
-        new LineSegmentsGeometry().setPositions(positions),
-        this.previewMaterial,
-      );
-      this.preview.frustumCulled = false;
-      this.preview.renderOrder = 11;
-      this.scene.add(overlay(this.preview));
-    } else this.preview.geometry.setPositions(positions);
-    this.preview.computeLineDistances();
-    this.invalidate();
-  }
-  private clearPreview(): void {
-    if (!this.preview) return;
-    this.scene.remove(this.preview);
-    this.preview.geometry.dispose();
-    this.preview = undefined;
-    this.invalidate();
   }
   public refreshPosition(id: string): void {
     this.refreshPositions([id]);
@@ -1659,7 +1134,7 @@ export class DiagramScene {
     if (!tile) return;
     const { x, y, z } = tile.group.position;
     const top = y + (tile.node.kind === 'group' ? 2 : 13);
-    const scale = this.penInput ? PEN_SCALE : 1;
+    const scale = this.gestures.penInput ? PEN_SCALE : 1;
     const halfW = tile.node.width / 2;
     const halfD = tile.node.depth / 2;
     for (const handle of this.ports.children) {
@@ -1706,153 +1181,6 @@ export class DiagramScene {
         : 1;
     return (2 * depth) / (this.height * projectionY);
   }
-  private up = (event?: PointerEvent): void => {
-    if (event && event.pointerId !== this.activePointer) return;
-    this.dragSlop = undefined;
-    if (this.erasing) {
-      const { nodes, edges } = this.erasing;
-      this.erasing = undefined;
-      this.releasePointer();
-      if (nodes.size || edges.size) this.onErase([...nodes], [...edges]);
-      return;
-    }
-    if (this.stroke) {
-      if (event) this.extendStroke(event);
-      const stroke = this.stroke;
-      this.stroke = undefined;
-      this.releasePointer();
-      this.clearInk();
-      this.onSketch(this.finishStroke(stroke));
-      return;
-    }
-    if (this.marquee) {
-      if (event) this.move(event);
-      const marquee = this.marquee;
-      this.marquee = undefined;
-      this.selectionBox.hidden = true;
-      if (marquee.active) {
-        const ids = nodesInSelectionRect(
-          this.nodeIndex,
-          this.camera,
-          this.width,
-          this.height,
-          selectionRect(marquee.start, marquee.end),
-        );
-        this.selectMany(
-          marquee.additive ? [...new Set([...marquee.initial, ...ids])] : ids,
-        );
-      } else this.select(marquee.clickId, marquee.additive);
-    }
-    this.releasePointer();
-    if (this.resizing) {
-      const { id, from, children } = this.resizing;
-      this.resizing = undefined;
-      const node = this.tiles.get(id)?.node;
-      if (
-        node &&
-        (node.width !== from.width ||
-          node.depth !== from.depth ||
-          node.x !== from.x ||
-          node.z !== from.z)
-      )
-        this.onResize([
-          {
-            id,
-            from,
-            to: { x: node.x, z: node.z, width: node.width, depth: node.depth },
-          },
-          ...children
-            .filter((c) => c.node.x !== c.x || c.node.z !== c.z)
-            .map((c) => ({
-              id: c.node.id,
-              from: { x: c.x, z: c.z },
-              to: { x: c.node.x, z: c.node.z },
-            })),
-        ]);
-    }
-    if (this.connectionStart && event && this.tool !== 'connect') {
-      const start = this.connectionStart;
-      this.connectionStart = undefined;
-      this.clearPreview();
-      const point = this.locate(event);
-      const hits = this.ray.intersectObjects(this.pickables, false);
-      const target = hits.find((h) => h.object.userData.nodeId !== start.id);
-      const id: unknown = target?.object.userData.nodeId;
-      const node = typeof id === 'string' ? this.nodeIndex.get(id) : undefined;
-      if (node && point)
-        this.onConnect(
-          start.id,
-          start.port,
-          node.id,
-          nearestPort(node, point, this.nodeIndex),
-        );
-    }
-    const moves = this.dragOrigins
-      .filter((o) => o.node.x !== o.x || o.node.z !== o.z)
-      .map((o) => ({
-        id: o.node.id,
-        from: { x: o.x, z: o.z },
-        to: { x: o.node.x, z: o.node.z },
-      }));
-    this.drag = undefined;
-    this.dragOrigins = [];
-    this.pan = undefined;
-    this.showGuides([]);
-    if (moves.length === 1) {
-      const move = moves[0];
-      if (move) this.onMove(move.id, move.from, move.to);
-    } else if (moves.length) this.onMoves(moves);
-  };
-  public cancelInteraction = (): void => {
-    this.marquee = undefined;
-    this.dragSlop = undefined;
-    this.stroke = undefined;
-    this.clearInk();
-    if (this.erasing) {
-      this.erasing = undefined;
-      this.selectMany([]);
-    }
-    this.selectionBox.hidden = true;
-    this.releasePointer();
-    if (this.resizing) {
-      const tile = this.tiles.get(this.resizing.id);
-      if (tile) {
-        Object.assign(tile.node, this.resizing.from);
-        this.applySize(tile);
-      }
-      for (const child of this.resizing.children) {
-        child.node.x = child.x;
-        child.node.z = child.z;
-      }
-      this.resizing = undefined;
-    }
-    for (const origin of this.dragOrigins) {
-      origin.node.x = origin.x;
-      origin.node.z = origin.z;
-    }
-    this.drag = undefined;
-    this.dragOrigins = [];
-    this.pan = undefined;
-    this.showGuides([]);
-    this.connectionStart = undefined;
-    this.clearPreview();
-    this.updatePositions();
-    this.invalidate();
-  };
-  private cancel = (): void => this.cancelInteraction();
-  private lostCapture = (event: PointerEvent): void => {
-    if (event.pointerId === this.activePointer) this.cancelInteraction();
-  };
-  private releasePointer(): void {
-    const pointer = this.activePointer;
-    this.activePointer = undefined;
-    if (
-      pointer !== undefined &&
-      this.renderer.domElement.hasPointerCapture(pointer)
-    )
-      this.renderer.domElement.releasePointerCapture(pointer);
-  }
-  private preventNativeDrag = (event: Event): void => event.preventDefault();
   private wheel = (event: WheelEvent): void => {
     this.inMotion();
     this.fitted = false;
@@ -1870,50 +1198,6 @@ export class DiagramScene {
     }
     this.onZoom(this.view.percent);
     this.invalidate();
-  };
-  private context = (event: MouseEvent): void => {
-    event.preventDefault();
-    const edge = this.edgeAt(event);
-    if (edge) this.selectEdge(edge);
-    else if (!this.selectedEdge || this.selectedIds.size) {
-      // Right-clicking an unselected node acts on that node.
-      const rect = this.renderer.domElement.getBoundingClientRect();
-      this.pointer.set(
-        ((event.clientX - rect.left) / this.width) * 2 - 1,
-        (-(event.clientY - rect.top) / this.height) * 2 + 1,
-      );
-      this.ray.setFromCamera(this.pointer, this.camera);
-      const id = this.nodeAt();
-      if (id && !this.selectedIds.has(id)) this.select(id);
-    }
-    this.onContextMenu(event.clientX, event.clientY);
-  };
-  private doubleClick = (event: MouseEvent): void => {
-    if (this.tool !== 'select') return;
-    const edge = this.edgeAt(event);
-    if (edge) {
-      this.onEditRequest({ kind: 'edge', id: edge });
-      return;
-    }
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.pointer.set(
-      ((event.clientX - rect.left) / this.width) * 2 - 1,
-      (-(event.clientY - rect.top) / this.height) * 2 + 1,
-    );
-    this.ray.setFromCamera(this.pointer, this.camera);
-    const id = this.nodeAt();
-    if (id) {
-      this.select(id);
-      this.onEditRequest({ kind: 'node', id });
-      return;
-    }
-    const point = this.ray.ray.intersectPlane(this.plane, this.point);
-    if (point)
-      this.onEditRequest({
-        kind: 'empty',
-        x: Math.round(point.x),
-        z: Math.round(point.z),
-      });
   };
   /** Screen rectangle covering a node's top face, for overlay editors. */
   public nodeScreenRect(
@@ -2476,47 +1760,8 @@ export class DiagramScene {
     canvas.height = Math.max(1, Math.round(source.height * scale));
     const context = canvas.getContext('2d');
     context?.drawImage(source, 0, 0, canvas.width, canvas.height);
-    if (context && this.journeyCaption) {
-      const size = Math.max(12, Math.round(canvas.width / 48));
-      context.font = `${size}px sans-serif`;
-      const lines: string[] = [];
-      for (const paragraph of this.journeyCaption.split('\n')) {
-        let line = '';
-        for (const char of paragraph) {
-          if (
-            context.measureText(line + char).width > canvas.width - 48 &&
-            line
-          ) {
-            lines.push(line);
-            line = '';
-          }
-          line += char;
-        }
-        lines.push(line);
-      }
-      const visible = lines.slice(
-        0,
-        Math.max(1, Math.floor(canvas.height / (size * 3))),
-      );
-      if (visible.length < lines.length) visible[visible.length - 1] += '…';
-      const height = visible.length * size * 1.4 + 16;
-      context.fillStyle = '#111827';
-      context.fillRect(
-        8,
-        canvas.height - height - 8,
-        canvas.width - 16,
-        height,
-      );
-      context.fillStyle = '#ffffff';
-      context.textAlign = 'center';
-      visible.forEach((line, i) => {
-        context.fillText(
-          line,
-          canvas.width / 2,
-          canvas.height - height + size + i * size * 1.4,
-        );
-      });
-    }
+    if (context && this.journeyCaption)
+      drawCaption(context, canvas.width, canvas.height, this.journeyCaption);
     return canvas;
   }
   public png(): Promise<Blob> {
@@ -2541,10 +1786,6 @@ export class DiagramScene {
     this.grid.dispose();
     for (const geometry of Object.values(this.shapeGeometries))
       geometry.dispose();
-    this.clearPreview();
-    this.previewMaterial.dispose();
-    this.clearInk();
-    this.inkMaterial.dispose();
     this.portGeometry.dispose();
     this.portMaterial.dispose();
     this.handleGeometry.dispose();
@@ -2555,51 +1796,12 @@ export class DiagramScene {
     this.haloMaterial.dispose();
     this.flowMaterial.dispose();
     this.journey?.dispose();
-    this.showGuides([]);
-    this.guideMaterial.dispose();
     this.animators.clear();
     this.edgeMaterial.dispose();
     this.backdrop.dispose();
     this.antialias.dispose();
     this.renderer.dispose();
+    this.gestures.dispose();
     this.renderer.domElement.remove();
-    this.selectionBox.remove();
   }
-}
-
-function createFlowGeometries(): Record<
-  'process' | 'decision' | 'terminal',
-  BoxGeometry | ExtrudeGeometry
-> {
-  const diamond = new Shape();
-  diamond.moveTo(0, -0.5);
-  diamond.lineTo(0.5, 0);
-  diamond.lineTo(0, 0.5);
-  diamond.lineTo(-0.5, 0);
-  diamond.closePath();
-  const rounded = new Shape();
-  rounded.moveTo(-0.3, -0.5);
-  rounded.lineTo(0.3, -0.5);
-  rounded.quadraticCurveTo(0.5, -0.5, 0.5, -0.3);
-  rounded.lineTo(0.5, 0.3);
-  rounded.quadraticCurveTo(0.5, 0.5, 0.3, 0.5);
-  rounded.lineTo(-0.3, 0.5);
-  rounded.quadraticCurveTo(-0.5, 0.5, -0.5, 0.3);
-  rounded.lineTo(-0.5, -0.3);
-  rounded.quadraticCurveTo(-0.5, -0.5, -0.3, -0.5);
-  const extrude = (shape: Shape) => {
-    const geometry = new ExtrudeGeometry(shape, {
-      depth: 1,
-      bevelEnabled: false,
-      curveSegments: 6,
-    });
-    geometry.rotateX(-Math.PI / 2);
-    geometry.translate(0, -0.5, 0);
-    return geometry;
-  };
-  return {
-    process: new BoxGeometry(1, 1, 1),
-    decision: extrude(diamond),
-    terminal: extrude(rounded),
-  };
 }

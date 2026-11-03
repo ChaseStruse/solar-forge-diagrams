@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { DiagramDocument, DiagramNode } from '../src/domain/document';
 import {
+  branchName,
   inactiveEdges,
   journeyBranches,
   journeyStarts,
@@ -113,4 +114,21 @@ test('an active route switches off the other branches of its fork only', () => {
   expect([...inactiveEdges(graph)].sort()).toEqual(['e1', 'e3']);
   ecr.journey = { mode: 'fixed', edge: 'gone' };
   expect([...inactiveEdges(graph)]).toEqual([]);
+});
+
+test('branch names use the connection label, else the destination', () => {
+  const board = doc(
+    [node('a'), node('b'), node('c')],
+    [
+      ['a', 'b'],
+      ['a', 'c'],
+    ],
+  );
+  const labelled = {
+    ...board,
+    edges: board.edges.map((e) => (e.id === 'e0' ? { ...e, label: 'Yes' } : e)),
+  };
+  expect(branchName(labelled, 'e0')).toBe('Yes → b');
+  expect(branchName(labelled, 'e1')).toBe('→ c');
+  expect(branchName(labelled, 'missing')).toBe('Connection');
 });

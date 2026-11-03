@@ -8,6 +8,11 @@ import {
 } from './policies';
 
 export type Port = 'north' | 'east' | 'south' | 'west';
+export const isPort = (value: unknown): value is Port =>
+  value === 'north' ||
+  value === 'east' ||
+  value === 'south' ||
+  value === 'west';
 export interface DiagramNode {
   detailId?: string;
   journeyCaption?: string;
