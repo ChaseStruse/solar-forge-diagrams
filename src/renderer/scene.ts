@@ -37,6 +37,7 @@ import type {
 } from '../domain/document';
 import { isPort, worldPosition } from '../domain/document';
 import { inactiveEdges } from '../domain/journey';
+import { laneBands } from '../domain/lanes';
 import {
   type Fans,
   fansOf,
@@ -54,6 +55,7 @@ import { drawCaption } from './caption';
 import { createFlowGeometries } from './flow-shapes';
 import { JourneyPlayer } from './journey';
 import { LabelAtlas, rasterBucket } from './labels';
+import { createLaneBands, type LaneBandsView } from './lane-bands';
 import { type GestureBoard, PointerGestures } from './pointer-gestures';
 import { nodesInSelectionRect } from './selection';
 import type { Rect } from './smart-guides';
@@ -487,9 +489,11 @@ export class DiagramScene {
     const annotations = [...this.tiles.values()].flatMap((tile) =>
       tile.annotation ? [tile.annotation] : [],
     );
-    const { bodies, details, edgeGeometry, flowGeometry } = this;
+    const { bodies, details, edgeGeometry, flowGeometry, lanes } = this;
     const labels = this.labels.retire();
+    this.lanes = undefined;
     this.retired.push(() => {
+      lanes?.dispose();
       for (const annotation of annotations) annotation.dispose();
       bodies?.dispose();
       details?.dispose();
@@ -667,6 +671,13 @@ export class DiagramScene {
         ids.add(edge.id);
         this.incident.set(id, ids);
       }
+    }
+    const bands = laneBands(document);
+    if (bands) {
+      this.lanes = createLaneBands(bands, this.palette, (text) =>
+        this.labels.create(text, this.camera.zoom, 'group'),
+      );
+      this.content.add(this.lanes.root);
     }
     this.labels.finish(this.content);
     this.updatePositions();
@@ -893,6 +904,13 @@ export class DiagramScene {
       maxZ = Math.max(maxZ, tile.group.position.z + tile.node.depth / 2 + 70);
       maxY = Math.max(maxY, tile.group.position.y + 45);
     }
+    if (this.lanes) {
+      const box = this.lanes.bounds;
+      minX = Math.min(minX, box.minX);
+      maxX = Math.max(maxX, box.maxX);
+      minZ = Math.min(minZ, box.minZ);
+      maxZ = Math.max(maxZ, box.maxZ);
+    }
     if (Number.isFinite(minX)) this.view.fit({ minX, maxX, minZ, maxZ, maxY });
     this.onZoom(this.view.percent);
     this.invalidate();
@@ -906,6 +924,8 @@ export class DiagramScene {
     else this.invalidate();
   }
 
+  /** Swimlane bands drawn under the board, when it shows lanes. */
+  private lanes: LaneBandsView | undefined;
   /** Pointer input: drag, resize, marquee, connect, sketch, erase, pan. */
   private readonly gestures: PointerGestures;
   /** The narrow view of this scene that pointer gestures work through. */

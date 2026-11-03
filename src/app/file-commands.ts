@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { DiagramEdge, DiagramNode } from '../domain/document';
 import { parseDocument, serializeDocument } from '../domain/document';
-import { layoutEdit } from '../domain/layout';
+import { arrangeEdit } from '../domain/lanes';
 import { RecoveryWriter } from '../persistence/recovery';
 import {
   copyPng,
@@ -201,7 +201,7 @@ export function installFileCommands(
     importer.open();
   };
   element('auto-layout').onclick = () => {
-    commit(layoutEdit(state.current));
+    commit(arrangeEdit(state.current));
     scene.fit();
     element('file-menu').hidden = true;
   };

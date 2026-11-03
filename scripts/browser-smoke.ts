@@ -686,6 +686,93 @@ await Bun.sleep(300);
   );
 }
 
+// Swimlanes: owners from the inspector, L toggles, a drop changes owner.
+{
+  await evaluate(
+    `window.solarForge.load(${JSON.stringify(JSON.stringify(start))})`,
+  );
+  await evaluate(`document.querySelector('#top').click()`);
+  await Bun.sleep(200);
+  const setOwner = async (id: string, owner: string) => {
+    await evaluate(`window.solarForge.scene.select(${JSON.stringify(id)})`);
+    await evaluate(
+      `(() => { const f = document.querySelector('#node-owner'); f.value = ${JSON.stringify(owner)}; f.onchange(); })()`,
+    );
+  };
+  await setOwner(n0, 'Frontend team');
+  check(
+    'owner field saves owner',
+    (await nodeOf(n0)).owner === 'Frontend team',
+  );
+  check(
+    'owner offered as a suggestion',
+    (await evaluate(
+      `[...document.querySelectorAll('#owner-options option')].map(o => o.value).join()`,
+    )) === 'Frontend team',
+  );
+  await setOwner(n1, 'Data team');
+  await evaluate(
+    `window.solarForge.scene.select(undefined); document.activeElement?.blur()`,
+  );
+  await key('l');
+  const laned = await doc();
+  check(
+    'L shows lanes',
+    laned.lanes?.direction === 'right' &&
+      (await evaluate(
+        `document.querySelector('#lanes').getAttribute('aria-pressed')`,
+      )) === 'true',
+  );
+  check('lanes separate owners', (await nodeOf(n0)).z !== (await nodeOf(n1)).z);
+  // Drag the first step down into the second step's lane.
+  await evaluate(`window.solarForge.scene.fit()`);
+  await evaluate(
+    `new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`,
+  );
+  const from = await at(n0),
+    lane = await at(n1);
+  await dragFrom(from, { x: from.x, y: lane.y });
+  await Bun.sleep(150);
+  check(
+    'drop into a lane changes owner',
+    (await nodeOf(n0)).owner === 'Data team',
+  );
+  check(
+    'drop is one undoable step',
+    /Move to Data team/.test(await text('#status')),
+  );
+  await key('z', 2, 'KeyZ');
+  check(
+    'undo restores the owner',
+    (await nodeOf(n0)).owner === 'Frontend team',
+  );
+  // A journey across owners reports its handoff.
+  await evaluate(`window.solarForge.scene.select(${JSON.stringify(n0)})`);
+  await key('p');
+  for (
+    let i = 0;
+    i < 60 &&
+    (await evaluate(
+      `document.querySelector('#journey').getAttribute('aria-pressed')`,
+    )) === 'true';
+    i++
+  ) {
+    if (/Handoff Frontend team → Data team/.test(await text('#status'))) break;
+    await Bun.sleep(100);
+  }
+  check(
+    'journey calls out the handoff',
+    /Handoff Frontend team → Data team/.test(await text('#status')),
+  );
+  await key('Escape');
+  await evaluate(`document.activeElement?.blur()`);
+  await key('l');
+  check(
+    'L again hides lanes, keeps owners',
+    !(await doc()).lanes && (await nodeOf(n1)).owner === 'Data team',
+  );
+}
+
 // Example with detail diagrams, navigate in and out.
 const examples = await evaluate(
   `import('/src/catalog/templates.ts').then(m => Object.keys(m))`,

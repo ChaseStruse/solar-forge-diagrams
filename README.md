@@ -24,6 +24,7 @@ The installer checks the bundle's checksums and package identity, then installs 
 - **Import:** Mermaid flowcharts, Terraform (`.tf` or `terraform show -json`), CloudFormation YAML/JSON and Docker Compose, parsed locally. No Terraform, Docker or network access is needed.
 - **Network checks:** security groups, network ACLs and route tables feed a reachability matrix with explained Allowed / Denied / Unknown decisions.
 - **Journeys:** animated traffic walkthroughs with saved scenarios, captions and branch choices.
+- **Swimlanes:** give steps an owner and show any board as lanes, with handoffs called out during journeys.
 - **Projects:** linked detail diagrams, atomic saves and crash recovery.
 - **Export:** PNG, SVG, GIF, WebM/MP4, Mermaid, PlantUML and draw.io.
 

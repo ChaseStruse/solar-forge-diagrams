@@ -24,6 +24,8 @@ export type Edit =
       nodes?: Change<DiagramNode>[];
       edges?: Change<DiagramEdge>[];
       title?: string;
+      /** Show the board as swimlanes, or stop with null. */
+      lanes?: DiagramDocument['lanes'] | null;
     };
 export interface Change<T> {
   id: string;
@@ -139,6 +141,11 @@ export class DocumentHistory {
         const nodes = changes(doc.nodes, edit.nodes ?? []);
         const edges = changes(doc.edges, edit.edges ?? []);
         const title = doc.title;
+        const lanesBefore = structuredClone(doc.lanes);
+        const setLanes = (value: DiagramDocument['lanes'] | null) => {
+          if (value) doc.lanes = structuredClone(value);
+          else delete doc.lanes;
+        };
         function apply<T extends { id: string }>(
           source: T[],
           records: ReturnType<typeof changes<T>>,
@@ -161,13 +168,15 @@ export class DocumentHistory {
           doc.nodes = apply(doc.nodes, nodes, true);
           doc.edges = apply(doc.edges, edges, true);
           doc.title = title;
+          if (edit.lanes !== undefined) setLanes(lanesBefore ?? null);
         };
         redo = () => {
           doc.nodes = apply(doc.nodes, nodes, false);
           doc.edges = apply(doc.edges, edges, false);
           if (edit.title !== undefined) doc.title = edit.title;
+          if (edit.lanes !== undefined) setLanes(edit.lanes);
         };
-        retained = [nodes, edges, title];
+        retained = [nodes, edges, title, lanesBefore];
         break;
       }
       case 'move': {
