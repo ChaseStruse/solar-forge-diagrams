@@ -88,6 +88,8 @@ Choose **File menu → Import Mermaid or infrastructure…**, then choose a `.mm
 - Text entities (`#quot;`, `#35;`), `<br/>` line breaks and markdown strings are decoded. A `title:` front matter block, or the `%% Title` comment written by Export Mermaid source, names the board.
 - Styling, classes and click handlers are skipped and listed as warnings.
 
+Imported charts use a flowchart layout: each step sits a layer after the steps leading to it, branches spread side by side, links that skip steps run straight past the steps between, loops are drawn back up instead of collapsing into one row, and forward links leave from the side facing the flow. Long labels wrap on wider shapes.
+
 Charts exported with **Export Mermaid source** import back with the same node IDs, labels, groups, connections and walkthrough captions; positions are laid out again. Try [examples/mermaid/checkout.mmd](../examples/mermaid/checkout.mmd).
 
 ## Import existing infrastructure

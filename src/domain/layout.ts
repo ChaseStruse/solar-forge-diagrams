@@ -1,4 +1,5 @@
 import type { DiagramDocument, DiagramNode } from './document';
+import { type FlowSlot, flowLayers, flowPositions } from './flow-layout';
 import type { Edit } from './history';
 
 const GAP_X = 120,
@@ -6,12 +7,21 @@ const GAP_X = 120,
   PADDING = 70,
   HEADER = 70;
 const grid = (n: number) => Math.ceil(n / 10) * 10;
+/** Space between flowchart layers, leaving room for link labels. */
+const FLOW_GAP = 200;
 /** Which way flow runs: layers advance left to right, or top to bottom. */
 export type LayoutDirection = 'right' | 'down';
+/**
+ * `packed` wraps a large layer into a compact grid, which suits
+ * architecture boards. `flow` keeps every layer in one centred line across
+ * the flow, ordered under its predecessors, which suits flowcharts.
+ */
+export type LayoutStyle = 'packed' | 'flow';
 /** Deterministic layered packing, from the innermost boundary outwards. */
 export function layoutDocument(
   input: DiagramDocument,
   direction: LayoutDirection = 'right',
+  style: LayoutStyle = 'packed',
 ): DiagramDocument {
   const doc = structuredClone(input);
   const down = direction === 'down';
@@ -57,9 +67,12 @@ export function layoutDocument(
     }
     const adjacent = new Map(list.map((n) => [n.id, new Set<string>()]));
     const degree = new Map(list.map((n) => [n.id, 0]));
+    /** Members entered by a link from outside this container. */
+    const entries = new Set<string>();
     for (const e of doc.edges) {
       const a = rootOf(e.source, parent?.id),
         b = rootOf(e.target, parent?.id);
+      if (!a && b) entries.add(b);
       if (a && b && a !== b && !adjacent.get(a)?.has(b)) {
         adjacent.get(a)?.add(b);
         degree.set(b, (degree.get(b) ?? 0) + 1);
@@ -91,11 +104,48 @@ export function layoutDocument(
       column.push(n);
       columns.set(r, column);
     }
-    const gapAlong = down ? GAP_Z : GAP_X,
+    // Flowcharts leave room between layers for link labels.
+    const gapAlong = style === 'flow' ? FLOW_GAP : down ? GAP_Z : GAP_X,
       gapAcross = down ? GAP_X : GAP_Z;
     let main = 0,
       maxCross = 0;
-    for (const [, column] of [...columns].sort((a, b) => a[0] - b[0])) {
+    const ordered = [...columns].sort((a, b) => a[0] - b[0]);
+    if (style === 'flow') {
+      const byId = new Map(list.map((n) => [n.id, n]));
+      // A link passing through a layer reserves a narrow lane there.
+      const LANE = 60;
+      const size = (slot: FlowSlot) => {
+        const node = slot.virtual ? undefined : byId.get(slot.id);
+        return node ? across(node) : LANE;
+      };
+      const flow = flowLayers(
+        list.map((n) => n.id),
+        adjacent,
+        entries,
+      );
+      const centres = flowPositions(flow, size, gapAcross);
+      // Measure from the leftmost edge so every slot sits at cross >= 0.
+      let low = Number.POSITIVE_INFINITY,
+        high = Number.NEGATIVE_INFINITY;
+      for (const layer of flow.layers)
+        for (const slot of layer) {
+          const c = centres.get(slot.id) ?? 0;
+          low = Math.min(low, c - size(slot) / 2);
+          high = Math.max(high, c + size(slot) / 2);
+        }
+      maxCross = Number.isFinite(low) ? high - low : 0;
+      for (const layer of flow.layers) {
+        const real = layer.flatMap((slot) => {
+          const node = slot.virtual ? undefined : byId.get(slot.id);
+          return node ? [node] : [];
+        });
+        const columnSize = Math.max(0, ...real.map(along));
+        for (const node of real)
+          place(node, main + columnSize / 2, (centres.get(node.id) ?? 0) - low);
+        main += columnSize + gapAlong;
+      }
+    }
+    for (const [, column] of style === 'flow' ? [] : ordered) {
       column.sort((a, b) => a.id.localeCompare(b.id));
       // Wrap wide independent sets into rows instead of a very tall column.
       const slots = Math.max(1, Math.ceil(Math.sqrt(column.length)));
@@ -140,8 +190,9 @@ export function layoutDocument(
 export function layoutEdit(
   doc: DiagramDocument,
   direction: LayoutDirection = 'right',
+  style: LayoutStyle = 'packed',
 ): Edit {
-  const laid = layoutDocument(doc, direction);
+  const laid = layoutDocument(doc, direction, style);
   return {
     type: 'graph',
     label: 'Automatic layout',

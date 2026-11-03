@@ -4,7 +4,7 @@ import type {
   DiagramEdge,
   DiagramNode,
 } from '../domain/document';
-import { MAX_TEXT } from '../domain/document';
+import { MAX_TEXT, worldPosition } from '../domain/document';
 import { type LayoutDirection, layoutDocument } from '../domain/layout';
 import type { ImportResult } from './types';
 
@@ -398,6 +398,16 @@ export function importMermaid(source: string, name = 'Mermaid'): ImportResult {
     } catch {}
   }
   if (!nodes.size) throw Error('The flowchart has no nodes to import');
+  // Long labels get a wider tile and wrap, rather than shrinking to fit.
+  for (const node of nodes.values()) {
+    if (node.kind !== 'service') continue;
+    const longest = Math.max(...node.label.split('\n').map((l) => l.length));
+    if (longest > 14) {
+      node.width = Math.min(260, 160 + (longest - 14) * 6);
+      node.wrap = true;
+    }
+    if (node.shape === 'decision') node.depth = 120;
+  }
 
   const document: DiagramDocument = {
     version: 1,
@@ -405,8 +415,26 @@ export function importMermaid(source: string, name = 'Mermaid'): ImportResult {
     nodes: [...nodes.values()],
     edges,
   };
+  const laid = layoutDocument(document, direction, 'flow');
+  // Forward links leave from the side facing the flow and enter from the
+  // opposite side, as flowcharts read; links that loop back route freely.
+  const index = new Map(laid.nodes.map((n) => [n.id, n]));
+  for (const edge of laid.edges) {
+    const source = index.get(edge.source);
+    const target = index.get(edge.target);
+    if (!source || !target) continue;
+    const a = worldPosition(source, index);
+    const b = worldPosition(target, index);
+    const forward =
+      direction === 'down'
+        ? b.z - target.depth / 2 > a.z + source.depth / 2
+        : b.x - target.width / 2 > a.x + source.width / 2;
+    if (!forward) continue;
+    edge.sourcePort = direction === 'down' ? 'south' : 'east';
+    edge.targetPort = direction === 'down' ? 'north' : 'west';
+  }
   return {
-    document: layoutDocument(document, direction),
+    document: laid,
     warnings,
     format: 'Mermaid flowchart',
   };
