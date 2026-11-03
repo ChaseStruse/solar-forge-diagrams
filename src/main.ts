@@ -1,15 +1,9 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { layoutEdit } from './domain/layout';
-import { RecoveryWriter } from './persistence/recovery';
-import type { OpenedFile } from './platform/files';
-import { exportText } from './platform/files';
-import { choose, commandPalette, promptText } from './ui/dialogs';
-import { infrastructureImporter } from './ui/importer';
+import { commandPalette } from './ui/dialogs';
 import './style.css';
 import './theme-effects.css';
+import { loadAppearance } from './app/appearance';
 import type { App } from './app/context';
+import { installFileCommands } from './app/file-commands';
 import { installJourneyControls } from './app/journey-controls';
 import { installRecording } from './app/recording';
 import { createAppState } from './app/state';
@@ -42,88 +36,31 @@ import {
   ungroupNodes,
 } from './editor/operations';
 import { recognizeSketch } from './editor/sketch';
-import { boardFonts, findBoardFont, loadBoardFont } from './fonts';
-import {
-  copyPng,
-  exportPng,
-  nativeAvailable,
-  openDocumentFile,
-  readRecovery,
-  saveDocumentFile,
-  saveSvg,
-  writeRecovery,
-} from './platform/files';
+import { nativeAvailable } from './platform/files';
 import { DiagramScene, type EditTarget, type Tool } from './renderer/scene';
-import { applyThemeCss, findTheme, type ScenePalette, themes } from './themes';
-import {
-  element,
-  field,
-  fillOptions,
-  inputElement,
-  isTextTarget,
-} from './ui/dom';
+import { themes } from './themes';
+import { element, inputElement, isTextTarget } from './ui/dom';
 import { installInspector } from './ui/inspector';
 import { installLayersPanel } from './ui/layers-panel';
 import { appShell } from './ui/shell';
 import { dismissSplash, removeSplash } from './ui/splash';
-import { renderAmbient } from './ui/theme-fx';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('Application root is missing');
 root.innerHTML = appShell();
 const state = createAppState(starterDocument());
-const recovery = new RecoveryWriter(
-  () => (state.history.isDirty ? serializeDocument(state.project) : null),
-  writeRecovery,
-  (error) => notify(`Recovery failed: ${String(error)}. Save your diagram.`),
-);
 const notify = (message: string): void => {
   element('status').textContent = message;
 };
-let theme = findTheme(
-  (() => {
-    try {
-      return localStorage.getItem('solar-forge-theme');
-    } catch {
-      return null;
-    }
-  })(),
-);
-/** Ambient theme effects: on by default unless the system asks for less motion. */
-let themeEffects = (() => {
-  try {
-    const saved = localStorage.getItem('solar-forge-theme-fx');
-    if (saved) return saved === 'on';
-  } catch {}
-  return !matchMedia('(prefers-reduced-motion: reduce)').matches;
-})();
-let boardFont = findBoardFont(
-  (() => {
-    try {
-      return localStorage.getItem('solar-forge-font');
-    } catch {
-      return null;
-    }
-  })(),
-);
-/** The theme's board colours with the chosen board font. */
-function scenePalette(): ScenePalette {
-  return boardFont.family
-    ? { ...theme.scene, labelFont: boardFont.family }
-    : theme.scene;
-}
-function applyThemeChrome(): void {
-  applyThemeCss(theme);
-  document.documentElement.dataset.fx = themeEffects ? 'on' : 'off';
-  if (theme.markSvg) element('forge-mark').innerHTML = theme.markSvg;
-  else element('forge-mark').textContent = theme.mark;
-  renderAmbient(element('theme-fx'), themeEffects ? theme.ambient : undefined);
-}
-applyThemeChrome();
+const appearance = loadAppearance(notify);
 let scene: DiagramScene;
 const cameraKeys = new CameraKeys((dx, dy) => scene.panByPixels(dx, dy));
 try {
-  scene = new DiagramScene(element('canvas'), state.current, theme.scene);
+  scene = new DiagramScene(
+    element('canvas'),
+    state.current,
+    appearance.initialPalette,
+  );
 } catch (error) {
   removeSplash();
   notify(
@@ -150,9 +87,11 @@ const app: App = {
   closeEditor: (save) => closeEditor?.(save),
   navigateDiagram,
   replaceDocument,
-  canReplace,
+  canReplace: () => files.canReplace(),
   toggleJourney,
 };
+const { setTheme } = appearance.install(scene);
+const files = installFileCommands(app, appearance.boardFontFamily);
 const layers = installLayersPanel(app);
 function showLayers(show: boolean): void {
   layers.showLayers(show);
@@ -175,174 +114,13 @@ function showComponents(show: boolean): void {
     inputElement('search').focus();
   }
 }
-function setTheme(id: string): void {
-  theme = findTheme(id);
-  applyThemeChrome();
-  scene.setPalette(scenePalette());
-  for (const button of element('theme-list').querySelectorAll('button'))
-    button.setAttribute(
-      'aria-pressed',
-      String(button.dataset.theme === theme.id),
-    );
-  try {
-    localStorage.setItem('solar-forge-theme', theme.id);
-  } catch {}
-  notify(`${theme.name} · ${theme.tagline}`);
-}
-for (const [index, option] of themes.entries()) {
-  if (option.group !== themes[index - 1]?.group) {
-    const caption = document.createElement('p');
-    caption.className = 'popover-caption';
-    caption.textContent = option.group.toUpperCase();
-    element('theme-list').append(caption);
-  }
-  const button = document.createElement('button');
-  button.dataset.theme = option.id;
-  button.setAttribute('aria-pressed', String(option.id === theme.id));
-  const swatch = document.createElement('span');
-  swatch.className = 'theme-swatch';
-  swatch.style.background = `linear-gradient(135deg, ${option.css.bg} 0 45%, ${option.css.accent} 45% 72%, ${option.css.hot} 72%)`;
-  swatch.style.color = option.css.text ?? '';
-  if (option.markSvg) swatch.innerHTML = option.markSvg;
-  else swatch.textContent = option.mark;
-  const text = document.createElement('span');
-  text.className = 'theme-text';
-  const name = document.createElement('strong');
-  name.textContent = option.name;
-  const tagline = document.createElement('small');
-  tagline.textContent = option.tagline;
-  text.append(name, tagline);
-  button.append(swatch, text);
-  button.onclick = () => {
-    setTheme(option.id);
-    element('theme-menu').hidden = true;
-    element('theme').setAttribute('aria-expanded', 'false');
-  };
-  element('theme-list').append(button);
-}
-/** Switch board text to a font, drawing only once its face has loaded. */
-async function setBoardFont(id: string, announce = true): Promise<void> {
-  const font = findBoardFont(id);
-  boardFont = font;
-  field('board-font').value = font.id;
-  try {
-    await loadBoardFont(font);
-  } catch {
-    notify(`${font.name} font unavailable; using a fallback.`);
-  }
-  if (boardFont !== font) return;
-  scene.setPalette(scenePalette());
-  try {
-    localStorage.setItem('solar-forge-font', font.id);
-  } catch {}
-  if (announce) notify(`Board font · ${font.name}`);
-}
-fillOptions(
-  'board-font',
-  boardFonts.map((font) => [font.id, font.name] as [string, string]),
-  boardFont.id,
-);
-field('board-font').onchange = () =>
-  void setBoardFont(field('board-font').value);
-if (boardFont.family) void setBoardFont(boardFont.id, false);
 element('features').onclick = () =>
   void import('./ui/tour')
     .then(({ startTour }) => startTour())
     .catch((error) => notify(`Tour unavailable: ${String(error)}`));
-inputElement('theme-fx-toggle').checked = themeEffects;
-inputElement('theme-fx-toggle').onchange = () => {
-  themeEffects = inputElement('theme-fx-toggle').checked;
-  applyThemeChrome();
-  try {
-    localStorage.setItem('solar-forge-theme-fx', themeEffects ? 'on' : 'off');
-  } catch {}
-  notify(`Ambient effects ${themeEffects ? 'on' : 'off'}`);
-};
-element('theme').onclick = () => {
-  const menu = element('theme-menu');
-  menu.hidden = !menu.hidden;
-  element('theme').setAttribute('aria-expanded', String(!menu.hidden));
-};
-async function refreshRecents(): Promise<void> {
-  if (!nativeAvailable()) return;
-  try {
-    const files =
-      await invoke<{ name: string; path: string }[]>('recent_documents');
-    const list = element('recent-files');
-    list.replaceChildren();
-    if (!files.length) {
-      const empty = document.createElement('p');
-      empty.className = 'muted';
-      empty.textContent = 'No recent diagrams yet';
-      list.append(empty);
-    }
-    for (const file of files) {
-      const button = document.createElement('button');
-      button.textContent = file.name;
-      button.title = file.path;
-      button.onclick = () =>
-        void action(async () => {
-          if (!(await canReplace())) return;
-          const opened = await invoke<OpenedFile>('open_recent', {
-            path: file.path,
-          });
-          replaceDocument(parseDocument(opened.content));
-          state.fileHandle = opened.handle;
-          element('file-menu').hidden = true;
-          notify(`Opened ${opened.name}`);
-          await refreshRecents();
-        });
-      list.append(button);
-    }
-  } catch (error) {
-    notify(`Recent files unavailable: ${String(error)}`);
-  }
-}
-element('title').onclick = () =>
-  void action(async () => {
-    const title = await promptText('Diagram name', state.current.title);
-    if (title) commit({ type: 'graph', label: 'Rename diagram', title });
-  });
-for (const id of ['examples', 'browse-examples']) {
-  element(id).onclick = () =>
-    void action(async () => {
-      element('file-menu').hidden = true;
-      element('menu').setAttribute('aria-expanded', 'false');
-      const { chooseExample } = await import('./ui/examples');
-      const template = await chooseExample();
-      if (!template || !(await canReplace())) return;
-      replaceDocument(template.create());
-      notify(`Loaded ${template.name}`);
-    });
-}
-element('export-svg').onclick = () =>
-  void action(async () => {
-    const { exportSvg } = await import('./export/svg');
-    if (await saveSvg(await exportSvg(state.current, boardFont.family)))
-      notify('SVG exported');
-  });
-for (const [id, format] of [
-  ['export-mermaid', 'mmd'],
-  ['export-plantuml', 'puml'],
-  ['export-drawio', 'drawio'],
-] as const) {
-  element(id).onclick = () =>
-    void action(async () => {
-      const { exportInterchange } = await import('./export/interchange');
-      const content = exportInterchange(
-        format === 'drawio' ? state.project : state.current,
-        format,
-      );
-      if (await exportText(content, format))
-        notify(
-          `Exported ${format === 'drawio' ? 'draw.io project' : 'diagram source'}`,
-        );
-      element('file-menu').hidden = true;
-    });
-}
 function updateHeader(): void {
   state.dirty = state.history.isDirty;
-  if (state.recoveryReady) recovery.schedule();
+  files.scheduleRecovery();
   element('save-state').textContent = state.dirty
     ? 'Unsaved changes'
     : 'Unchanged';
@@ -429,128 +207,6 @@ async function action(task: () => Promise<void>): Promise<void> {
     state.busy = false;
   }
 }
-async function saveCurrent(saveAs = false): Promise<boolean> {
-  scene.finishInteraction();
-  const savedHistory = state.history;
-  const token = state.history.token;
-  const saved = await saveDocumentFile(
-    serializeDocument(state.project),
-    saveAs ? undefined : state.fileHandle,
-    state.project.title,
-  );
-  if (!saved) return false;
-  if (state.history === savedHistory) state.fileHandle = saved.handle;
-  savedHistory.markSaved(token);
-  updateHeader();
-  await recovery.flush();
-  notify(`Saved ${saved.name}`);
-  void refreshRecents();
-  return !state.history.isDirty;
-}
-async function canReplace(): Promise<boolean> {
-  scene.finishInteraction();
-  if (!state.history.isDirty) return true;
-  const decision = await choose(
-    'Save your changes?',
-    'This diagram has unsaved changes.',
-    ['Cancel', 'Discard changes', 'Save'],
-  );
-  if (decision === 'Save') return saveCurrent();
-  return decision === 'Discard changes';
-}
-const importer = infrastructureImporter({
-  notify,
-  apply: async (doc) => {
-    const nodeChanges = new Map(
-      state.current.nodes.map((node) => [
-        node.id,
-        { id: node.id, value: null as DiagramNode | null },
-      ]),
-    );
-    for (const value of doc.nodes)
-      nodeChanges.set(value.id, { id: value.id, value });
-    const edgeChanges = new Map(
-      state.current.edges.map((edge) => [
-        edge.id,
-        { id: edge.id, value: null as DiagramEdge | null },
-      ]),
-    );
-    for (const value of doc.edges)
-      edgeChanges.set(value.id, { id: value.id, value });
-    commit(
-      {
-        type: 'graph',
-        label: 'Import infrastructure',
-        title: doc.title,
-        nodes: [...nodeChanges.values()],
-        edges: [...edgeChanges.values()],
-      },
-      [],
-    );
-    scene.fit();
-    return true;
-  },
-});
-element('import-infrastructure').onclick = () => {
-  element('file-menu').hidden = true;
-  importer.open();
-};
-element('auto-layout').onclick = () => {
-  commit(layoutEdit(state.current));
-  scene.fit();
-  element('file-menu').hidden = true;
-};
-element('new').onclick = () =>
-  void action(async () => {
-    if (!(await canReplace())) return;
-    replaceDocument({
-      version: 1,
-      title: 'Untitled diagram',
-      nodes: [],
-      edges: [],
-    });
-    element('file-menu').hidden = true;
-  });
-element('open').onclick = () => {
-  element('file-menu').hidden = true;
-  void action(async () => {
-    if (!(await canReplace())) return;
-    const opened = await openDocumentFile();
-    if (opened !== null) {
-      replaceDocument(parseDocument(opened.content));
-      state.fileHandle = opened.handle;
-      notify(`Opened ${opened.name}`);
-      void refreshRecents();
-    }
-  });
-};
-for (const id of ['save', 'save-as'])
-  element(id).onclick = () => {
-    element('file-menu').hidden = true;
-    void action(async () => {
-      await saveCurrent(id === 'save-as');
-    });
-  };
-element('export').onclick = () => {
-  element('file-menu').hidden = true;
-  void action(async () => {
-    if (await exportPng(await scene.png())) notify('PNG exported');
-  });
-};
-element('quick-save').onclick = () => element('save').click();
-async function copyImage(): Promise<void> {
-  try {
-    notify('Capturing diagram…');
-    await copyPng(await scene.captureDiagram());
-    notify('Diagram image copied · paste it anywhere');
-  } catch (error) {
-    notify(
-      `Could not copy image: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-element('copy-image').onclick = () => void copyImage();
-element('quick-export').onclick = () => element('export').click();
 element('menu').onclick = () => {
   const menu = element('file-menu');
   menu.hidden = !menu.hidden;
@@ -1146,33 +802,6 @@ const journey = installJourneyControls(app);
 function toggleJourney(): void {
   journey.toggleJourney();
 }
-field('quality').onchange = () => {
-  const ratio = Number(field('quality').value);
-  scene.setQuality(ratio);
-  try {
-    localStorage.setItem('solar-forge-quality', String(ratio));
-  } catch {
-    notify('Quality changed for this session.');
-  }
-};
-try {
-  const quality = localStorage.getItem('solar-forge-quality');
-  if (quality && ['1', '1.5', '2'].includes(quality)) {
-    field('quality').value = quality;
-    scene.setQuality(Number(quality));
-  }
-} catch {}
-function setFlow(on: boolean): void {
-  scene.setFlow(on);
-  element('flow').setAttribute('aria-pressed', String(on));
-  try {
-    localStorage.setItem('solar-forge-flow', on ? '1' : '0');
-  } catch {}
-}
-try {
-  if (localStorage.getItem('solar-forge-flow') === '0') setFlow(false);
-} catch {}
-element('flow').onclick = () => setFlow(!scene.flow);
 function renderDiagramPath(): void {
   const nav = element('diagram-path');
   nav.replaceChildren();
@@ -1392,7 +1021,7 @@ window.addEventListener('keydown', (event) => {
       { label: 'Play journey (P)', run: toggleJourney },
       {
         label: 'Copy diagram image (Ctrl+Shift+C)',
-        run: () => void copyImage(),
+        run: () => void files.copyImage(),
       },
       ...alignments.map(([alignment, label]) => ({
         label,
@@ -1430,7 +1059,7 @@ window.addEventListener('keydown', (event) => {
     !isTextTarget(event.target)
   ) {
     event.preventDefault();
-    void copyImage();
+    void files.copyImage();
     return;
   }
   if (
@@ -1560,79 +1189,6 @@ notify(
     ? 'Offline · Ready'
     : 'Browser workspace · Saving downloads a copy',
 );
-void (async () => {
-  const native = nativeAvailable();
-  if (native) {
-    if (await invoke<boolean>('diagnostic_mode')) {
-      const { runNativeDiagnostics } = await import('./renderer/diagnostics');
-      await runNativeDiagnostics(scene);
-      return;
-    }
-    let closing = false;
-    await getCurrentWindow().onCloseRequested((event) => {
-      event.preventDefault();
-      if (closing || state.busy) return;
-      closing = true;
-      void (async () => {
-        if (!(await canReplace())) return;
-        // A deliberate discard also removes the recovery snapshot.
-        if (state.recoveryReady) {
-          await recovery.flush();
-          await writeRecovery(null);
-        }
-        recovery.dispose();
-        await getCurrentWindow().destroy();
-      })()
-        .catch((error) => notify(`Could not close: ${String(error)}`))
-        .finally(() => {
-          closing = false;
-        });
-    });
-  }
-  const content = await readRecovery();
-  if (content) {
-    const decision = await choose(
-      'Recover your diagram?',
-      'An unsaved diagram was found from a previous session.',
-      native
-        ? ['Close app', 'Discard recovery', 'Recover']
-        : ['Discard recovery', 'Recover'],
-    );
-    if (decision === 'Recover') {
-      replaceDocument(parseDocument(content));
-      state.history.markSaved(-1);
-      updateHeader();
-      notify('Recovered diagram. Save to choose a destination.');
-    } else if (decision === 'Discard recovery') await writeRecovery(null);
-    else if (native) {
-      await getCurrentWindow().destroy();
-      return;
-    }
-  }
-  state.recoveryReady = true;
-  window.addEventListener('blur', () => {
-    if (state.history.isDirty) {
-      recovery.schedule();
-      void recovery.flush().catch(() => {});
-    }
-  });
-  if (!native) return;
-  await refreshRecents();
-  const openPending = async () => {
-    if (state.busy) return;
-    const opened = await invoke<OpenedFile | null>('take_pending_file');
-    if (!opened) return;
-    await action(async () => {
-      if (!(await canReplace())) return;
-      replaceDocument(parseDocument(opened.content));
-      state.fileHandle = opened.handle;
-      notify(`Opened ${opened.name}`);
-      await refreshRecents();
-    });
-  };
-  await listen(
-    'pending-file',
-    () => void openPending().catch((error) => notify(String(error))),
-  );
-  await openPending();
-})().catch((error) => notify(`Startup check failed: ${String(error)}`));
+void files
+  .start()
+  .catch((error) => notify(`Startup check failed: ${String(error)}`));
