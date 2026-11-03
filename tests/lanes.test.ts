@@ -169,3 +169,22 @@ test('owners and lanes survive saving; bad values are refused', () => {
   const blank = { ...doc, edges: [], nodes: [{ ...step('x'), owner: '   ' }] };
   expect(parseDocument(JSON.stringify(blank)).nodes[0]?.owner).toBeUndefined();
 });
+
+test('text and sticky notes stay put and are not given a lane', () => {
+  const doc = board();
+  doc.nodes.push({
+    ...step('memo'),
+    kind: 'note',
+    serviceId: 'note.sticky',
+    x: 5000,
+    z: 5000,
+  });
+  apply(doc);
+  expect(at(doc, 'memo')).toMatchObject({ x: 5000, z: 5000 });
+  expect(laneBands(doc)?.bands.map((b) => b.owner)).toEqual([
+    'Customer',
+    'Storefront',
+    'Payments',
+    '',
+  ]);
+});

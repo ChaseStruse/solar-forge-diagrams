@@ -5,17 +5,21 @@ import {
   detailDiagramsTour,
   journeyForksTour,
   networkFlowTour,
+  swimlanesTour,
 } from '../src/catalog/feature-examples';
+import { parseDocument, serializeDocument } from '../src/domain/document';
 import { journeyBranches, journeyStarts } from '../src/domain/journey';
+import { laneAt, laneBands } from '../src/domain/lanes';
 import { evaluateTraffic } from '../src/domain/network';
 
 test('feature tours are listed together and each has a walkthrough note', () => {
-  expect(findExamples('', 'Feature tours').length).toBe(4);
+  expect(findExamples('', 'Feature tours').length).toBe(5);
   for (const create of [
     buildingBlocksTour,
     detailDiagramsTour,
     journeyForksTour,
     networkFlowTour,
+    swimlanesTour,
   ]) {
     const note = create().nodes.find((n) => n.kind === 'note');
     expect(note?.label).toStartWith('1. ');
@@ -61,4 +65,46 @@ test('journey tour shows ask, every-branch and active-route forks', () => {
     mode: 'fixed',
     edges: ['visit-stream'],
   });
+});
+
+test('swimlane tour opens in lanes with every step owned and in its lane', () => {
+  const doc = swimlanesTour();
+  expect(doc.lanes).toEqual({
+    direction: 'right',
+    order: ['Customer', 'Storefront', 'Payment service', 'Warehouse'],
+  });
+  const bands = laneBands(doc);
+  if (!bands) throw Error('No lanes');
+  const stepsOnly = doc.nodes.filter((n) => n.kind === 'service');
+  expect(stepsOnly).toHaveLength(12);
+  for (const n of stepsOnly) {
+    expect(n.owner).toBeTruthy();
+    expect(laneAt(bands, n)).toBe(n.owner ?? '');
+    expect(n.journeyCaption).toBeTruthy();
+  }
+  // Heading above the lanes, walkthrough below: neither inside a band.
+  for (const id of ['title', 'guide']) {
+    const n = doc.nodes.find((m) => m.id === id);
+    expect(n && laneAt(bands, n)).toBeUndefined();
+  }
+  expect(journeyStarts(doc)).toEqual(['cart']);
+  // The journey crosses teams: at least five handoffs on the happy path.
+  const owner = new Map(doc.nodes.map((n) => [n.id, n.owner]));
+  const happy = [
+    'cart',
+    'review',
+    'signed',
+    'address',
+    'charge',
+    'approved',
+    'order',
+    'pick',
+    'ship',
+    'arrives',
+  ];
+  const handoffs = happy
+    .slice(1)
+    .filter((id, i) => owner.get(id) !== owner.get(happy[i] ?? ''));
+  expect(handoffs.length).toBeGreaterThanOrEqual(5);
+  expect(parseDocument(serializeDocument(doc))).toEqual(doc);
 });

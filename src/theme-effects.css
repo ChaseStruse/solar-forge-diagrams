@@ -378,27 +378,33 @@
   filter: grayscale(1) sepia(1) hue-rotate(70deg) saturate(5) brightness(0.95);
 }
 
-/* ---------- Solar Ram Studios: molten gold and sunfire ---------- */
+/* ---------- Solar Ram Studios: emerald eclipse on obsidian ---------- */
+/* Brand: charcoal and black dominate, emerald guides, silver-white highlights. */
 :root[data-theme="solar-ram"] .brand {
-  font-weight: 800;
-  letter-spacing: 1px;
+  font-family: "Noto Serif", Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
   background: linear-gradient(
     100deg,
-    #fff3c4 0%,
-    var(--accent) 35%,
-    var(--hot) 65%,
-    #fff3c4 100%
+    #f2f5f4 0%,
+    #f2f5f4 30%,
+    var(--accent) 50%,
+    #f2f5f4 70%,
+    #f2f5f4 100%
   );
   background-size: 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--hot) 60%, transparent));
+  filter: drop-shadow(
+    0 0 8px color-mix(in srgb, var(--accent) 45%, transparent)
+  );
 }
 :root[data-theme="solar-ram"]:not([data-fx="off"]) .brand {
-  animation: sr-molten 5s ease-in-out infinite alternate;
+  animation: sr-sheen 6s ease-in-out infinite alternate;
 }
-@keyframes sr-molten {
+@keyframes sr-sheen {
   to {
     background-position: 100% 0;
   }
@@ -419,28 +425,40 @@
   height: 28px;
 }
 :root[data-theme="solar-ram"]:not([data-fx="off"]) .forge-mark {
-  animation: sr-pulse 2.4s ease-in-out infinite;
+  animation: sr-pulse 3s ease-in-out infinite;
 }
 @keyframes sr-pulse {
   50% {
-    transform: scale(1.12) rotate(-6deg);
-    filter: drop-shadow(0 0 10px var(--hot)) drop-shadow(0 0 26px var(--accent));
+    transform: scale(1.1) rotate(-5deg);
+    filter: drop-shadow(0 0 10px var(--accent)) drop-shadow(0 0 24px var(--hot));
   }
 }
 :root[data-theme="solar-ram"]
   :is(.floating-dock, .tool-rail, .layers-panel, .popover) {
-  border-image: linear-gradient(160deg, var(--accent), var(--hot) 50%, #5a2208)
+  border-image: linear-gradient(160deg, var(--accent), var(--hot) 50%, #05542d)
     1;
   border-radius: 0;
   box-shadow:
     0 0 30px color-mix(in srgb, var(--hot) 22%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--accent) 35%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 30%, transparent);
 }
 :root[data-theme="solar-ram"] .export-button {
-  background: linear-gradient(135deg, #ffd36b, var(--accent) 45%, var(--hot));
+  background: linear-gradient(135deg, #f2f5f4, var(--accent) 50%, var(--hot));
+  color: var(--on-accent);
   border: 0;
-  box-shadow: 0 0 18px color-mix(in srgb, var(--hot) 55%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 45%, transparent);
   font-weight: 800;
+}
+/* Rising emerald energy instead of orange embers. */
+:root[data-theme="solar-ram"] .fx-ember {
+  background: radial-gradient(
+    circle,
+    #f2f5f4 0,
+    var(--accent) 40%,
+    var(--hot) 75%,
+    transparent 100%
+  );
+  box-shadow: 0 0 10px var(--accent);
 }
 :root[data-theme="solar-ram"] .forge-wordmark::after {
   content: " × SOLAR RAM";

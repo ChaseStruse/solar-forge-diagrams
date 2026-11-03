@@ -22,9 +22,14 @@ const grid = (n: number) => Math.round(n / 10) * 10;
 export const laneKey = (node: DiagramNode) => node.owner ?? '';
 export const laneName = (owner: string) => owner || 'Unassigned';
 
-/** Top-level nodes: lanes arrange these; nested nodes move with their group. */
+/**
+ * Top-level steps and boundaries: lanes arrange these. Nested nodes move
+ * with their boundary; text and sticky notes stay where they are.
+ */
 const participants = (doc: DiagramDocument) =>
-  doc.nodes.filter((n) => n.parentId === undefined);
+  doc.nodes.filter(
+    (n) => n.parentId === undefined && n.kind !== 'text' && n.kind !== 'note',
+  );
 
 /**
  * Lane order: the board's previous order for owners still in use, then new
