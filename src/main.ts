@@ -1,46 +1,24 @@
-import { commandPalette } from './ui/dialogs';
 import './style.css';
 import './theme-effects.css';
 import { loadAppearance } from './app/appearance';
+import { installBoardEdits } from './app/board-edits';
 import type { App } from './app/context';
 import { installFileCommands } from './app/file-commands';
 import { installJourneyControls } from './app/journey-controls';
 import { installRecording } from './app/recording';
+import { installShortcuts } from './app/shortcuts';
 import { createAppState } from './app/state';
 import { installTabletControls } from './app/tablet-controls';
-import { services } from './catalog/services';
-import type {
-  DiagramDocument,
-  DiagramEdge,
-  DiagramNode,
-  Port,
-} from './domain/document';
-import {
-  MAX_TEXT,
-  parseDocument,
-  serializeDocument,
-  starterDocument,
-} from './domain/document';
+import type { DiagramDocument, DiagramNode } from './domain/document';
+import { parseDocument, starterDocument } from './domain/document';
 import type { Edit } from './domain/history';
 import { DocumentHistory } from './domain/history';
-import { fontSize, resizedFont } from './domain/text';
-import { CameraKeys, isPanKey } from './editor/camera-keys';
-import {
-  type Alignment,
-  alignNodes,
-  copyFragment,
-  defaultSize,
-  deleteNodes,
-  groupNodes,
-  pasteFragment,
-  ungroupNodes,
-} from './editor/operations';
-import { recognizeSketch } from './editor/sketch';
+import { deleteNodes } from './editor/operations';
 import { nativeAvailable } from './platform/files';
 import { DiagramScene, type EditTarget, type Tool } from './renderer/scene';
-import { themes } from './themes';
 import { installComponentPalette } from './ui/component-palette';
-import { element, inputElement, isTextTarget } from './ui/dom';
+import { element } from './ui/dom';
+import { installInlineEditor } from './ui/inline-editor';
 import { installInspector } from './ui/inspector';
 import { installLayersPanel } from './ui/layers-panel';
 import { appShell } from './ui/shell';
@@ -55,7 +33,6 @@ const notify = (message: string): void => {
 };
 const appearance = loadAppearance(notify);
 let scene: DiagramScene;
-const cameraKeys = new CameraKeys((dx, dy) => scene.panByPixels(dx, dy));
 try {
   scene = new DiagramScene(
     element('canvas'),
@@ -85,7 +62,7 @@ const app: App = {
   travelHistory,
   deleteSelection,
   openEditor,
-  closeEditor: (save) => closeEditor?.(save),
+  closeEditor: (save) => editor.close(save),
   navigateDiagram,
   replaceDocument,
   canReplace: () => files.canReplace(),
@@ -314,188 +291,6 @@ function travelHistory(redo: boolean): void {
 element('undo').onclick = () => travelHistory(false);
 element('redo').onclick = () => travelHistory(true);
 
-/** Drop a text or note at a board point and start typing into it. */
-function placeAnnotation(kind: 'text' | 'note', x: number, z: number): void {
-  const service = services.find((s) => s.kind === kind);
-  if (!service) return;
-  const id = crypto.randomUUID();
-  const [width, depth] = defaultSize(kind);
-  const snap = (value: number) =>
-    scene.snapping ? Math.round(value / 10) * 10 : value;
-  state.history.execute({
-    type: 'insert',
-    node: {
-      id,
-      kind,
-      serviceId: service.id,
-      label: '',
-      x: snap(x + width / 2 - 20),
-      z: snap(z),
-      width,
-      depth,
-      color: service.color,
-    },
-  });
-  deferInspect(() => scene.load(state.current));
-  scene.select(id);
-  updateHeader();
-  selectTool('select');
-  openEditor({ kind: 'node', id }, true);
-}
-scene.onPlace = placeAnnotation;
-scene.onEditRequest = (target) => {
-  const node =
-    target.kind === 'node'
-      ? state.current.nodes.find((n) => n.id === target.id)
-      : undefined;
-  const detail = state.project.details?.find(
-    (entry) => entry.id === node?.detailId,
-  );
-  if (detail) navigateDiagram(detail.document);
-  else openEditor(target);
-};
-
-let closeEditor: ((save: boolean) => void) | undefined;
-/**
- * Edit text in place over the canvas. Annotations get a multi-line editor
- * matching their box; services, boundaries and connections a one-line field.
- */
-function openEditor(target: EditTarget, created = false): void {
-  closeEditor?.(true);
-  if (target.kind === 'empty') {
-    placeAnnotation('text', target.x, target.z);
-    return;
-  }
-  const node =
-    target.kind === 'node'
-      ? state.current.nodes.find((n) => n.id === target.id)
-      : undefined;
-  const edge =
-    target.kind === 'edge'
-      ? state.current.edges.find((e) => e.id === target.id)
-      : undefined;
-  if (!node && !edge) return;
-  const annotation = node?.kind === 'text' || node?.kind === 'note';
-  const editor = document.createElement(annotation ? 'textarea' : 'input');
-  editor.className = `inline-editor${node ? ` ${node.kind}` : ' edge'}`;
-  editor.value = node?.label ?? edge?.label ?? '';
-  editor.maxLength = annotation ? MAX_TEXT : 1000;
-  editor.setAttribute('aria-label', annotation ? 'Text' : 'Label');
-  editor.spellcheck = annotation;
-  if (node && annotation) {
-    const rect = scene.nodeScreenRect(node.id);
-    const scale = scene.nodePixelScale(node.id);
-    if (!rect) return;
-    Object.assign(editor.style, {
-      left: `${rect.left}px`,
-      top: `${rect.top}px`,
-      width: `${Math.max(rect.width, 160)}px`,
-      height: `${Math.max(rect.height, 48)}px`,
-      fontSize: `${Math.max(11, fontSize(node) * scale)}px`,
-      padding: `${(node.kind === 'note' ? 14 : 4) * scale}px`,
-      background: node.kind === 'note' ? node.color : '',
-    });
-  } else {
-    const anchor = node
-      ? (() => {
-          const rect = scene.nodeScreenRect(node.id);
-          return rect
-            ? {
-                x: rect.left + rect.width / 2,
-                y:
-                  node.kind === 'group'
-                    ? rect.top + 18
-                    : rect.top + rect.height + 22,
-              }
-            : undefined;
-        })()
-      : edge
-        ? scene.edgeScreenPosition(edge.id)
-        : undefined;
-    if (!anchor) return;
-    Object.assign(editor.style, {
-      left: `${anchor.x - 110}px`,
-      top: `${anchor.y - 18}px`,
-      width: '220px',
-    });
-  }
-  document.body.append(editor);
-  editor.focus();
-  editor.select();
-  let done = false;
-  const finish = (save: boolean) => {
-    if (done) return;
-    done = true;
-    closeEditor = undefined;
-    const value = editor.value;
-    editor.remove();
-    if (!save) {
-      // Cancelling a just-placed annotation removes it again.
-      if (created && annotation) travelHistory(false);
-      return;
-    }
-    if (node) {
-      const live = state.current.nodes.find((n) => n.id === node.id);
-      if (!live) return;
-      if (created && live.kind === 'text' && !value.trim()) {
-        travelHistory(false);
-        return;
-      }
-      if (value === live.label) return;
-      commit(
-        {
-          type: 'graph',
-          label: annotation ? 'Edit text' : 'Rename component',
-          nodes: [{ id: live.id, value: { ...live, label: value } }],
-        },
-        [live.id],
-      );
-    } else if (edge) {
-      const live = state.current.edges.find((e) => e.id === edge.id);
-      if (!live || value === live.label) return;
-      commit(
-        {
-          type: 'graph',
-          label: 'Label connection',
-          edges: [
-            { id: live.id, value: { ...live, label: value.slice(0, 1000) } },
-          ],
-        },
-        [],
-      );
-      scene.selectEdge(live.id);
-    }
-  };
-  closeEditor = finish;
-  editor.addEventListener('blur', () => finish(true));
-  editor.addEventListener('keydown', (event) => {
-    const keyboard = event as KeyboardEvent;
-    keyboard.stopPropagation();
-    if (keyboard.key === 'Escape') {
-      keyboard.preventDefault();
-      finish(!created);
-    } else if (
-      keyboard.key === 'Enter' &&
-      (!annotation || keyboard.ctrlKey || keyboard.metaKey)
-    ) {
-      keyboard.preventDefault();
-      finish(true);
-    }
-  });
-  notify(
-    annotation
-      ? 'Typing · Ctrl+Enter or click away to finish · Esc cancels'
-      : 'Enter to rename · Esc cancels',
-  );
-}
-function hasSelectedAncestor(node: DiagramNode): boolean {
-  let parent = node.parentId;
-  while (parent) {
-    if (state.selectedIds.has(parent)) return true;
-    parent = state.current.nodes.find((n) => n.id === parent)?.parentId;
-  }
-  return false;
-}
 function commit(
   edit: Edit,
   ids: readonly string[] = [...state.selectedIds],
@@ -513,126 +308,6 @@ function commit(
   inspect();
   notify(edit.type === 'graph' ? edit.label : `Updated ${edit.type}`);
 }
-scene.onResize = (changes) => {
-  const nodes = changes.flatMap(({ id, from, to }) => {
-    const node = state.current.nodes.find((n) => n.id === id);
-    if (!node) return [];
-    const value = {
-      ...node,
-      ...to,
-      ...(node.kind === 'text' || node.kind === 'note'
-        ? {
-            fontSize: resizedFont(
-              node,
-              { ...node, ...from },
-              { ...node, ...to },
-            ),
-          }
-        : {}),
-    };
-    Object.assign(node, from);
-    return [{ id, value }];
-  });
-  commit({ type: 'graph', label: 'Resize component', nodes });
-};
-scene.onMoves = (moves) => {
-  const nodes = moves.flatMap((move) => {
-    const node = state.current.nodes.find((n) => n.id === move.id);
-    if (!node) return [];
-    const value = { ...node, ...move.to };
-    Object.assign(node, move.from);
-    return [{ id: node.id, value }];
-  });
-  commit({ type: 'graph', label: 'Move selection', nodes });
-};
-scene.onConnect = (source, sourcePort, target, targetPort) => {
-  if (connect(source, sourcePort, target, targetPort)) selectTool('select');
-};
-function connect(
-  source: string,
-  sourcePort: Port | undefined,
-  target: string,
-  targetPort: Port | undefined,
-): boolean {
-  if (source === target) {
-    notify('Choose a different target component.');
-    return false;
-  }
-  const id = crypto.randomUUID();
-  const value: DiagramEdge = { id, source, target, label: '' };
-  if (sourcePort) value.sourcePort = sourcePort;
-  if (targetPort) value.targetPort = targetPort;
-  commit({
-    type: 'graph',
-    label: 'Connect components',
-    edges: [{ id, value }],
-  });
-  return true;
-}
-/** Turn a sketch-tool stroke into a flowchart shape or a connection. */
-scene.onSketch = (stroke) => {
-  const sketch = recognizeSketch(stroke.points);
-  if (sketch.kind === 'none') {
-    // A tap selects, as with the select tool; only real strokes get a hint.
-    if (stroke.points.length < 3) scene.select(stroke.from?.id);
-    else
-      notify(
-        'Could not recognise that. Draw a box, diamond or oval, or a line between two components.',
-      );
-    return;
-  }
-  if (sketch.kind === 'line') {
-    const { from, to } = stroke;
-    if (from && to && from.id !== to.id)
-      connect(from.id, from.port, to.id, to.port);
-    else
-      notify(
-        'Start and end a line on two different components to connect them.',
-      );
-    return;
-  }
-  const service = services.find((s) => s.id === `flow.${sketch.shape}`);
-  if (!service) return;
-  const snap = (value: number) =>
-    scene.snapping ? Math.round(value / 10) * 10 : Math.round(value);
-  const id = crypto.randomUUID();
-  state.history.execute({
-    type: 'insert',
-    node: {
-      id,
-      kind: service.kind,
-      serviceId: service.id,
-      shape: sketch.shape,
-      label: service.label,
-      x: snap(sketch.x),
-      z: snap(sketch.z),
-      width: Math.max(30, snap(sketch.width)),
-      depth: Math.max(30, snap(sketch.depth)),
-      color: service.color,
-    },
-  });
-  deferInspect(() => scene.load(state.current));
-  scene.select(id);
-  updateHeader();
-  notify(`${service.label} added. Double-click to rename it.`);
-};
-/** The pen's eraser end: delete what it passed over in one undoable step. */
-scene.onErase = (nodes, edges) => {
-  const edit = deleteNodes(state.current, new Set(nodes));
-  if (edit.type !== 'graph') return;
-  const removed = new Set(edit.edges?.map((e) => e.id));
-  const extra = edges
-    .filter((id) => !removed.has(id))
-    .map((id) => ({ id, value: null }));
-  commit(
-    {
-      ...edit,
-      label: 'Erase',
-      edges: [...(edit.edges ?? []), ...extra],
-    },
-    [],
-  );
-};
 const tablet = installTabletControls({
   scene,
   notify,
@@ -665,6 +340,13 @@ const tablet = installTabletControls({
     journey: toggleJourney,
   },
 });
+const edits = installBoardEdits(app, inspector.routeActions);
+const editor = installInlineEditor(app, (x, z) =>
+  edits.placeAnnotation('text', x, z),
+);
+function openEditor(target: EditTarget, created = false): void {
+  editor.open(target, created);
+}
 const journey = installJourneyControls(app);
 function toggleJourney(): void {
   journey.toggleJourney();
@@ -689,7 +371,7 @@ function renderDiagramPath(): void {
 function navigateDiagram(board: DiagramDocument, returning = false): void {
   if (board === state.current) return;
   scene.finishInteraction();
-  closeEditor?.(true);
+  editor.close(true);
   scene.stopJourney();
   if (!returning && board !== state.current)
     state.diagramTrail.push(state.current);
@@ -711,328 +393,14 @@ element('snap').onclick = () => {
   scene.snapping = !scene.snapping;
   element('snap').setAttribute('aria-pressed', String(scene.snapping));
 };
-element('tool-group').onclick = () => {
-  try {
-    const id = crypto.randomUUID();
-    commit(groupNodes(state.current, state.selectedIds, id), [id]);
-  } catch (error) {
-    notify(String(error));
-  }
-};
-element('ungroup').onclick = () =>
-  commit(ungroupNodes(state.current, state.selectedIds), []);
-element('duplicate').onclick = () => {
-  const edit = pasteFragment(
-    copyFragment(state.current, state.selectedIds),
-    () => crypto.randomUUID(),
-  );
-  commit(
-    edit,
-    edit.type === 'graph' ? (edit.nodes?.map((n) => n.id) ?? []) : [],
-  );
-};
-scene.onContextMenu = (x, y) => {
-  const menu = element('context-menu');
-  for (const row of menu.querySelectorAll<HTMLElement>('[data-multi]'))
-    row.hidden = !!state.selectedEdge || state.selectedIds.size < 2;
-  for (const button of menu.querySelectorAll<HTMLButtonElement>(
-    'button[data-action]',
-  )) {
-    const action = button.dataset.action;
-    const routes = inspector.routeActions();
-    button.hidden = state.selectedEdge
-      ? action === 'edge-active'
-        ? !routes.active
-        : action === 'edge-all-routes'
-          ? !routes.all
-          : action !== 'delete'
-      : action === 'edge-active' || action === 'edge-all-routes'
-        ? true
-        : action === 'delete' || action === 'duplicate'
-          ? !state.selectedIds.size
-          : false;
-  }
-  menu.hidden = false;
-  menu.style.left = `${Math.min(x, innerWidth - 190)}px`;
-  menu.style.top = `${Math.min(y, innerHeight - 250)}px`;
-};
-const alignments: readonly [Alignment, string][] = [
-  ['left', 'Align left edges'],
-  ['center', 'Align centres horizontally'],
-  ['right', 'Align right edges'],
-  ['top', 'Align top edges'],
-  ['middle', 'Align middles'],
-  ['bottom', 'Align bottom edges'],
-  ['distribute-x', 'Distribute horizontally'],
-  ['distribute-z', 'Distribute vertically'],
-];
-function align(alignment: Alignment): void {
-  if (state.selectedIds.size < 2) {
-    notify('Select two or more components to align.');
-    return;
-  }
-  commit(alignNodes(state.current, state.selectedIds, alignment));
-}
-for (const button of document.querySelectorAll<HTMLButtonElement>(
-  '#context-menu [data-align]',
-))
-  button.onclick = () => {
-    element('context-menu').hidden = true;
-    align(button.dataset.align as Alignment);
-  };
-for (const button of document.querySelectorAll<HTMLButtonElement>(
-  '#context-menu button[data-action]',
-))
-  button.onclick = () => {
-    element('context-menu').hidden = true;
-    element(button.dataset.action ?? 'fit').click();
-  };
-// The canvas claims pointerdown (no blur), so finish inline edits explicitly.
-window.addEventListener(
-  'pointerdown',
-  (event) => {
-    if (
-      closeEditor &&
-      !(
-        event.target instanceof Element &&
-        event.target.closest('.inline-editor')
-      )
-    )
-      closeEditor(true);
-  },
-  { capture: true },
-);
-window.addEventListener('pointerdown', (event) => {
-  if (
-    event.target instanceof Node &&
-    !element('context-menu').contains(event.target)
-  )
-    element('context-menu').hidden = true;
+installShortcuts(app, {
+  setTheme,
+  copyImage: files.copyImage,
+  populateComponents: palette.populate,
+  align: edits.align,
+  alignments: edits.alignments,
+  closeSettings: () => tablet.showSettings(false),
 });
-for (const type of ['copy', 'cut'] as const)
-  window.addEventListener(type, (event) => {
-    if (isTextTarget(event.target) || !state.selectedIds.size) return;
-    event.preventDefault();
-    event.clipboardData?.setData(
-      'text/plain',
-      serializeDocument(copyFragment(state.current, state.selectedIds)),
-    );
-    if (type === 'cut') deleteSelection();
-  });
-window.addEventListener('paste', (event) => {
-  if (isTextTarget(event.target)) return;
-  const text = event.clipboardData?.getData('text/plain');
-  if (!text) return;
-  try {
-    const doc = parseDocument(text);
-    const edit = pasteFragment(doc, () => crypto.randomUUID());
-    event.preventDefault();
-    commit(
-      edit,
-      edit.type === 'graph' ? (edit.nodes?.map((n) => n.id) ?? []) : [],
-    );
-  } catch {
-    notify('Clipboard does not contain a valid Solar Forge selection.');
-  }
-});
-window.addEventListener('keydown', (event) => {
-  if (isTextTarget(event.target)) return;
-  if (
-    (event.ctrlKey || event.metaKey) &&
-    ['a', 'g', 'd'].includes(event.key.toLowerCase())
-  ) {
-    event.preventDefault();
-    const key = event.key.toLowerCase();
-    if (key === 'a') scene.selectMany(state.current.nodes.map((n) => n.id));
-    else
-      element(
-        key === 'd' ? 'duplicate' : event.shiftKey ? 'ungroup' : 'tool-group',
-      ).click();
-  }
-});
-
-window.addEventListener('keydown', (event) => {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-    event.preventDefault();
-    commandPalette([
-      ...[
-        'new',
-        'browse-examples',
-        'open',
-        'save',
-        'save-as',
-        'export',
-        'export-svg',
-        'auto-layout',
-        'reachability',
-        'import-infrastructure',
-        'export-gif',
-        'export-video',
-        'export-mermaid',
-        'export-plantuml',
-        'export-drawio',
-        'fit',
-        'iso',
-        'top',
-        'tool-group',
-        'ungroup',
-        'duplicate',
-        'delete',
-      ].map((id) => ({
-        label:
-          element(id).getAttribute('title') ??
-          element(id).textContent?.trim() ??
-          id,
-        run: () => element(id).click(),
-      })),
-      { label: 'Play journey (P)', run: toggleJourney },
-      {
-        label: 'Copy diagram image (Ctrl+Shift+C)',
-        run: () => void files.copyImage(),
-      },
-      ...alignments.map(([alignment, label]) => ({
-        label,
-        run: () => align(alignment),
-      })),
-      ...themes.map((option) => ({
-        label: `Theme: ${option.name}`,
-        run: () => setTheme(option.id),
-      })),
-      ...services.map((service) => ({
-        label: `Add ${service.label} · ${service.category}`,
-        run: () => {
-          showComponents(true);
-          inputElement('search').value = service.label;
-          palette.populate(service.label);
-        },
-      })),
-    ]);
-    return;
-  }
-  if (
-    (event.ctrlKey || event.metaKey) &&
-    ['z', 'y'].includes(event.key.toLowerCase()) &&
-    !(event.target instanceof HTMLInputElement) &&
-    !(event.target instanceof HTMLTextAreaElement)
-  ) {
-    event.preventDefault();
-    travelHistory(event.shiftKey || event.key.toLowerCase() === 'y');
-    return;
-  }
-  if (
-    (event.ctrlKey || event.metaKey) &&
-    event.shiftKey &&
-    event.key.toLowerCase() === 'c' &&
-    !isTextTarget(event.target)
-  ) {
-    event.preventDefault();
-    void files.copyImage();
-    return;
-  }
-  if (
-    (event.ctrlKey || event.metaKey) &&
-    ['s', 'o', 'n'].includes(event.key.toLowerCase())
-  ) {
-    event.preventDefault();
-    element(
-      event.key.toLowerCase() === 's'
-        ? event.shiftKey
-          ? 'save-as'
-          : 'save'
-        : event.key.toLowerCase() === 'n'
-          ? 'new'
-          : 'open',
-    ).click();
-    return;
-  }
-  if (event.key === 'Escape') {
-    closeEditor?.(false);
-    if (scene.journeyPlaying) {
-      scene.stopJourney();
-      return;
-    }
-    scene.cancelInteraction();
-    element('context-menu').hidden = true;
-    selectTool('select');
-    showComponents(false);
-    element('file-menu').hidden = true;
-    element('help-panel').hidden = true;
-    element('traffic-panel').hidden = true;
-    element('gif-panel').hidden = true;
-    element('theme-menu').hidden = true;
-    tablet.showSettings(false);
-    element('menu').setAttribute('aria-expanded', 'false');
-    element('help').setAttribute('aria-expanded', 'false');
-    scene.select(undefined);
-    return;
-  }
-  if (
-    event.target instanceof HTMLInputElement ||
-    event.target instanceof HTMLTextAreaElement ||
-    event.target instanceof HTMLSelectElement ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.altKey
-  )
-    return;
-  const roots = state.current.nodes.filter(
-    (n) => state.selectedIds.has(n.id) && !hasSelectedAncestor(n),
-  );
-  const arrow = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(
-    event.key,
-  );
-  // Arrows nudge a selection; otherwise they and WASD glide the camera.
-  if (
-    isPanKey(event.key) &&
-    !(arrow && roots.length) &&
-    // A modal dialog owns the keyboard; the board behind it stays put.
-    !document.querySelector('dialog[open]')
-  ) {
-    event.preventDefault();
-    cameraKeys.press(event.key, event.shiftKey);
-    return;
-  }
-  if (arrow) {
-    event.preventDefault();
-    const step = event.shiftKey ? 50 : scene.snapping ? 10 : 1;
-    const dx =
-      event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
-    const dz =
-      event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
-    commit({
-      type: 'graph',
-      label: 'Nudge selection',
-      nodes: roots.map((n) => ({
-        id: n.id,
-        value: { ...n, x: n.x + dx, z: n.z + dz },
-      })),
-    });
-  }
-  if (event.key === '/') {
-    event.preventDefault();
-    showComponents(true);
-  }
-  if (event.key.toLowerCase() === 'v') selectTool('select');
-  if (event.key.toLowerCase() === 'c') element('tool-connect').click();
-  if (event.key.toLowerCase() === 'm') selectTool('pan');
-  if (event.key.toLowerCase() === 'p') toggleJourney();
-  if (event.key.toLowerCase() === 't') element('tool-text').click();
-  if (event.key.toLowerCase() === 'n') element('tool-note').click();
-  if (event.key.toLowerCase() === 'b') element('tool-sketch').click();
-  if (event.key === 'Enter' && state.selected) {
-    event.preventDefault();
-    openEditor({ kind: 'node', id: state.selected });
-  }
-  if (event.key.toLowerCase() === 'f') scene.fit();
-  if (event.key === 'Delete' || event.key === 'Backspace') {
-    event.preventDefault();
-    deleteSelection();
-  }
-});
-window.addEventListener('keyup', (event) => {
-  if (isPanKey(event.key)) cameraKeys.release(event.key, event.shiftKey);
-});
-window.addEventListener('blur', () => cameraKeys.stop());
 window.addEventListener('beforeunload', (event) => {
   scene.finishInteraction();
   if (state.dirty) event.preventDefault();
