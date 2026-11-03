@@ -2,22 +2,19 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { layoutEdit } from './domain/layout';
-import {
-  defaultRecordingOptions,
-  validateRecordingOptions,
-} from './export/recording-options';
 import { RecoveryWriter } from './persistence/recovery';
 import type { OpenedFile } from './platform/files';
-import { exportGif, exportText, exportVideo } from './platform/files';
+import { exportText } from './platform/files';
 import { choose, commandPalette, promptText } from './ui/dialogs';
 import { infrastructureImporter } from './ui/importer';
 import './style.css';
 import './theme-effects.css';
 import type { App } from './app/context';
 import { installJourneyControls } from './app/journey-controls';
+import { installRecording } from './app/recording';
 import { createAppState } from './app/state';
 import { installTabletControls } from './app/tablet-controls';
-import { findService, services } from './catalog/services';
+import { services } from './catalog/services';
 import type {
   DiagramDocument,
   DiagramEdge,
@@ -32,7 +29,6 @@ import {
 } from './domain/document';
 import type { Edit } from './domain/history';
 import { DocumentHistory } from './domain/history';
-import { journeyStarts } from './domain/journey';
 import { fontSize, resizedFont } from './domain/text';
 import { CameraKeys, isPanKey } from './editor/camera-keys';
 import {
@@ -67,6 +63,7 @@ import {
   isTextTarget,
 } from './ui/dom';
 import { installInspector } from './ui/inspector';
+import { installLayersPanel } from './ui/layers-panel';
 import { appShell } from './ui/shell';
 import { dismissSplash, removeSplash } from './ui/splash';
 import { renderAmbient } from './ui/theme-fx';
@@ -156,6 +153,14 @@ const app: App = {
   canReplace,
   toggleJourney,
 };
+const layers = installLayersPanel(app);
+function showLayers(show: boolean): void {
+  layers.showLayers(show);
+}
+function updateLayers(): void {
+  layers.updateLayers();
+}
+installRecording(app);
 const inspector = installInspector(app);
 function inspect(): void {
   inspector.inspect();
@@ -258,122 +263,6 @@ element('theme').onclick = () => {
   menu.hidden = !menu.hidden;
   element('theme').setAttribute('aria-expanded', String(!menu.hidden));
 };
-function showLayers(show: boolean): void {
-  state.layersVisible = show;
-  element('layers-panel').hidden = !show;
-  element('toggle-layers').setAttribute('aria-pressed', String(show));
-  scene.setPanelVisible(show);
-}
-let layerSignature = '';
-const layerButtons = new Map<string, HTMLButtonElement>();
-function updateLayers(): void {
-  const list = element('layer-tree');
-  const signature = JSON.stringify([
-    state.current.nodes.map((n) => [
-      n.id,
-      n.label,
-      n.color,
-      n.parentId,
-      n.serviceId,
-      n.kind,
-      n.detailId,
-    ]),
-    state.current.edges.map((e) => [e.id, e.label, e.source, e.target]),
-  ]);
-  if (signature !== layerSignature) {
-    layerSignature = signature;
-    list.replaceChildren();
-    layerButtons.clear();
-    const names = new Map(
-      state.current.nodes.map((node) => [node.id, node.label]),
-    );
-    const children = new Map<string | undefined, DiagramNode[]>();
-    for (const node of state.current.nodes) {
-      const entries = children.get(node.parentId) ?? [];
-      entries.push(node);
-      children.set(node.parentId, entries);
-    }
-    const ordered: { node: DiagramNode; depth: number }[] = [];
-    const visit = (parent: string | undefined, depth: number) => {
-      for (const node of children.get(parent) ?? []) {
-        ordered.push({ node, depth });
-        visit(node.id, depth + 1);
-      }
-    };
-    visit(undefined, 0);
-    for (const { node, depth } of ordered) {
-      const button = document.createElement('button');
-      button.className = `layer-row ${node.kind}${state.selectedIds.has(node.id) ? ' selected' : ''}`;
-      button.setAttribute(
-        'aria-pressed',
-        String(state.selectedIds.has(node.id)),
-      );
-      const symbol = document.createElement('span');
-      symbol.className = 'layer-symbol';
-      symbol.style.color = node.color;
-      const service = findService(node.serviceId ?? node.label);
-      if (service?.icon && (node.kind === 'service' || node.kind === 'group')) {
-        const image = document.createElement('img');
-        image.src = service.icon;
-        image.alt = '';
-        symbol.append(image);
-      } else
-        symbol.textContent =
-          node.kind === 'group' ? '▱' : (service?.glyph ?? '◇');
-      if (node.kind === 'text' || node.kind === 'note') {
-        symbol.textContent = node.kind === 'text' ? 'T' : '▤';
-        symbol.style.color = node.kind === 'note' ? node.color : '';
-      }
-      const label = document.createElement('span');
-      label.textContent =
-        node.label.split('\n')[0] ||
-        (node.kind === 'note'
-          ? 'Sticky note'
-          : node.kind === 'text'
-            ? 'Text'
-            : '');
-      button.append(symbol, label);
-      button.style.paddingLeft = `${8 + depth * 12}px`;
-      layerButtons.set(`node:${node.id}`, button);
-      button.onclick = (event) => scene.select(node.id, event.shiftKey);
-      list.append(button);
-      if (node.detailId) {
-        const detail = state.project.details?.find(
-          (entry) => entry.id === node.detailId,
-        );
-        if (detail) {
-          const open = document.createElement('button');
-          open.className = 'detail-layer-link';
-          open.textContent = '↳ Open detail ↗';
-          open.setAttribute('aria-label', `Open detail for ${node.label}`);
-          open.onclick = () => navigateDiagram(detail.document);
-          list.append(open);
-        }
-      }
-    }
-    if (state.current.edges.length) {
-      const heading = document.createElement('p');
-      heading.className = 'section-label connections-heading';
-      heading.textContent = 'CONNECTIONS';
-      list.append(heading);
-    }
-    for (const edge of state.current.edges) {
-      const row = document.createElement('button');
-      row.className = `layer-row connection-row${state.selectedEdge === edge.id ? ' selected' : ''}`;
-      row.textContent = `↳ ${edge.label || 'Connection'} · ${names.get(edge.source) ?? ''} → ${names.get(edge.target) ?? ''}`;
-      row.onclick = () => scene.selectEdge(edge.id);
-      list.append(row);
-      layerButtons.set(`edge:${edge.id}`, row);
-    }
-  }
-  for (const [key, button] of layerButtons) {
-    const active = key.startsWith('node:')
-      ? state.selectedIds.has(key.slice(5))
-      : state.selectedEdge === key.slice(5);
-    button.classList.toggle('selected', active);
-    button.setAttribute('aria-pressed', String(active));
-  }
-}
 async function refreshRecents(): Promise<void> {
   if (!nativeAvailable()) return;
   try {
@@ -426,112 +315,6 @@ for (const id of ['examples', 'browse-examples']) {
       notify(`Loaded ${template.name}`);
     });
 }
-let recordingMode: 'gif' | 'video' = 'gif';
-let recordingAbort: AbortController | undefined;
-function openRecording(mode: 'gif' | 'video'): void {
-  recordingMode = mode;
-  element('file-menu').hidden = true;
-  element('gif-panel').hidden = false;
-  element('recording-title').textContent =
-    mode === 'gif' ? 'Journey GIF' : 'Journey video';
-  element('gif-record').textContent =
-    mode === 'gif' ? 'Record GIF' : 'Record video';
-  element('video-format-row').hidden = mode === 'gif';
-  element('video-help').hidden = mode === 'gif';
-  element('gif-dither-row').hidden = mode !== 'gif';
-  element('gif-help').hidden = mode !== 'gif';
-  inputElement('gif-duration').focus();
-  if (mode === 'video')
-    void import('./export/video').then(({ videoMime }) => {
-      for (const option of (element('video-format') as HTMLSelectElement)
-        .options) {
-        const supported = !!videoMime(option.value as 'webm' | 'mp4');
-        option.disabled = !supported;
-        option.textContent =
-          option.value.toUpperCase() + (supported ? '' : ' (unavailable)');
-      }
-      const select = element('video-format') as HTMLSelectElement;
-      if (select.selectedOptions[0]?.disabled)
-        select.value =
-          [...select.options].find((option) => !option.disabled)?.value ?? '';
-    });
-}
-element('export-gif').onclick = () => openRecording('gif');
-element('export-video').onclick = () => openRecording('video');
-
-try {
-  const saved = localStorage.getItem('solar-forge-gif');
-  const options = saved
-    ? validateRecordingOptions(JSON.parse(saved))
-    : defaultRecordingOptions;
-  inputElement('gif-duration').value = String(options.duration);
-  inputElement('gif-dither').checked = options.dither;
-} catch {}
-element('gif-record').onclick = () =>
-  void action(async () => {
-    const options = validateRecordingOptions({
-      duration: Number(inputElement('gif-duration').value),
-      dither: inputElement('gif-dither').checked,
-    });
-    try {
-      localStorage.setItem('solar-forge-gif', JSON.stringify(options));
-    } catch {}
-
-    const networkPath = state.checkedJourney;
-    const starts = networkPath
-      ? networkPath.path.slice(0, 1)
-      : journeyStarts(state.current, state.selected);
-    if (!starts.length) {
-      notify('Connect components before exporting a journey.');
-      return;
-    }
-    const { recordJourney } = await import('./export/gif');
-    const mode = recordingMode;
-    const format = field('video-format').value as 'webm' | 'mp4';
-    const video = mode === 'video' ? await import('./export/video') : undefined;
-    if (video && !video.videoMime(format))
-      throw Error('Choose an available video format');
-    element('gif-panel').hidden = true;
-    state.recording = true;
-    recordingAbort = new AbortController();
-    element('file-menu').hidden = true;
-    scene.stopJourney();
-    const controls = [element('app')];
-    for (const control of controls) control.inert = true;
-    try {
-      scene.playJourney(starts, networkPath);
-      const progress = (percent: number) =>
-        notify(
-          `Recording journey ${mode === 'gif' ? 'GIF' : format.toUpperCase()} · ${percent}% · ${options.duration} seconds · Esc cancels; decision forks use the first branch`,
-        );
-      const blob = video
-        ? await video.recordVideo(
-            () => scene.gifFrame(1280, 720),
-            progress,
-            recordingAbort.signal,
-            { duration: options.duration, format },
-          )
-        : await recordJourney(
-            () => scene.gifFrame(),
-            progress,
-            recordingAbort.signal,
-            options,
-          );
-      scene.stopJourney();
-      const saved = video
-        ? await exportVideo(blob, format)
-        : await exportGif(blob);
-      if (saved)
-        notify(
-          `Journey ${video ? format.toUpperCase() : 'GIF'} exported · ${options.duration} seconds`,
-        );
-    } finally {
-      state.recording = false;
-      recordingAbort = undefined;
-      scene.stopJourney();
-      for (const control of controls) control.inert = false;
-    }
-  });
 element('export-svg').onclick = () =>
   void action(async () => {
     const { exportSvg } = await import('./export/svg');
@@ -778,20 +561,6 @@ for (const id of ['components', 'tool-add', 'layer-add'])
   element(id).onclick = () =>
     showComponents(element('component-palette').hidden);
 element('close-components').onclick = () => showComponents(false);
-element('toggle-layers').onclick = () => showLayers(!state.layersVisible);
-element('close-layers').onclick = () => showLayers(false);
-element('ground-toggle').onclick = () => {
-  state.diagramVisible = !state.diagramVisible;
-  scene.setDiagramVisible(state.diagramVisible);
-  element('ground-toggle').setAttribute(
-    'aria-pressed',
-    String(state.diagramVisible),
-  );
-  element('ground-toggle').setAttribute(
-    'aria-label',
-    state.diagramVisible ? 'Hide diagram' : 'Show diagram',
-  );
-};
 function selectTool(tool: Tool): void {
   scene.setTool(tool);
   for (const name of ['select', 'pan', 'connect', 'sketch', 'text', 'note']) {
@@ -1570,16 +1339,6 @@ window.addEventListener('paste', (event) => {
     notify('Clipboard does not contain a valid Solar Forge selection.');
   }
 });
-window.addEventListener(
-  'keydown',
-  (event) => {
-    if (!state.recording) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (event.key === 'Escape') recordingAbort?.abort();
-  },
-  true,
-);
 window.addEventListener('keydown', (event) => {
   if (isTextTarget(event.target)) return;
   if (
@@ -1792,14 +1551,9 @@ if (import.meta.env.DEV)
       load: (json: string) => replaceDocument(parseDocument(json)),
     },
   });
-function adaptViewport(): void {
-  if (innerWidth < 800 && state.layersVisible) showLayers(false);
-}
-window.addEventListener('resize', adaptViewport);
 populateServices();
 updateHeader();
 void dismissSplash();
-adaptViewport();
 scene.fit();
 notify(
   nativeAvailable()
