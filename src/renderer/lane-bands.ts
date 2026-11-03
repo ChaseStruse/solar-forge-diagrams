@@ -68,9 +68,10 @@ export function createLaneBands(
   const length = lanes.to - lanes.from;
   const header = LANE_HEADER - 60;
   for (const [i, band] of lanes.bands.entries()) {
+    const hues = palette.laneHues ?? LANE_HUES;
     const hue = palette.monochrome
       ? palette.group
-      : (LANE_HUES[i % LANE_HUES.length] ?? palette.group);
+      : (hues[i % hues.length] ?? palette.group);
     const size = band.end - band.start;
     const middle = (band.start + band.end) / 2;
     const body = strip(hue, i % 2 ? 0.05 : 0.09);
