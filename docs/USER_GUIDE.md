@@ -77,9 +77,24 @@ Choose **Export journey GIF** from the file menu (also available in Ctrl+K comma
 Frame captures include the journeyman, pulses, and flow animation. Select a start node before export to focus the journey, and choose a duration long enough for its route. Decision prompts take their first branch during recording; fixed routes are respected. Editing pauses while recording; press **Esc** to cancel. The native app opens a GIF save dialog; browser previews download `journey.gif`. Native GIF exports use [Tauri's raw binary request body](https://v2.tauri.app/develop/calling-rust/#accessing-raw-request) instead of a JSON array of numbers.
 
 
+## Import a Mermaid flowchart
+
+Choose **File menu → Import Mermaid or infrastructure…**, then choose a `.mmd` or `.mermaid` file or paste the chart's text. Mermaid is detected automatically; the **Format** selector can force it. **Preview import** lists anything that was skipped before **Import diagram** replaces the board (one undoable step).
+
+- `flowchart` and `graph` charts import, in any direction; `TD`/`TB` charts lay out top to bottom and `LR` charts left to right (`BT` and `RL` use the forward direction). Other Mermaid diagram types, such as sequence diagrams, are refused with a message.
+- Diamonds `{…}` become Decision shapes, stadiums `([…])` and circles `((…))` become Start / end, and every other shape becomes a Process step.
+- Subgraphs become groups and can nest; a node mentioned inside a subgraph moves into it, as in Mermaid. Linking to a subgraph's name connects to the group.
+- Every link form imports, including chains (`a --> b --> c`) and `&` lists. Link labels (`-->|text|`, `-- text -->`) are kept; dotted links (`-.->`) become dependency connections.
+- Text entities (`#quot;`, `#35;`), `<br/>` line breaks and markdown strings are decoded. A `title:` front matter block, or the `%% Title` comment written by Export Mermaid source, names the board.
+- Styling, classes and click handlers are skipped and listed as warnings.
+
+Imported charts use a flowchart layout: each step sits a layer after the steps leading to it, branches spread side by side, links that skip steps run straight past the steps between, loops are drawn back up instead of collapsing into one row, and forward links leave from the side facing the flow. Long labels wrap on wider shapes.
+
+Charts exported with **Export Mermaid source** import back with the same node IDs, labels, groups, connections and walkthrough captions; positions are laid out again. Try [examples/mermaid/checkout.mmd](../examples/mermaid/checkout.mmd).
+
 ## Import existing infrastructure
 
-Choose **File menu → Import infrastructure…**. Select multiple `.tf` files from the same root module together, or choose one `terraform show -json` output, CloudFormation YAML/JSON template, or Docker Compose YAML file. You can also paste code; the format selector can override detection. **Preview import** shows resource/boundary counts and warnings before **Import diagram** replaces the board. Import is an undoable replacement of the current board; Undo restores its previous contents and the rest of the project stays intact. Parsing, validation and layout run in a dedicated offline worker. Close the importer or edit the input to cancel an in-progress preview; stale results cannot be applied.
+Choose **File menu → Import Mermaid or infrastructure…**. Select multiple `.tf` files from the same root module together, or choose one `terraform show -json` output, CloudFormation YAML/JSON template, or Docker Compose YAML file. You can also paste code; the format selector can override detection. **Preview import** shows resource/boundary counts and warnings before **Import diagram** replaces the board. Import is an undoable replacement of the current board; Undo restores its previous contents and the rest of the project stays intact. Parsing, validation and layout run in a dedicated offline worker. Close the importer or edit the input to cancel an in-progress preview; stale results cannot be applied.
 
 Everything runs locally. Import never runs Terraform, Docker, shell code, CloudFormation transforms, providers, or remote module downloads. It retains the resource properties needed for diagramming and network checks, rather than copying whole state records, environment variables, or user-data scripts into the diagram. Limits are 256 selected files, 50 MB of source, 5000 AWS resources or 2000 Compose services, and the existing portable document limits.
 

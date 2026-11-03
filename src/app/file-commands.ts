@@ -185,7 +185,7 @@ export function installFileCommands(
       commit(
         {
           type: 'graph',
-          label: 'Import infrastructure',
+          label: 'Import diagram',
           title: doc.title,
           nodes: [...nodeChanges.values()],
           edges: [...edgeChanges.values()],
