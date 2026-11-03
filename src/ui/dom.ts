@@ -33,3 +33,22 @@ export function isTextTarget(target: EventTarget | null): boolean {
     target instanceof HTMLSelectElement
   );
 }
+
+/** Replace a select's options and choose `value`. */
+export function fillOptions(
+  id: string,
+  options: readonly (readonly [string, string])[],
+  value: string,
+): void {
+  const select = field(id);
+  if (!(select instanceof HTMLSelectElement)) return;
+  select.replaceChildren(
+    ...options.map(([id, label]) => {
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = label;
+      return option;
+    }),
+  );
+  select.value = value;
+}

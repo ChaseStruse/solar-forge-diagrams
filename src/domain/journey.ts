@@ -79,3 +79,11 @@ export function inactiveEdges(doc: DiagramDocument): Set<string> {
   }
   return inactive;
 }
+
+/** Name a branch by its connection label, else by where it leads. */
+export function branchName(doc: DiagramDocument, edgeId: string): string {
+  const edge = doc.edges.find((e) => e.id === edgeId);
+  if (!edge) return 'Connection';
+  const target = doc.nodes.find((n) => n.id === edge.target)?.label ?? '';
+  return edge.label ? `${edge.label} → ${target}` : `→ ${target}`;
+}
