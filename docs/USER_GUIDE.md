@@ -90,6 +90,7 @@ While lanes are shown:
 - **Automatic layout** re-flows the lanes instead of packing the board.
 - **Ctrl K → Lanes: switch rows and columns** turns lanes into columns with the flow running downwards, and back.
 - Boundaries move as one block in the lane of their own Owner; steps inside them keep their places.
+- Text and sticky notes are not steps: they stay where you put them.
 
 Journeys call out each **handoff**, a connection between steps with different owners (a step inside a boundary counts the boundary's owner if it has none), and report the total when the journey ends. Lanes appear in both Plan and 2.5D views; SVG, Mermaid and other exports do not draw lanes yet.
 

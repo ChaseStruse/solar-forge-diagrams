@@ -6,6 +6,7 @@ import {
   detailDiagramsTour,
   journeyForksTour,
   networkFlowTour,
+  swimlanesTour,
 } from './feature-examples';
 import { kubernetesExample } from './kubernetes';
 import {
@@ -103,6 +104,15 @@ export const templates: Template[] = [
     description:
       'Follow a journey that asks at a decision, splits at a fork and keeps to an active route.',
     create: journeyForksTour,
+  },
+  {
+    id: 'tour-swimlanes',
+    name: 'Swimlanes',
+    category: 'Feature tours',
+    subcategory: 'Boards',
+    description:
+      'A checkout across four teams in lanes: follow the journey, count handoffs and move steps between owners.',
+    create: swimlanesTour,
   },
   {
     id: 'private-worker',

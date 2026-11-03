@@ -4,6 +4,7 @@ import type {
   DiagramNode,
   NetworkRule,
 } from '../domain/document';
+import { laneBands, laneLayout } from '../domain/lanes';
 import { defaultTraffic } from '../domain/network';
 import { findService } from './services';
 
@@ -358,6 +359,143 @@ export function buildingBlocksTour(): DiagramDocument {
     -240,
     340,
     1400,
+  );
+  return doc;
+}
+
+export function swimlanesTour(): DiagramDocument {
+  const { doc, node, edge, steps, heading } = board('Feature tour · Swimlanes');
+  const step = (
+    id: string,
+    shape: 'process' | 'decision' | 'terminal',
+    label: string,
+    owner: string,
+    caption: string,
+  ) => {
+    const added = node(id, `flow.${shape}`, label, 0, 0, {
+      owner,
+      ...(shape === 'decision' ? { journey: { mode: 'ask' as const } } : {}),
+    });
+    added.journeyCaption = caption;
+    return added;
+  };
+  step(
+    'cart',
+    'terminal',
+    'Opens basket',
+    'Customer',
+    'A customer is ready to buy. Follow them through checkout.',
+  );
+  step(
+    'review',
+    'process',
+    'Reviews items',
+    'Customer',
+    'They check what is in the basket.',
+  );
+  step(
+    'signed',
+    'decision',
+    'Signed in?',
+    'Storefront',
+    'The storefront checks for an account: choose a branch.',
+  );
+  step(
+    'guest',
+    'process',
+    'Checks out as guest',
+    'Customer',
+    'No account, so they continue as a guest.',
+  );
+  step(
+    'address',
+    'process',
+    'Enters address',
+    'Customer',
+    'Delivery details go in.',
+  );
+  step(
+    'charge',
+    'process',
+    'Charges card',
+    'Payment service',
+    'The card is charged: work has passed to the payment service.',
+  );
+  step(
+    'approved',
+    'decision',
+    'Card approved?',
+    'Payment service',
+    'Did the bank approve it? Choose a branch.',
+  );
+  step(
+    'retry',
+    'process',
+    'Asks for another card',
+    'Storefront',
+    'Declined: the storefront asks for another card.',
+  );
+  step(
+    'order',
+    'process',
+    'Creates order',
+    'Storefront',
+    'Approved: the storefront records the order.',
+  );
+  step(
+    'pick',
+    'process',
+    'Picks and packs',
+    'Warehouse',
+    'The warehouse picks and packs the parcel.',
+  );
+  step(
+    'ship',
+    'process',
+    'Ships parcel',
+    'Warehouse',
+    'It leaves with the courier.',
+  );
+  step(
+    'arrives',
+    'terminal',
+    'Parcel arrives',
+    'Customer',
+    'Back with the customer: count the handoffs in the status bar.',
+  );
+  edge('cart', 'review');
+  edge('review', 'signed');
+  edge('signed', 'guest', 'No');
+  edge('signed', 'address', 'Yes');
+  edge('guest', 'address');
+  edge('address', 'charge');
+  edge('charge', 'approved');
+  edge('approved', 'retry', 'Declined');
+  edge('retry', 'charge', 'New card');
+  edge('approved', 'order', 'Approved');
+  edge('order', 'pick');
+  edge('pick', 'ship');
+  edge('ship', 'arrives');
+  // Lay the steps out in lanes, as pressing L would.
+  const { positions, order } = laneLayout(doc, 'right');
+  for (const n of doc.nodes) Object.assign(n, positions.get(n.id) ?? {});
+  doc.lanes = { direction: 'right', order };
+  const bands = laneBands(doc);
+  const top = bands?.bands[0]?.start ?? 0;
+  const bottom = bands?.bands.at(-1)?.end ?? 0;
+  const middle = bands ? (bands.from + bands.to) / 2 : 0;
+  heading('title', 'Swimlanes: who does each step', middle, top - 110);
+  steps(
+    'guide',
+    [
+      'Press P to follow a customer. Pick a branch at each decision; the status bar calls out every handoff between teams and the total at the end.',
+      'Select a step and change its Owner in the properties panel: it moves to that lane.',
+      'Drag a step into another lane to hand it to that team.',
+      'Press L to hide the lanes and L again to bring them back. Ctrl K → Lanes: switch rows and columns.',
+    ],
+    middle,
+    bottom + 80,
+    1700,
   );
   return doc;
 }
