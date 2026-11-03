@@ -77,6 +77,22 @@ Choose **Export journey GIF** from the file menu (also available in Ctrl+K comma
 Frame captures include the journeyman, pulses, and flow animation. Select a start node before export to focus the journey, and choose a duration long enough for its route. Decision prompts take their first branch during recording; fixed routes are respected. Editing pauses while recording; press **Esc** to cancel. The native app opens a GIF save dialog; browser previews download `journey.gif`. Native GIF exports use [Tauri's raw binary request body](https://v2.tauri.app/develop/calling-rust/#accessing-raw-request) instead of a JSON array of numbers.
 
 
+## Owners and swimlanes
+
+Every step can say who carries it out: select it and fill in **Owner** in the properties panel (a person, team or system; existing owners are suggested). With several steps selected, the owner applies to all of them.
+
+Press **Lanes** in the bottom dock (or `L`) to show the board as swimlanes: one band per owner, steps arranged along the flow in the order the flow reaches each owner, and steps without an owner in an **Unassigned** lane at the end. Lanes are a view of the board and one undoable step; press Lanes again to hide them, and the steps and their owners stay as they are.
+
+While lanes are shown:
+
+- Changing a step's Owner moves it to that lane and re-flows the lanes.
+- Dragging a step into another lane makes that lane's owner its owner. Dropping outside every lane puts it back.
+- **Automatic layout** re-flows the lanes instead of packing the board.
+- **Ctrl K → Lanes: switch rows and columns** turns lanes into columns with the flow running downwards, and back.
+- Boundaries move as one block in the lane of their own Owner; steps inside them keep their places.
+
+Journeys call out each **handoff**, a connection between steps with different owners (a step inside a boundary counts the boundary's owner if it has none), and report the total when the journey ends. Lanes appear in both Plan and 2.5D views; SVG, Mermaid and other exports do not draw lanes yet.
+
 ## Import a Mermaid flowchart
 
 Choose **File menu → Import Mermaid or infrastructure…**, then choose a `.mmd` or `.mermaid` file or paste the chart's text. Mermaid is detected automatically; the **Format** selector can force it. **Preview import** lists anything that was skipped before **Import diagram** replaces the board (one undoable step).

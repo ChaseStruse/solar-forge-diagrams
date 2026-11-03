@@ -16,6 +16,8 @@ export const isPort = (value: unknown): value is Port =>
 export interface DiagramNode {
   detailId?: string;
   journeyCaption?: string;
+  /** Who carries out this step: a person, team or system. Lanes group by it. */
+  owner?: string;
   network?: ResourceNetwork;
   policy?: ResourcePolicy;
   id: string;
@@ -83,7 +85,17 @@ export interface TrafficScenario {
   sourceId?: string;
   targetId?: string;
 }
+/** A board shown as swimlanes: one band per owner, in this order. */
+export interface LaneView {
+  /** Flow runs left to right with lanes as rows, or downwards with columns. */
+  direction: 'right' | 'down';
+  /** Owners from the first lane to the last; '' is the Unassigned lane. */
+  order: string[];
+}
+export const MAX_OWNER = 100;
 export interface DiagramDocument {
+  /** Present when the board is shown as swimlanes. */
+  lanes?: LaneView;
   /** Flat project library: detail boards can link to other boards by ID. */
   details?: { id: string; document: DiagramDocument }[];
   scenarios?: TrafficScenario[];
@@ -178,6 +190,11 @@ function parseBoard(json: string): DiagramDocument {
     if (n.journeyCaption !== undefined)
       node.journeyCaption = text(n.journeyCaption, 'journey caption');
     if (n.parentId !== undefined) node.parentId = text(n.parentId, 'parent ID');
+    if (n.owner !== undefined) {
+      const owner = text(n.owner, 'owner').trim();
+      if (owner.length > MAX_OWNER) throw Error('Invalid owner');
+      if (owner) node.owner = owner;
+    }
     if (n.serviceId !== undefined)
       node.serviceId = text(n.serviceId, 'service ID');
     if (n.shape !== undefined) {
@@ -340,9 +357,26 @@ function parseBoard(json: string): DiagramDocument {
       return result;
     });
   }
+  let lanes: LaneView | undefined;
+  if (input.lanes !== undefined) {
+    const view = record(input.lanes);
+    if (view.direction !== 'right' && view.direction !== 'down')
+      throw Error('Invalid lane direction');
+    if (!Array.isArray(view.order) || view.order.length > 1000)
+      throw Error('Invalid lane order');
+    const order: string[] = [];
+    for (const value of view.order) {
+      const owner = text(value, 'lane owner');
+      if (owner.length > MAX_OWNER || order.includes(owner))
+        throw Error('Invalid or duplicate lane');
+      order.push(owner);
+    }
+    lanes = { direction: view.direction, order };
+  }
   return {
     version: 1,
     title: text(input.title, 'title'),
+    ...(lanes ? { lanes } : {}),
     ...(scenarios ? { scenarios } : {}),
     nodes,
     edges,

@@ -5,6 +5,7 @@ import { installBoardEdits } from './app/board-edits';
 import type { App } from './app/context';
 import { installFileCommands } from './app/file-commands';
 import { installJourneyControls } from './app/journey-controls';
+import { installLanes } from './app/lanes';
 import { installRecording } from './app/recording';
 import { installShortcuts } from './app/shortcuts';
 import { createAppState } from './app/state';
@@ -90,7 +91,10 @@ element('features').onclick = () =>
   void import('./ui/tour')
     .then(({ startTour }) => startTour())
     .catch((error) => notify(`Tour unavailable: ${String(error)}`));
+/** Lanes install late; header refreshes before then skip the lane button. */
+let lanesReady = false;
 function updateHeader(): void {
+  if (lanesReady) lanes.refresh();
   state.dirty = state.history.isDirty;
   files.scheduleRecovery();
   element('save-state').textContent = state.dirty
@@ -351,6 +355,9 @@ const journey = installJourneyControls(app);
 function toggleJourney(): void {
   journey.toggleJourney();
 }
+// After board edits: lanes wrap the move handlers to reassign dropped steps.
+const lanes = installLanes(app);
+lanesReady = true;
 function renderDiagramPath(): void {
   const nav = element('diagram-path');
   nav.replaceChildren();
@@ -400,6 +407,8 @@ installShortcuts(app, {
   align: edits.align,
   alignments: edits.alignments,
   closeSettings: () => tablet.showSettings(false),
+  toggleLanes: lanes.toggle,
+  swapLaneDirection: lanes.swapDirection,
 });
 window.addEventListener('beforeunload', (event) => {
   scene.finishInteraction();

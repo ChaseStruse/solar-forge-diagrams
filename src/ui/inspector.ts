@@ -197,6 +197,24 @@ export function installInspector(app: App): Inspector {
             : node?.shape
               ? 'Flowchart shape'
               : 'Component · double-click to rename';
+    // Owner: shared value across the selection, with every owner on offer.
+    const owners = [
+      ...new Set(
+        state.current.nodes.flatMap((n) => (n.owner ? [n.owner] : [])),
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+    element('owner-options').replaceChildren(
+      ...owners.map((owner) => new Option(owner)),
+    );
+    const ownerTargets = node ? detailTargets() : [];
+    const ownerValues = new Set(ownerTargets.map((n) => n.owner ?? ''));
+    const ownerField = inputElement('node-owner');
+    ownerField.value =
+      ownerValues.size === 1 ? ([...ownerValues][0] ?? '') : '';
+    ownerField.placeholder =
+      ownerValues.size > 1
+        ? 'Mixed · type to set for all'
+        : 'Who does this step?';
     for (const id of ['delete', 'tool-edit']) {
       const button = element(id);
       if (button instanceof HTMLButtonElement) button.disabled = !node && !edge;

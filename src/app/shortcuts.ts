@@ -20,6 +20,8 @@ export interface ShortcutCommands {
   align(alignment: Alignment): void;
   alignments: readonly [Alignment, string][];
   closeSettings(): void;
+  toggleLanes(): void;
+  swapLaneDirection(): void;
 }
 
 /**
@@ -134,6 +136,11 @@ export function installShortcuts(app: App, commands: ShortcutCommands): void {
           run: () => element(id).click(),
         })),
         { label: 'Play journey (P)', run: toggleJourney },
+        { label: 'Lanes: show or hide (L)', run: commands.toggleLanes },
+        {
+          label: 'Lanes: switch rows and columns',
+          run: commands.swapLaneDirection,
+        },
         {
           label: 'Copy diagram image (Ctrl+Shift+C)',
           run: () => void commands.copyImage(),
@@ -268,6 +275,7 @@ export function installShortcuts(app: App, commands: ShortcutCommands): void {
     if (event.key.toLowerCase() === 'c') element('tool-connect').click();
     if (event.key.toLowerCase() === 'm') selectTool('pan');
     if (event.key.toLowerCase() === 'p') toggleJourney();
+    if (event.key.toLowerCase() === 'l') commands.toggleLanes();
     if (event.key.toLowerCase() === 't') element('tool-text').click();
     if (event.key.toLowerCase() === 'n') element('tool-note').click();
     if (event.key.toLowerCase() === 'b') element('tool-sketch').click();

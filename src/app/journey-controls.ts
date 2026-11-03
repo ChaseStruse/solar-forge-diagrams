@@ -239,13 +239,33 @@ export function installJourneyControls(app: App): JourneyControls {
       notify(`Blocked · ${edge?.label || id} · ${result.reason}`);
     return result.allowed;
   };
+  /** Handoffs between owners on the journey playing now. */
+  let handoffs = 0;
+  /** A step's owner, or the owner of the nearest group around it. */
+  const ownerOf = (id: string): string | undefined => {
+    const nodes = state.current.nodes;
+    const seen = new Set<string>();
+    for (
+      let node = nodes.find((n) => n.id === id);
+      node && !seen.has(node.id);
+      node = nodes.find((n) => n.id === node?.parentId)
+    ) {
+      seen.add(node.id);
+      if (node.owner) return node.owner;
+    }
+    return undefined;
+  };
   scene.onJourneyHop = (id) => {
     const edge = state.current.edges.find((e) => e.id === id);
     if (!edge) return;
     const name = (nodeId: string) =>
       state.current.nodes.find((n) => n.id === nodeId)?.label ?? '';
+    const from = ownerOf(edge.source);
+    const to = ownerOf(edge.target);
+    const handoff = from !== undefined && to !== undefined && from !== to;
+    if (handoff) handoffs++;
     notify(
-      `${edge.networkRule ? 'Allowed · ' : ''}${name(edge.source)} → ${name(edge.target)}${edge.label ? ` · ${edge.label}` : ''}`,
+      `${edge.networkRule ? 'Allowed · ' : ''}${name(edge.source)} → ${name(edge.target)}${edge.label ? ` · ${edge.label}` : ''}${handoff ? ` · Handoff ${from} → ${to}` : ''}`,
     );
   };
   scene.onJourneyCaption = (caption) => {
@@ -254,6 +274,11 @@ export function installJourneyControls(app: App): JourneyControls {
   };
   scene.onJourneyEnd = () => {
     element('journey').setAttribute('aria-pressed', 'false');
+    if (handoffs)
+      notify(
+        `Journey finished · ${handoffs} handoff${handoffs === 1 ? '' : 's'} between owners`,
+      );
+    handoffs = 0;
   };
   scene.onJourneyBranches = (id) => journeyBranches(state.current, id);
   let chooser: { close: (edge?: string) => void } | undefined;
