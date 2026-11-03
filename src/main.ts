@@ -23,9 +23,15 @@ import { renderNetworkProperties } from './ui/network-properties';
 import { reachabilityPanel } from './ui/reachability';
 import './style.css';
 import './theme-effects.css';
+import { createAppState } from './app/state';
 import { installTabletControls } from './app/tablet-controls';
 import { findService, services } from './catalog/services';
-import type { DiagramEdge, DiagramNode, Port } from './domain/document';
+import type {
+  DiagramDocument,
+  DiagramEdge,
+  DiagramNode,
+  Port,
+} from './domain/document';
 import {
   MAX_TEXT,
   parseDocument,
@@ -70,13 +76,7 @@ import { renderAmbient } from './ui/theme-fx';
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('Application root is missing');
 root.innerHTML = appShell();
-let current = starterDocument();
-let project = current;
-let history = new DocumentHistory(current);
-let diagramTrail: (typeof current)[] = [];
-let selected: string | undefined;
-let checkedJourney: { path: string[]; allowed: boolean } | undefined;
-let selectedIds = new Set<string>();
+const state = createAppState(starterDocument());
 const METADATA_KEYS = [
   'region',
   'environment',
@@ -84,18 +84,11 @@ const METADATA_KEYS = [
   'tags',
   'notes',
 ] as const;
-let selectedEdge: string | undefined;
-let dirty = false;
-let busy = false;
-let fileHandle: number | undefined;
-let recoveryReady = false;
 const recovery = new RecoveryWriter(
-  () => (history.isDirty ? serializeDocument(project) : null),
+  () => (state.history.isDirty ? serializeDocument(state.project) : null),
   writeRecovery,
   (error) => notify(`Recovery failed: ${String(error)}. Save your diagram.`),
 );
-let layersVisible = true;
-let diagramVisible = true;
 const notify = (message: string): void => {
   element('status').textContent = message;
 };
@@ -142,7 +135,7 @@ applyThemeChrome();
 let scene: DiagramScene;
 const cameraKeys = new CameraKeys((dx, dy) => scene.panByPixels(dx, dy));
 try {
-  scene = new DiagramScene(element('canvas'), current, theme.scene);
+  scene = new DiagramScene(element('canvas'), state.current, theme.scene);
 } catch (error) {
   removeSplash();
   notify(
@@ -249,7 +242,7 @@ element('theme').onclick = () => {
   element('theme').setAttribute('aria-expanded', String(!menu.hidden));
 };
 function showLayers(show: boolean): void {
-  layersVisible = show;
+  state.layersVisible = show;
   element('layers-panel').hidden = !show;
   element('toggle-layers').setAttribute('aria-pressed', String(show));
   scene.setPanelVisible(show);
@@ -259,7 +252,7 @@ const layerButtons = new Map<string, HTMLButtonElement>();
 function updateLayers(): void {
   const list = element('layer-tree');
   const signature = JSON.stringify([
-    current.nodes.map((n) => [
+    state.current.nodes.map((n) => [
       n.id,
       n.label,
       n.color,
@@ -268,15 +261,17 @@ function updateLayers(): void {
       n.kind,
       n.detailId,
     ]),
-    current.edges.map((e) => [e.id, e.label, e.source, e.target]),
+    state.current.edges.map((e) => [e.id, e.label, e.source, e.target]),
   ]);
   if (signature !== layerSignature) {
     layerSignature = signature;
     list.replaceChildren();
     layerButtons.clear();
-    const names = new Map(current.nodes.map((node) => [node.id, node.label]));
+    const names = new Map(
+      state.current.nodes.map((node) => [node.id, node.label]),
+    );
     const children = new Map<string | undefined, DiagramNode[]>();
-    for (const node of current.nodes) {
+    for (const node of state.current.nodes) {
       const entries = children.get(node.parentId) ?? [];
       entries.push(node);
       children.set(node.parentId, entries);
@@ -291,8 +286,11 @@ function updateLayers(): void {
     visit(undefined, 0);
     for (const { node, depth } of ordered) {
       const button = document.createElement('button');
-      button.className = `layer-row ${node.kind}${selectedIds.has(node.id) ? ' selected' : ''}`;
-      button.setAttribute('aria-pressed', String(selectedIds.has(node.id)));
+      button.className = `layer-row ${node.kind}${state.selectedIds.has(node.id) ? ' selected' : ''}`;
+      button.setAttribute(
+        'aria-pressed',
+        String(state.selectedIds.has(node.id)),
+      );
       const symbol = document.createElement('span');
       symbol.className = 'layer-symbol';
       symbol.style.color = node.color;
@@ -323,7 +321,7 @@ function updateLayers(): void {
       button.onclick = (event) => scene.select(node.id, event.shiftKey);
       list.append(button);
       if (node.detailId) {
-        const detail = project.details?.find(
+        const detail = state.project.details?.find(
           (entry) => entry.id === node.detailId,
         );
         if (detail) {
@@ -336,15 +334,15 @@ function updateLayers(): void {
         }
       }
     }
-    if (current.edges.length) {
+    if (state.current.edges.length) {
       const heading = document.createElement('p');
       heading.className = 'section-label connections-heading';
       heading.textContent = 'CONNECTIONS';
       list.append(heading);
     }
-    for (const edge of current.edges) {
+    for (const edge of state.current.edges) {
       const row = document.createElement('button');
-      row.className = `layer-row connection-row${selectedEdge === edge.id ? ' selected' : ''}`;
+      row.className = `layer-row connection-row${state.selectedEdge === edge.id ? ' selected' : ''}`;
       row.textContent = `↳ ${edge.label || 'Connection'} · ${names.get(edge.source) ?? ''} → ${names.get(edge.target) ?? ''}`;
       row.onclick = () => scene.selectEdge(edge.id);
       list.append(row);
@@ -353,8 +351,8 @@ function updateLayers(): void {
   }
   for (const [key, button] of layerButtons) {
     const active = key.startsWith('node:')
-      ? selectedIds.has(key.slice(5))
-      : selectedEdge === key.slice(5);
+      ? state.selectedIds.has(key.slice(5))
+      : state.selectedEdge === key.slice(5);
     button.classList.toggle('selected', active);
     button.setAttribute('aria-pressed', String(active));
   }
@@ -383,7 +381,7 @@ async function refreshRecents(): Promise<void> {
             path: file.path,
           });
           replaceDocument(parseDocument(opened.content));
-          fileHandle = opened.handle;
+          state.fileHandle = opened.handle;
           element('file-menu').hidden = true;
           notify(`Opened ${opened.name}`);
           await refreshRecents();
@@ -396,7 +394,7 @@ async function refreshRecents(): Promise<void> {
 }
 element('title').onclick = () =>
   void action(async () => {
-    const title = await promptText('Diagram name', current.title);
+    const title = await promptText('Diagram name', state.current.title);
     if (title) commit({ type: 'graph', label: 'Rename diagram', title });
   });
 for (const id of ['examples', 'browse-examples']) {
@@ -411,7 +409,6 @@ for (const id of ['examples', 'browse-examples']) {
       notify(`Loaded ${template.name}`);
     });
 }
-let recordingGif = false;
 let recordingMode: 'gif' | 'video' = 'gif';
 let recordingAbort: AbortController | undefined;
 function openRecording(mode: 'gif' | 'video'): void {
@@ -463,10 +460,10 @@ element('gif-record').onclick = () =>
       localStorage.setItem('solar-forge-gif', JSON.stringify(options));
     } catch {}
 
-    const networkPath = checkedJourney;
+    const networkPath = state.checkedJourney;
     const starts = networkPath
       ? networkPath.path.slice(0, 1)
-      : journeyStarts(current, selected);
+      : journeyStarts(state.current, state.selected);
     if (!starts.length) {
       notify('Connect components before exporting a journey.');
       return;
@@ -478,7 +475,7 @@ element('gif-record').onclick = () =>
     if (video && !video.videoMime(format))
       throw Error('Choose an available video format');
     element('gif-panel').hidden = true;
-    recordingGif = true;
+    state.recording = true;
     recordingAbort = new AbortController();
     element('file-menu').hidden = true;
     scene.stopJourney();
@@ -512,7 +509,7 @@ element('gif-record').onclick = () =>
           `Journey ${video ? format.toUpperCase() : 'GIF'} exported · ${options.duration} seconds`,
         );
     } finally {
-      recordingGif = false;
+      state.recording = false;
       recordingAbort = undefined;
       scene.stopJourney();
       for (const control of controls) control.inert = false;
@@ -521,7 +518,7 @@ element('gif-record').onclick = () =>
 element('export-svg').onclick = () =>
   void action(async () => {
     const { exportSvg } = await import('./export/svg');
-    if (await saveSvg(await exportSvg(current, boardFont.family)))
+    if (await saveSvg(await exportSvg(state.current, boardFont.family)))
       notify('SVG exported');
   });
 for (const [id, format] of [
@@ -533,7 +530,7 @@ for (const [id, format] of [
     void action(async () => {
       const { exportInterchange } = await import('./export/interchange');
       const content = exportInterchange(
-        format === 'drawio' ? project : current,
+        format === 'drawio' ? state.project : state.current,
         format,
       );
       if (await exportText(content, format))
@@ -544,21 +541,24 @@ for (const [id, format] of [
     });
 }
 function updateHeader(): void {
-  dirty = history.isDirty;
-  if (recoveryReady) recovery.schedule();
-  element('save-state').textContent = dirty ? 'Unsaved changes' : 'Unchanged';
+  state.dirty = state.history.isDirty;
+  if (state.recoveryReady) recovery.schedule();
+  element('save-state').textContent = state.dirty
+    ? 'Unsaved changes'
+    : 'Unchanged';
   for (const [id, enabled] of [
-    ['undo', history.canUndo],
-    ['redo', history.canRedo],
+    ['undo', state.history.canUndo],
+    ['redo', state.history.canRedo],
   ] as const) {
     const button = element(id);
     if (button instanceof HTMLButtonElement) button.disabled = !enabled;
   }
-  element('title').textContent = `${current.title}${dirty ? ' •' : ''}`;
+  element('title').textContent =
+    `${state.current.title}${state.dirty ? ' •' : ''}`;
   element('count').textContent =
-    `${current.nodes.length} objects · ${current.edges.length} connections`;
+    `${state.current.nodes.length} objects · ${state.current.edges.length} connections`;
   const count = (kind: DiagramNode['kind']) =>
-    current.nodes.filter((node) => node.kind === kind).length;
+    state.current.nodes.filter((node) => node.kind === kind).length;
   const notes = count('text') + count('note');
   element('ground-summary').textContent =
     `${count('service')} services · ${count('group')} boundaries${notes ? ` · ${notes} notes` : ''}`;
@@ -566,7 +566,7 @@ function updateHeader(): void {
   renderDiagramPath();
 }
 function inspect(): void {
-  const node = current.nodes.find((n) => n.id === selected);
+  const node = state.current.nodes.find((n) => n.id === state.selected);
   element('properties').hidden = !node;
   element('selection').textContent =
     node?.kind === 'text' || node?.kind === 'note'
@@ -581,7 +581,7 @@ function inspect(): void {
   const detailSelect = element('node-detail') as HTMLSelectElement;
   detailSelect.replaceChildren(
     new Option('No detail diagram', ''),
-    ...(project.details ?? []).map(
+    ...(state.project.details ?? []).map(
       (entry) => new Option(entry.document.title, entry.id),
     ),
   );
@@ -599,7 +599,7 @@ function inspect(): void {
   element('node-font-row').hidden = !annotation && !component;
   element('node-wrap-row').hidden = !component;
   const outgoing = node
-    ? current.edges.filter((edge) => edge.source === node.id)
+    ? state.current.edges.filter((edge) => edge.source === node.id)
     : [];
   element('node-branch-row').hidden = outgoing.length < 2;
   if (node && outgoing.length >= 2) {
@@ -619,7 +619,7 @@ function inspect(): void {
       ],
       setting?.mode === 'fixed'
         ? `fixed:${setting.edge}`
-        : (setting?.mode ?? journeyBranches(current, node.id).mode),
+        : (setting?.mode ?? journeyBranches(state.current, node.id).mode),
     );
   }
   if (node) {
@@ -634,7 +634,7 @@ function inspect(): void {
     inputElement('node-wrap').checked = Boolean(node.wrap);
     inputElement('node-color').value = node.color;
   }
-  const edge = current.edges.find((e) => e.id === selectedEdge);
+  const edge = state.current.edges.find((e) => e.id === state.selectedEdge);
   element('edge-properties').hidden = !edge;
   if (node) {
     for (const key of ['x', 'z', 'width', 'depth'] as const)
@@ -642,7 +642,7 @@ function inspect(): void {
     const excluded = new Set<string>([node.id]);
     for (let changed = true; changed; ) {
       changed = false;
-      for (const n of current.nodes)
+      for (const n of state.current.nodes)
         if (n.parentId && excluded.has(n.parentId) && !excluded.has(n.id)) {
           excluded.add(n.id);
           changed = true;
@@ -652,7 +652,7 @@ function inspect(): void {
       'node-parent',
       [
         ['', 'Board'],
-        ...current.nodes
+        ...state.current.nodes
           .filter((n) => n.kind === 'group' && !excluded.has(n.id))
           .map((n) => [n.id, n.label] as [string, string]),
       ],
@@ -685,7 +685,7 @@ function inspect(): void {
     element('edge-all-routes').hidden = !routes.all;
     const ruleResult = evaluateTraffic(
       edge.networkRule,
-      current.traffic ?? defaultTraffic,
+      state.current.traffic ?? defaultTraffic,
     );
     element('rule-result').textContent =
       `${ruleResult.allowed ? 'Allowed' : 'Blocked'} for current traffic · ${ruleResult.reason}`;
@@ -696,7 +696,7 @@ function inspect(): void {
     field('rule-direction').value = edge.networkRule?.direction ?? 'any';
     updateRuleFields();
     inputElement('edge-label').value = edge.label;
-    const options = current.nodes.map(
+    const options = state.current.nodes.map(
       (n) => [n.id, n.label] as [string, string],
     );
     fillOptions('edge-source', options, edge.source);
@@ -723,7 +723,7 @@ function inspect(): void {
   renderNetworkProperties(
     element('resource-network'),
     node,
-    current,
+    state.current,
     (value) =>
       commit({
         type: 'graph',
@@ -748,21 +748,21 @@ function deferInspect(task: () => void): void {
   }
 }
 scene.onSelect = (node) => {
-  checkedJourney = undefined;
-  selected = node?.id;
-  selectedIds = new Set(scene.selection);
-  selectedEdge = undefined;
+  state.checkedJourney = undefined;
+  state.selected = node?.id;
+  state.selectedIds = new Set(scene.selection);
+  state.selectedEdge = undefined;
   if (!inspectDeferred) inspect();
 };
 scene.onSelectEdge = (id) => {
-  checkedJourney = undefined;
-  selected = undefined;
-  selectedIds = new Set();
-  selectedEdge = id;
+  state.checkedJourney = undefined;
+  state.selected = undefined;
+  state.selectedIds = new Set();
+  state.selectedEdge = id;
   if (!inspectDeferred) inspect();
 };
 scene.onMove = (id, from, to) => {
-  history.execute({ type: 'move', id, from, to });
+  state.history.execute({ type: 'move', id, from, to });
   updateHeader();
   inspect();
   notify('Position updated');
@@ -773,52 +773,52 @@ scene.onZoom = (percent) => {
   if (element('zoom-level').textContent !== value)
     element('zoom-level').textContent = value;
 };
-function replaceDocument(next: typeof current): void {
-  fileHandle = undefined;
-  current = next;
-  project = next;
-  diagramTrail = [];
-  history = new DocumentHistory(current);
-  selected = undefined;
-  dirty = false;
-  deferInspect(() => scene.load(current));
+function replaceDocument(next: DiagramDocument): void {
+  state.fileHandle = undefined;
+  state.current = next;
+  state.project = next;
+  state.diagramTrail = [];
+  state.history = new DocumentHistory(state.current);
+  state.selected = undefined;
+  state.dirty = false;
+  deferInspect(() => scene.load(state.current));
   scene.fit();
   inspect();
   updateHeader();
 }
 async function action(task: () => Promise<void>): Promise<void> {
-  if (busy) return;
+  if (state.busy) return;
   scene.finishInteraction();
-  busy = true;
+  state.busy = true;
   try {
     await task();
   } catch (error) {
     notify(error instanceof Error ? error.message : String(error));
   } finally {
-    busy = false;
+    state.busy = false;
   }
 }
 async function saveCurrent(saveAs = false): Promise<boolean> {
   scene.finishInteraction();
-  const savedHistory = history;
-  const token = history.token;
+  const savedHistory = state.history;
+  const token = state.history.token;
   const saved = await saveDocumentFile(
-    serializeDocument(project),
-    saveAs ? undefined : fileHandle,
-    project.title,
+    serializeDocument(state.project),
+    saveAs ? undefined : state.fileHandle,
+    state.project.title,
   );
   if (!saved) return false;
-  if (history === savedHistory) fileHandle = saved.handle;
+  if (state.history === savedHistory) state.fileHandle = saved.handle;
   savedHistory.markSaved(token);
   updateHeader();
   await recovery.flush();
   notify(`Saved ${saved.name}`);
   void refreshRecents();
-  return !history.isDirty;
+  return !state.history.isDirty;
 }
 async function canReplace(): Promise<boolean> {
   scene.finishInteraction();
-  if (!history.isDirty) return true;
+  if (!state.history.isDirty) return true;
   const decision = await choose(
     'Save your changes?',
     'This diagram has unsaved changes.',
@@ -828,9 +828,9 @@ async function canReplace(): Promise<boolean> {
   return decision === 'Discard changes';
 }
 const reachability = reachabilityPanel({
-  document: () => current,
+  document: () => state.current,
   play: (result) => {
-    checkedJourney = {
+    state.checkedJourney = {
       path: result.path,
       allowed: result.status === 'allowed',
     };
@@ -852,7 +852,7 @@ const importer = infrastructureImporter({
   notify,
   apply: async (doc) => {
     const nodeChanges = new Map(
-      current.nodes.map((node) => [
+      state.current.nodes.map((node) => [
         node.id,
         { id: node.id, value: null as DiagramNode | null },
       ]),
@@ -860,7 +860,7 @@ const importer = infrastructureImporter({
     for (const value of doc.nodes)
       nodeChanges.set(value.id, { id: value.id, value });
     const edgeChanges = new Map(
-      current.edges.map((edge) => [
+      state.current.edges.map((edge) => [
         edge.id,
         { id: edge.id, value: null as DiagramEdge | null },
       ]),
@@ -886,7 +886,7 @@ element('import-infrastructure').onclick = () => {
   importer.open();
 };
 element('auto-layout').onclick = () => {
-  commit(layoutEdit(current));
+  commit(layoutEdit(state.current));
   scene.fit();
   element('file-menu').hidden = true;
 };
@@ -908,7 +908,7 @@ element('open').onclick = () => {
     const opened = await openDocumentFile();
     if (opened !== null) {
       replaceDocument(parseDocument(opened.content));
-      fileHandle = opened.handle;
+      state.fileHandle = opened.handle;
       notify(`Opened ${opened.name}`);
       void refreshRecents();
     }
@@ -951,15 +951,18 @@ for (const id of ['components', 'tool-add', 'layer-add'])
   element(id).onclick = () =>
     showComponents(element('component-palette').hidden);
 element('close-components').onclick = () => showComponents(false);
-element('toggle-layers').onclick = () => showLayers(!layersVisible);
+element('toggle-layers').onclick = () => showLayers(!state.layersVisible);
 element('close-layers').onclick = () => showLayers(false);
 element('ground-toggle').onclick = () => {
-  diagramVisible = !diagramVisible;
-  scene.setDiagramVisible(diagramVisible);
-  element('ground-toggle').setAttribute('aria-pressed', String(diagramVisible));
+  state.diagramVisible = !state.diagramVisible;
+  scene.setDiagramVisible(state.diagramVisible);
+  element('ground-toggle').setAttribute(
+    'aria-pressed',
+    String(state.diagramVisible),
+  );
   element('ground-toggle').setAttribute(
     'aria-label',
-    diagramVisible ? 'Hide diagram' : 'Show diagram',
+    state.diagramVisible ? 'Hide diagram' : 'Show diagram',
   );
 };
 function selectTool(tool: Tool): void {
@@ -1011,11 +1014,12 @@ element('help').onclick = () => {
   element('help').setAttribute('aria-expanded', String(!help.hidden));
 };
 element('tool-edit').onclick = () => {
-  if (selected) openEditor({ kind: 'node', id: selected });
-  else if (selectedEdge) openEditor({ kind: 'edge', id: selectedEdge });
+  if (state.selected) openEditor({ kind: 'node', id: state.selected });
+  else if (state.selectedEdge)
+    openEditor({ kind: 'edge', id: state.selectedEdge });
 };
 field('node-text').onchange = () => {
-  const node = current.nodes.find((n) => n.id === selected);
+  const node = state.current.nodes.find((n) => n.id === state.selected);
   const label = field('node-text').value.slice(0, MAX_TEXT);
   if (!node || label === node.label) return;
   commit({
@@ -1025,7 +1029,7 @@ field('node-text').onchange = () => {
   });
 };
 field('node-font').onchange = () => {
-  const node = current.nodes.find((n) => n.id === selected);
+  const node = state.current.nodes.find((n) => n.id === state.selected);
   if (node?.kind === 'service' && !field('node-font').value.trim()) {
     const value = { ...node };
     delete value.fontSize;
@@ -1048,7 +1052,7 @@ field('node-font').onchange = () => {
   });
 };
 inputElement('node-wrap').onchange = () => {
-  const node = current.nodes.find((n) => n.id === selected);
+  const node = state.current.nodes.find((n) => n.id === state.selected);
   if (!node) return;
   const value = { ...node };
   if (inputElement('node-wrap').checked) value.wrap = true;
@@ -1060,7 +1064,7 @@ inputElement('node-wrap').onchange = () => {
   });
 };
 field('node-branch').onchange = () => {
-  const node = current.nodes.find((n) => n.id === selected);
+  const node = state.current.nodes.find((n) => n.id === state.selected);
   const value = field('node-branch').value;
   if (!node) return;
   const journey: NonNullable<DiagramNode['journey']> = value.startsWith(
@@ -1075,7 +1079,7 @@ field('node-branch').onchange = () => {
   });
 };
 field('node-color').onchange = () => {
-  const node = current.nodes.find((n) => n.id === selected);
+  const node = state.current.nodes.find((n) => n.id === state.selected);
   const color = field('node-color').value;
   if (!node || !/^#[0-9a-f]{6}$/i.test(color) || color === node.color) return;
   commit({
@@ -1085,7 +1089,7 @@ field('node-color').onchange = () => {
   });
 };
 element('node-label').onchange = () => {
-  const node = current.nodes.find((n) => n.id === selected);
+  const node = state.current.nodes.find((n) => n.id === state.selected);
   if (!node) return;
   const label = inputElement('node-label').value.slice(0, 1000);
   if (label === node.label) return;
@@ -1106,45 +1110,48 @@ element('node-label').onchange = () => {
   });
 };
 function deleteSelection(): void {
-  if (selectedEdge) {
+  if (state.selectedEdge) {
     commit(
       {
         type: 'graph',
         label: 'Delete connection',
-        edges: [{ id: selectedEdge, value: null }],
+        edges: [{ id: state.selectedEdge, value: null }],
       },
       [],
     );
     return;
   }
-  if (!selectedIds.size) return;
-  commit(deleteNodes(current, selectedIds), []);
+  if (!state.selectedIds.size) return;
+  commit(deleteNodes(state.current, state.selectedIds), []);
   notify('Selection deleted');
 }
 element('delete').onclick = deleteSelection;
 function travelHistory(redo: boolean): void {
   scene.finishInteraction();
-  const edit = redo ? history.redo() : history.undo();
+  const edit = redo ? state.history.redo() : state.history.undo();
   if (!edit) return;
-  const switched = current !== history.document;
+  const switched = state.current !== state.history.document;
   deferInspect(() => {
     if (switched) {
-      current = history.document;
-      diagramTrail = current === project ? [] : [project];
-      scene.load(current);
+      state.current = state.history.document;
+      state.diagramTrail =
+        state.current === state.project ? [] : [state.project];
+      scene.load(state.current);
       scene.fit();
     }
-    const selection = [...selectedIds];
-    const edge = selectedEdge;
+    const selection = [...state.selectedIds];
+    const edge = state.selectedEdge;
     if (edit.type === 'move') {
       if (!switched) scene.refreshPosition(edit.id);
     } else {
       // A board switch has just loaded this exact document.
-      if (!switched) scene.load(current);
+      if (!switched) scene.load(state.current);
       scene.selectMany(
-        selection.filter((id) => current.nodes.some((node) => node.id === id)),
+        selection.filter((id) =>
+          state.current.nodes.some((node) => node.id === id),
+        ),
       );
-      if (edge && current.edges.some((e) => e.id === edge))
+      if (edge && state.current.edges.some((e) => e.id === edge))
         scene.selectEdge(edge);
     }
   });
@@ -1208,12 +1215,12 @@ function addService(service: (typeof services)[number]): void {
   const [width, depth] = defaultSize(service.kind);
   let point: { x: number; z: number };
   try {
-    point = insertionSlot(current, scene.insertionPoint(), width, depth);
+    point = insertionSlot(state.current, scene.insertionPoint(), width, depth);
   } catch (error) {
     notify(String(error));
     return;
   }
-  history.execute({
+  state.history.execute({
     type: 'insert',
     node: {
       id,
@@ -1237,7 +1244,7 @@ function addService(service: (typeof services)[number]): void {
       color: service.color,
     },
   });
-  deferInspect(() => scene.load(current));
+  deferInspect(() => scene.load(state.current));
   scene.select(id);
   scene.reveal(id);
   updateHeader();
@@ -1261,7 +1268,7 @@ function placeAnnotation(kind: 'text' | 'note', x: number, z: number): void {
   const [width, depth] = defaultSize(kind);
   const snap = (value: number) =>
     scene.snapping ? Math.round(value / 10) * 10 : value;
-  history.execute({
+  state.history.execute({
     type: 'insert',
     node: {
       id,
@@ -1275,7 +1282,7 @@ function placeAnnotation(kind: 'text' | 'note', x: number, z: number): void {
       color: service.color,
     },
   });
-  deferInspect(() => scene.load(current));
+  deferInspect(() => scene.load(state.current));
   scene.select(id);
   updateHeader();
   selectTool('select');
@@ -1285,9 +1292,11 @@ scene.onPlace = placeAnnotation;
 scene.onEditRequest = (target) => {
   const node =
     target.kind === 'node'
-      ? current.nodes.find((n) => n.id === target.id)
+      ? state.current.nodes.find((n) => n.id === target.id)
       : undefined;
-  const detail = project.details?.find((entry) => entry.id === node?.detailId);
+  const detail = state.project.details?.find(
+    (entry) => entry.id === node?.detailId,
+  );
   if (detail) navigateDiagram(detail.document);
   else openEditor(target);
 };
@@ -1305,11 +1314,11 @@ function openEditor(target: EditTarget, created = false): void {
   }
   const node =
     target.kind === 'node'
-      ? current.nodes.find((n) => n.id === target.id)
+      ? state.current.nodes.find((n) => n.id === target.id)
       : undefined;
   const edge =
     target.kind === 'edge'
-      ? current.edges.find((e) => e.id === target.id)
+      ? state.current.edges.find((e) => e.id === target.id)
       : undefined;
   if (!node && !edge) return;
   const annotation = node?.kind === 'text' || node?.kind === 'note';
@@ -1372,7 +1381,7 @@ function openEditor(target: EditTarget, created = false): void {
       return;
     }
     if (node) {
-      const live = current.nodes.find((n) => n.id === node.id);
+      const live = state.current.nodes.find((n) => n.id === node.id);
       if (!live) return;
       if (created && live.kind === 'text' && !value.trim()) {
         travelHistory(false);
@@ -1388,7 +1397,7 @@ function openEditor(target: EditTarget, created = false): void {
         [live.id],
       );
     } else if (edge) {
-      const live = current.edges.find((e) => e.id === edge.id);
+      const live = state.current.edges.find((e) => e.id === edge.id);
       if (!live || value === live.label) return;
       commit(
         {
@@ -1471,19 +1480,22 @@ function fillOptions(
 function hasSelectedAncestor(node: DiagramNode): boolean {
   let parent = node.parentId;
   while (parent) {
-    if (selectedIds.has(parent)) return true;
-    parent = current.nodes.find((n) => n.id === parent)?.parentId;
+    if (state.selectedIds.has(parent)) return true;
+    parent = state.current.nodes.find((n) => n.id === parent)?.parentId;
   }
   return false;
 }
-function commit(edit: Edit, ids: readonly string[] = [...selectedIds]): void {
+function commit(
+  edit: Edit,
+  ids: readonly string[] = [...state.selectedIds],
+): void {
   scene.finishInteraction();
-  const edge = selectedEdge;
-  if (!history.execute(edit)) return;
+  const edge = state.selectedEdge;
+  if (!state.history.execute(edit)) return;
   deferInspect(() => {
-    scene.load(current);
+    scene.load(state.current);
     scene.selectMany(ids);
-    if (!ids.length && edge && current.edges.some((e) => e.id === edge))
+    if (!ids.length && edge && state.current.edges.some((e) => e.id === edge))
       scene.selectEdge(edge);
   });
   updateHeader();
@@ -1492,7 +1504,7 @@ function commit(edit: Edit, ids: readonly string[] = [...selectedIds]): void {
 }
 scene.onResize = (changes) => {
   const nodes = changes.flatMap(({ id, from, to }) => {
-    const node = current.nodes.find((n) => n.id === id);
+    const node = state.current.nodes.find((n) => n.id === id);
     if (!node) return [];
     const value = {
       ...node,
@@ -1514,7 +1526,7 @@ scene.onResize = (changes) => {
 };
 scene.onMoves = (moves) => {
   const nodes = moves.flatMap((move) => {
-    const node = current.nodes.find((n) => n.id === move.id);
+    const node = state.current.nodes.find((n) => n.id === move.id);
     if (!node) return [];
     const value = { ...node, ...move.to };
     Object.assign(node, move.from);
@@ -1573,7 +1585,7 @@ scene.onSketch = (stroke) => {
   const snap = (value: number) =>
     scene.snapping ? Math.round(value / 10) * 10 : Math.round(value);
   const id = crypto.randomUUID();
-  history.execute({
+  state.history.execute({
     type: 'insert',
     node: {
       id,
@@ -1588,14 +1600,14 @@ scene.onSketch = (stroke) => {
       color: service.color,
     },
   });
-  deferInspect(() => scene.load(current));
+  deferInspect(() => scene.load(state.current));
   scene.select(id);
   updateHeader();
   notify(`${service.label} added. Double-click to rename it.`);
 };
 /** The pen's eraser end: delete what it passed over in one undoable step. */
 scene.onErase = (nodes, edges) => {
-  const edit = deleteNodes(current, new Set(nodes));
+  const edit = deleteNodes(state.current, new Set(nodes));
   if (edit.type !== 'graph') return;
   const removed = new Set(edit.edges?.map((e) => e.id));
   const extra = edges
@@ -1613,8 +1625,8 @@ scene.onErase = (nodes, edges) => {
 const tablet = installTabletControls({
   scene,
   notify,
-  isRecording: () => recordingGif,
-  layersVisible: () => layersVisible,
+  isRecording: () => state.recording,
+  layersVisible: () => state.layersVisible,
   showLayers,
   components: {
     isOpen: () => !element('component-palette').hidden,
@@ -1672,60 +1684,63 @@ element('flow').onclick = () => setFlow(!scene.flow);
 function renderDiagramPath(): void {
   const nav = element('diagram-path');
   nav.replaceChildren();
-  if (current === project) return;
+  if (state.current === state.project) return;
   const home = document.createElement('button');
-  home.textContent = `⌂ ${project.title}`;
-  home.onclick = () => navigateDiagram(project, true);
+  home.textContent = `⌂ ${state.project.title}`;
+  home.onclick = () => navigateDiagram(state.project, true);
   const back = document.createElement('button');
   back.textContent = '← Back';
   back.onclick = () => {
-    const previous = diagramTrail.pop();
+    const previous = state.diagramTrail.pop();
     if (previous) navigateDiagram(previous, true);
   };
   const label = document.createElement('span');
-  label.textContent = current.title;
+  label.textContent = state.current.title;
   nav.append(home, back, label);
 }
-function navigateDiagram(board: typeof current, returning = false): void {
-  if (board === current) return;
+function navigateDiagram(board: DiagramDocument, returning = false): void {
+  if (board === state.current) return;
   scene.finishInteraction();
   closeEditor?.(true);
   scene.stopJourney();
-  if (!returning && board !== current) diagramTrail.push(current);
-  if (diagramTrail.length > 100) diagramTrail.shift();
-  if (board === project) diagramTrail = [];
-  current = board;
-  history.document = board;
-  selected = undefined;
-  selectedEdge = undefined;
-  selectedIds.clear();
-  checkedJourney = undefined;
-  deferInspect(() => scene.load(current));
+  if (!returning && board !== state.current)
+    state.diagramTrail.push(state.current);
+  if (state.diagramTrail.length > 100) state.diagramTrail.shift();
+  if (board === state.project) state.diagramTrail = [];
+  state.current = board;
+  state.history.document = board;
+  state.selected = undefined;
+  state.selectedEdge = undefined;
+  state.selectedIds.clear();
+  state.checkedJourney = undefined;
+  deferInspect(() => scene.load(state.current));
   scene.fit();
   updateHeader();
   inspect();
   notify(`Opened ${board.title}`);
 }
 element('detail-open').onclick = () => {
-  const id = current.nodes.find((n) => n.id === selected)?.detailId;
-  const board = project.details?.find((entry) => entry.id === id)?.document;
+  const id = state.current.nodes.find((n) => n.id === state.selected)?.detailId;
+  const board = state.project.details?.find(
+    (entry) => entry.id === id,
+  )?.document;
   if (board) navigateDiagram(board);
 };
 element('detail-create').onclick = () => {
-  const node = current.nodes.find((n) => n.id === selected);
+  const node = state.current.nodes.find((n) => n.id === state.selected);
   if (!node) return;
-  if ((project.details?.length ?? 0) >= 100) {
+  if ((state.project.details?.length ?? 0) >= 100) {
     notify('A project supports up to 100 detail diagrams');
     return;
   }
   const id = crypto.randomUUID();
-  const board: typeof current = {
+  const board: DiagramDocument = {
     version: 1,
     title: `${node.label} detail`,
     nodes: [],
     edges: [],
   };
-  history.execute({ type: 'detail', root: project, id, board });
+  state.history.execute({ type: 'detail', root: state.project, id, board });
   commit({
     type: 'graph',
     label: 'Link detail diagram',
@@ -1734,7 +1749,7 @@ element('detail-create').onclick = () => {
   navigateDiagram(board);
 };
 field('node-detail').onchange = () => {
-  const node = current.nodes.find((n) => n.id === selected);
+  const node = state.current.nodes.find((n) => n.id === state.selected);
   if (!node) return;
   const value = { ...node };
   if (field('node-detail').value) value.detailId = field('node-detail').value;
@@ -1746,7 +1761,7 @@ field('node-detail').onchange = () => {
   });
 };
 field('node-caption').onchange = () => {
-  const node = current.nodes.find((n) => n.id === selected);
+  const node = state.current.nodes.find((n) => n.id === state.selected);
   if (!node) return;
   commit({
     type: 'graph',
@@ -1763,7 +1778,7 @@ field('node-caption').onchange = () => {
   });
 };
 function scenarioOptions() {
-  return current.scenarios ?? defaultScenarios;
+  return state.current.scenarios ?? defaultScenarios;
 }
 function refreshScenarioChoices(): void {
   const select = element('traffic-scenario') as HTMLSelectElement;
@@ -1780,7 +1795,7 @@ function refreshScenarioChoices(): void {
     const value = endpoint.value;
     endpoint.replaceChildren(
       new Option('Not set', ''),
-      ...current.nodes
+      ...state.current.nodes
         .filter((n) => n.kind === 'service')
         .map((n) => new Option(n.label, n.id)),
     );
@@ -1858,17 +1873,17 @@ element('scenario-use').onclick = () => {
     const traffic = readTrafficFields();
     const source = field('scenario-source').value,
       target = field('scenario-target').value;
-    checkedJourney = undefined;
-    if (source && !current.nodes.some((n) => n.id === source))
+    state.checkedJourney = undefined;
+    if (source && !state.current.nodes.some((n) => n.id === source))
       throw Error('Scenario start is missing; choose another resource');
-    if (target && !current.nodes.some((n) => n.id === target))
+    if (target && !state.current.nodes.some((n) => n.id === target))
       throw Error('Scenario destination is missing; choose another resource');
-    commit({ type: 'traffic', from: current.traffic, to: traffic });
+    commit({ type: 'traffic', from: state.current.traffic, to: traffic });
     if (source && target) {
-      const result = checkReachability(current, source, target, traffic);
+      const result = checkReachability(state.current, source, target, traffic);
       notify(`${result.status}: ${result.reason}`);
       if (result.status !== 'unknown')
-        checkedJourney = {
+        state.checkedJourney = {
           path: result.path,
           allowed: result.status === 'allowed',
         };
@@ -1887,19 +1902,19 @@ function toggleJourney(): void {
     scene.stopJourney();
     return;
   }
-  const starts = checkedJourney
-    ? checkedJourney.path.slice(0, 1)
-    : journeyStarts(current, selected);
+  const starts = state.checkedJourney
+    ? state.checkedJourney.path.slice(0, 1)
+    : journeyStarts(state.current, state.selected);
   if (!starts.length) {
     notify(
       'No flow arrows. Use Reachability matrix for imported resources, or connect components.',
     );
     return;
   }
-  scene.playJourney(starts, checkedJourney);
+  scene.playJourney(starts, state.checkedJourney);
   element('journey').setAttribute('aria-pressed', 'true');
   const names = starts
-    .map((id) => current.nodes.find((n) => n.id === id)?.label)
+    .map((id) => state.current.nodes.find((n) => n.id === id)?.label)
     .join(', ');
   notify(`Journey from ${names} · P or Esc to stop`);
 }
@@ -1908,7 +1923,7 @@ element('traffic-settings').onclick = () => {
   const panel = element('traffic-panel');
   panel.hidden = !panel.hidden;
   refreshScenarioChoices();
-  const traffic = current.traffic ?? defaultTraffic;
+  const traffic = state.current.traffic ?? defaultTraffic;
   field('traffic-protocol').value = traffic.protocol;
   field('traffic-port').value = String(traffic.port);
   field('traffic-source').value = traffic.sourceIp;
@@ -1922,7 +1937,7 @@ element('traffic-apply').onclick = () => {
       sourceIp: field('traffic-source').value.trim(),
       direction: field('traffic-direction').value,
     });
-    commit({ type: 'traffic', from: current.traffic, to: traffic });
+    commit({ type: 'traffic', from: state.current.traffic, to: traffic });
     element('traffic-panel').hidden = true;
   } catch (error) {
     notify(String(error));
@@ -1940,7 +1955,7 @@ function updateRuleFields(): void {
 }
 field('rule-action').onchange = updateRuleFields;
 element('rule-apply').onclick = () => {
-  const edge = current.edges.find((e) => e.id === selectedEdge);
+  const edge = state.current.edges.find((e) => e.id === state.selectedEdge);
   if (!edge) return;
   try {
     const value = { ...edge };
@@ -1969,21 +1984,21 @@ element('rule-apply').onclick = () => {
   }
 };
 scene.onJourneyPermit = (id) => {
-  const edge = current.edges.find((e) => e.id === id);
+  const edge = state.current.edges.find((e) => e.id === id);
   const result = evaluateTraffic(
     edge?.networkRule,
-    current.traffic ?? defaultTraffic,
+    state.current.traffic ?? defaultTraffic,
   );
   if (
     edge &&
-    (current.nodes.find((n) => n.id === edge.source)?.network ||
-      current.nodes.find((n) => n.id === edge.target)?.network)
+    (state.current.nodes.find((n) => n.id === edge.source)?.network ||
+      state.current.nodes.find((n) => n.id === edge.target)?.network)
   ) {
     const reach = checkReachability(
-      current,
+      state.current,
       edge.source,
       edge.target,
-      current.traffic ?? defaultTraffic,
+      state.current.traffic ?? defaultTraffic,
     );
     if (reach.status !== 'allowed') {
       notify(`${reach.status.toUpperCase()} · ${reach.reason}`);
@@ -1995,10 +2010,10 @@ scene.onJourneyPermit = (id) => {
   return result.allowed;
 };
 scene.onJourneyHop = (id) => {
-  const edge = current.edges.find((e) => e.id === id);
+  const edge = state.current.edges.find((e) => e.id === id);
   if (!edge) return;
   const name = (nodeId: string) =>
-    current.nodes.find((n) => n.id === nodeId)?.label ?? '';
+    state.current.nodes.find((n) => n.id === nodeId)?.label ?? '';
   notify(
     `${edge.networkRule ? 'Allowed · ' : ''}${name(edge.source)} → ${name(edge.target)}${edge.label ? ` · ${edge.label}` : ''}`,
   );
@@ -2010,22 +2025,23 @@ scene.onJourneyCaption = (caption) => {
 scene.onJourneyEnd = () => {
   element('journey').setAttribute('aria-pressed', 'false');
 };
-scene.onJourneyBranches = (id) => journeyBranches(current, id);
+scene.onJourneyBranches = (id) => journeyBranches(state.current, id);
 /** Name a branch by its connection label, else by where it leads. */
 function branchName(edgeId: string): string {
-  const edge = current.edges.find((e) => e.id === edgeId);
+  const edge = state.current.edges.find((e) => e.id === edgeId);
   if (!edge) return 'Connection';
-  const target = current.nodes.find((n) => n.id === edge.target)?.label ?? '';
+  const target =
+    state.current.nodes.find((n) => n.id === edge.target)?.label ?? '';
   return edge.label ? `${edge.label} → ${target}` : `→ ${target}`;
 }
 let chooser: { close: (edge?: string) => void } | undefined;
 scene.onJourneyChoose = (nodeId, edges) =>
   new Promise((resolve) => {
-    if (recordingGif) {
+    if (state.recording) {
       resolve(edges[0]);
       return;
     }
-    const node = current.nodes.find((n) => n.id === nodeId);
+    const node = state.current.nodes.find((n) => n.id === nodeId);
     const rect = scene.nodeScreenRect(nodeId);
     const panel = document.createElement('section');
     panel.className = 'popover decision-chooser';
@@ -2092,16 +2108,17 @@ element('snap').onclick = () => {
 element('tool-group').onclick = () => {
   try {
     const id = crypto.randomUUID();
-    commit(groupNodes(current, selectedIds, id), [id]);
+    commit(groupNodes(state.current, state.selectedIds, id), [id]);
   } catch (error) {
     notify(String(error));
   }
 };
 element('ungroup').onclick = () =>
-  commit(ungroupNodes(current, selectedIds), []);
+  commit(ungroupNodes(state.current, state.selectedIds), []);
 element('duplicate').onclick = () => {
-  const edit = pasteFragment(copyFragment(current, selectedIds), () =>
-    crypto.randomUUID(),
+  const edit = pasteFragment(
+    copyFragment(state.current, state.selectedIds),
+    () => crypto.randomUUID(),
   );
   commit(
     edit,
@@ -2110,7 +2127,7 @@ element('duplicate').onclick = () => {
 };
 for (const key of ['x', 'z', 'width', 'depth'] as const)
   field(`node-${key}`).onchange = () => {
-    const node = current.nodes.find((n) => n.id === selected);
+    const node = state.current.nodes.find((n) => n.id === state.selected);
     if (!node) return;
     const value = Number(field(`node-${key}`).value);
     if (
@@ -2141,9 +2158,9 @@ for (const key of ['x', 'z', 'width', 'depth'] as const)
     });
   };
 field('node-parent').onchange = () => {
-  const node = current.nodes.find((n) => n.id === selected);
+  const node = state.current.nodes.find((n) => n.id === state.selected);
   if (!node) return;
-  const index = new Map(current.nodes.map((n) => [n.id, n]));
+  const index = new Map(state.current.nodes.map((n) => [n.id, n]));
   const world = worldPosition(node, index);
   const parent = field('node-parent').value;
   const target = index.get(parent);
@@ -2159,10 +2176,10 @@ field('node-parent').onchange = () => {
 };
 /** Nodes whose architecture details the panel edits: the whole selection. */
 function detailTargets(): DiagramNode[] {
-  const ids = selectedIds.size
-    ? selectedIds
-    : new Set(selected ? [selected] : []);
-  return current.nodes.filter((n) => ids.has(n.id));
+  const ids = state.selectedIds.size
+    ? state.selectedIds
+    : new Set(state.selected ? [state.selected] : []);
+  return state.current.nodes.filter((n) => ids.has(n.id));
 }
 /** Every node nested inside a boundary, at any depth. */
 function descendants(id: string): DiagramNode[] {
@@ -2170,7 +2187,7 @@ function descendants(id: string): DiagramNode[] {
   const result: DiagramNode[] = [];
   for (let changed = true; changed; ) {
     changed = false;
-    for (const n of current.nodes)
+    for (const n of state.current.nodes)
       if (n.parentId && inside.has(n.parentId) && !inside.has(n.id)) {
         inside.add(n.id);
         result.push(n);
@@ -2207,7 +2224,7 @@ for (const key of METADATA_KEYS)
     );
   };
 element('meta-apply-inside').onclick = () => {
-  const boundary = current.nodes.find((n) => n.id === selected);
+  const boundary = state.current.nodes.find((n) => n.id === state.selected);
   if (!boundary) return;
   const details = Object.fromEntries(
     Object.entries(boundary.metadata ?? {}).filter(([, value]) => value),
@@ -2232,7 +2249,7 @@ for (const key of [
   'bend',
 ] as const)
   field(`edge-${key}`).onchange = () => {
-    const edge = current.edges.find((e) => e.id === selectedEdge);
+    const edge = state.current.edges.find((e) => e.id === state.selectedEdge);
     if (!edge) return;
     const value = { ...edge };
     const input = field(`edge-${key}`).value;
@@ -2259,18 +2276,18 @@ for (const key of [
 element('delete-edge').onclick = deleteSelection;
 /** Which route actions apply to the selected connection's fork. */
 function routeActions(): { active: boolean; all: boolean } {
-  const edge = current.edges.find((e) => e.id === selectedEdge);
+  const edge = state.current.edges.find((e) => e.id === state.selectedEdge);
   if (!edge) return { active: false, all: false };
   const fork =
-    current.edges.filter((e) => e.source === edge.source).length >= 2;
-  const node = current.nodes.find((n) => n.id === edge.source);
+    state.current.edges.filter((e) => e.source === edge.source).length >= 2;
+  const node = state.current.nodes.find((n) => n.id === edge.source);
   const fixed = node?.journey?.mode === 'fixed' ? node.journey.edge : undefined;
   return { active: fork && fixed !== edge.id, all: fork && !!fixed };
 }
 /** Choose the connection a fork follows; the other branches dim and go still. */
 function setRoute(active: boolean): void {
-  const edge = current.edges.find((e) => e.id === selectedEdge);
-  const node = edge && current.nodes.find((n) => n.id === edge.source);
+  const edge = state.current.edges.find((e) => e.id === state.selectedEdge);
+  const node = edge && state.current.nodes.find((n) => n.id === edge.source);
   if (!edge || !node) return;
   const value = { ...node };
   if (active) value.journey = { mode: 'fixed', edge: edge.id };
@@ -2295,13 +2312,13 @@ element('edge-all-routes').onclick = () => setRoute(false);
 scene.onContextMenu = (x, y) => {
   const menu = element('context-menu');
   for (const row of menu.querySelectorAll<HTMLElement>('[data-multi]'))
-    row.hidden = !!selectedEdge || selectedIds.size < 2;
+    row.hidden = !!state.selectedEdge || state.selectedIds.size < 2;
   for (const button of menu.querySelectorAll<HTMLButtonElement>(
     'button[data-action]',
   )) {
     const action = button.dataset.action;
     const routes = routeActions();
-    button.hidden = selectedEdge
+    button.hidden = state.selectedEdge
       ? action === 'edge-active'
         ? !routes.active
         : action === 'edge-all-routes'
@@ -2310,7 +2327,7 @@ scene.onContextMenu = (x, y) => {
       : action === 'edge-active' || action === 'edge-all-routes'
         ? true
         : action === 'delete' || action === 'duplicate'
-          ? !selectedIds.size
+          ? !state.selectedIds.size
           : false;
   }
   menu.hidden = false;
@@ -2328,11 +2345,11 @@ const alignments: readonly [Alignment, string][] = [
   ['distribute-z', 'Distribute vertically'],
 ];
 function align(alignment: Alignment): void {
-  if (selectedIds.size < 2) {
+  if (state.selectedIds.size < 2) {
     notify('Select two or more components to align.');
     return;
   }
-  commit(alignNodes(current, selectedIds, alignment));
+  commit(alignNodes(state.current, state.selectedIds, alignment));
 }
 for (const button of document.querySelectorAll<HTMLButtonElement>(
   '#context-menu [data-align]',
@@ -2372,11 +2389,11 @@ window.addEventListener('pointerdown', (event) => {
 });
 for (const type of ['copy', 'cut'] as const)
   window.addEventListener(type, (event) => {
-    if (isTextTarget(event.target) || !selectedIds.size) return;
+    if (isTextTarget(event.target) || !state.selectedIds.size) return;
     event.preventDefault();
     event.clipboardData?.setData(
       'text/plain',
-      serializeDocument(copyFragment(current, selectedIds)),
+      serializeDocument(copyFragment(state.current, state.selectedIds)),
     );
     if (type === 'cut') deleteSelection();
   });
@@ -2399,7 +2416,7 @@ window.addEventListener('paste', (event) => {
 window.addEventListener(
   'keydown',
   (event) => {
-    if (!recordingGif) return;
+    if (!state.recording) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (event.key === 'Escape') recordingAbort?.abort();
@@ -2414,7 +2431,7 @@ window.addEventListener('keydown', (event) => {
   ) {
     event.preventDefault();
     const key = event.key.toLowerCase();
-    if (key === 'a') scene.selectMany(current.nodes.map((n) => n.id));
+    if (key === 'a') scene.selectMany(state.current.nodes.map((n) => n.id));
     else
       element(
         key === 'd' ? 'duplicate' : event.shiftKey ? 'ungroup' : 'tool-group',
@@ -2546,8 +2563,8 @@ window.addEventListener('keydown', (event) => {
     event.altKey
   )
     return;
-  const roots = current.nodes.filter(
-    (n) => selectedIds.has(n.id) && !hasSelectedAncestor(n),
+  const roots = state.current.nodes.filter(
+    (n) => state.selectedIds.has(n.id) && !hasSelectedAncestor(n),
   );
   const arrow = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(
     event.key,
@@ -2590,9 +2607,9 @@ window.addEventListener('keydown', (event) => {
   if (event.key.toLowerCase() === 't') element('tool-text').click();
   if (event.key.toLowerCase() === 'n') element('tool-note').click();
   if (event.key.toLowerCase() === 'b') element('tool-sketch').click();
-  if (event.key === 'Enter' && selected) {
+  if (event.key === 'Enter' && state.selected) {
     event.preventDefault();
-    openEditor({ kind: 'node', id: selected });
+    openEditor({ kind: 'node', id: state.selected });
   }
   if (event.key.toLowerCase() === 'f') scene.fit();
   if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -2606,20 +2623,20 @@ window.addEventListener('keyup', (event) => {
 window.addEventListener('blur', () => cameraKeys.stop());
 window.addEventListener('beforeunload', (event) => {
   scene.finishInteraction();
-  if (dirty) event.preventDefault();
+  if (state.dirty) event.preventDefault();
 });
 window.addEventListener('pagehide', () => scene.dispose(), { once: true });
 if (import.meta.env.DEV)
   Object.assign(window, {
     solarForge: {
       scene,
-      document: () => current,
-      project: () => project,
+      document: () => state.current,
+      project: () => state.project,
       load: (json: string) => replaceDocument(parseDocument(json)),
     },
   });
 function adaptViewport(): void {
-  if (innerWidth < 800 && layersVisible) showLayers(false);
+  if (innerWidth < 800 && state.layersVisible) showLayers(false);
 }
 window.addEventListener('resize', adaptViewport);
 populateServices();
@@ -2643,12 +2660,12 @@ void (async () => {
     let closing = false;
     await getCurrentWindow().onCloseRequested((event) => {
       event.preventDefault();
-      if (closing || busy) return;
+      if (closing || state.busy) return;
       closing = true;
       void (async () => {
         if (!(await canReplace())) return;
         // A deliberate discard also removes the recovery snapshot.
-        if (recoveryReady) {
+        if (state.recoveryReady) {
           await recovery.flush();
           await writeRecovery(null);
         }
@@ -2672,7 +2689,7 @@ void (async () => {
     );
     if (decision === 'Recover') {
       replaceDocument(parseDocument(content));
-      history.markSaved(-1);
+      state.history.markSaved(-1);
       updateHeader();
       notify('Recovered diagram. Save to choose a destination.');
     } else if (decision === 'Discard recovery') await writeRecovery(null);
@@ -2681,9 +2698,9 @@ void (async () => {
       return;
     }
   }
-  recoveryReady = true;
+  state.recoveryReady = true;
   window.addEventListener('blur', () => {
-    if (history.isDirty) {
+    if (state.history.isDirty) {
       recovery.schedule();
       void recovery.flush().catch(() => {});
     }
@@ -2691,13 +2708,13 @@ void (async () => {
   if (!native) return;
   await refreshRecents();
   const openPending = async () => {
-    if (busy) return;
+    if (state.busy) return;
     const opened = await invoke<OpenedFile | null>('take_pending_file');
     if (!opened) return;
     await action(async () => {
       if (!(await canReplace())) return;
       replaceDocument(parseDocument(opened.content));
-      fileHandle = opened.handle;
+      state.fileHandle = opened.handle;
       notify(`Opened ${opened.name}`);
       await refreshRecents();
     });
