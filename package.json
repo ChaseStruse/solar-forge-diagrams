@@ -15,7 +15,8 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "check:size": "bun scripts/check-budgets.ts",
-    "verify": "bun run lint && bun run check && bun test && bun run build && bun run check:size"
+    "verify": "bun run lint && bun run check && bun test && bun run build && bun run check:size",
+    "smoke": "bun scripts/browser-smoke.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "2.10.1",
