@@ -84,7 +84,7 @@ export async function openInfrastructureFiles(): Promise<
   { name: string; content: string }[]
 > {
   if (isTauri()) return invoke('open_infrastructure');
-  const files = await pickFiles('.tf,.json,.yaml,.yml', true);
+  const files = await pickFiles('.mmd,.mermaid,.tf,.json,.yaml,.yml', true);
   if (
     files.length > 256 ||
     files.reduce((sum, f) => sum + f.size, 0) > 50_000_000

@@ -1,0 +1,22 @@
+---
+title: Checkout flow
+---
+flowchart TD
+  %% A customer checks out; payment can fail and be retried.
+  start([Customer opens cart]) --> review[Review items]
+  review --> signedIn{Signed in?}
+  signedIn -->|No| login[Sign in or continue as guest]
+  login --> address
+  signedIn -->|Yes| address[Enter delivery address]
+  address --> pay[Pay]
+
+  subgraph payments [Payment service]
+    pay --> charge{Card approved?}
+    charge -- declined --> retry[Ask for another card]
+    retry --> pay
+  end
+
+  charge -->|approved| confirm[Create order]
+  confirm --> email[Send confirmation email]
+  confirm -.-> analytics[(Analytics)]
+  email --> done([Order placed])

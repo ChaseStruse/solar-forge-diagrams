@@ -1,6 +1,7 @@
 import type { DiagramDocument } from '../domain/document';
 import { importInWorker } from '../import/client';
 import type { ImportFormat } from '../import/infrastructure';
+import { looksLikeMermaid } from '../import/mermaid';
 import type { ImportResult, InfrastructureFile } from '../import/types';
 import { openInfrastructureFiles } from '../platform/files';
 
@@ -11,8 +12,8 @@ export function infrastructureImporter(host: {
   const panel = document.createElement('section');
   panel.className = 'workspace-dialog';
   panel.hidden = true;
-  panel.setAttribute('aria-label', 'Import infrastructure');
-  panel.innerHTML = `<div class="dialog-heading"><h2>Import infrastructure</h2><button data-close aria-label="Close import">×</button></div><p>Choose .tf files together, or a Terraform JSON, CloudFormation, or Compose file. Files stay on this computer; code is never executed.</p><label>Format<select data-format><option value="auto">Detect format</option><option value="terraform">Terraform HCL / show JSON</option><option value="cloudformation">CloudFormation YAML / JSON</option><option value="compose">Docker Compose</option></select></label><button data-files>Choose files…</button><p data-names>No files selected</p><label>Or paste infrastructure code<textarea data-source rows="9" spellcheck="false" placeholder="Paste code here; use Format to select Terraform for pasted HCL"></textarea></label><button data-preview>Preview import</button><div data-summary role="status"></div><ul data-warnings></ul><div class="dialog-actions"><button data-apply disabled>Import diagram</button></div>`;
+  panel.setAttribute('aria-label', 'Import a diagram');
+  panel.innerHTML = `<div class="dialog-heading"><h2>Import</h2><button data-close aria-label="Close import">×</button></div><p>Choose a Mermaid flowchart, .tf files together, or a Terraform JSON, CloudFormation, or Compose file. Files stay on this computer; code is never executed.</p><label>Format<select data-format><option value="auto">Detect format</option><option value="terraform">Terraform HCL / show JSON</option><option value="cloudformation">CloudFormation YAML / JSON</option><option value="compose">Docker Compose</option><option value="mermaid">Mermaid flowchart</option></select></label><button data-files>Choose files…</button><p data-names>No files selected</p><label>Or paste Mermaid or infrastructure code<textarea data-source rows="9" spellcheck="false" placeholder="Paste a Mermaid flowchart or infrastructure code; use Format to select Terraform for pasted HCL"></textarea></label><button data-preview>Preview import</button><div data-summary role="status"></div><ul data-warnings></ul><div class="dialog-actions"><button data-apply disabled>Import diagram</button></div>`;
   document.body.append(panel);
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
@@ -65,14 +66,17 @@ export function infrastructureImporter(host: {
         ? [
             {
               name:
-                (format.value === 'terraform' ||
-                  (format.value === 'auto' &&
-                    /^\s*(resource|provider|variable|terraform|locals)\b/m.test(
-                      source.value,
-                    ))) &&
-                !source.value.trimStart().startsWith('{')
-                  ? 'pasted.tf'
-                  : 'pasted.yaml',
+                format.value === 'mermaid' ||
+                (format.value === 'auto' && looksLikeMermaid(source.value))
+                  ? 'pasted.mmd'
+                  : (format.value === 'terraform' ||
+                        (format.value === 'auto' &&
+                          /^\s*(resource|provider|variable|terraform|locals)\b/m.test(
+                            source.value,
+                          ))) &&
+                      !source.value.trimStart().startsWith('{')
+                    ? 'pasted.tf'
+                    : 'pasted.yaml',
               content: source.value,
             },
           ]
@@ -84,7 +88,12 @@ export function infrastructureImporter(host: {
       );
       if (controller.signal.aborted || request !== revision) return;
       preview = result;
-      summary.textContent = `${preview.format} · ${preview.document.nodes.filter((n) => n.kind !== 'group').length} resources · ${preview.document.nodes.filter((n) => n.kind === 'group').length} boundaries · ${preview.warnings.length} warnings. Import replaces the current board with an automatically laid out diagram; Undo restores it.`;
+      const flowchart = preview.format === 'Mermaid flowchart';
+      const shapes = preview.document.nodes.filter(
+        (n) => n.kind !== 'group',
+      ).length;
+      const groups = preview.document.nodes.length - shapes;
+      summary.textContent = `${preview.format} · ${shapes} ${flowchart ? 'shapes' : 'resources'} · ${groups} ${flowchart ? 'groups' : 'boundaries'} · ${flowchart ? `${preview.document.edges.length} connections · ` : ''}${preview.warnings.length} warnings. Import replaces the current board with an automatically laid out diagram; Undo restores it.`;
       for (const message of preview.warnings.slice(0, 200)) {
         const li = document.createElement('li');
         li.textContent = message;

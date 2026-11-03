@@ -134,7 +134,10 @@ async fn open_infrastructure(
             .dialog()
             .file()
             .set_parent(&window)
-            .add_filter("Infrastructure code", &["tf", "json", "yaml", "yml"])
+            .add_filter(
+                "Mermaid or infrastructure code",
+                &["mmd", "mermaid", "tf", "json", "yaml", "yml"],
+            )
             .blocking_pick_files()
         else {
             return Ok(Vec::new());

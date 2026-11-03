@@ -2,7 +2,7 @@
  * Browser smoke test: starts the Vite dev server, opens the app in headless
  * Chromium over the DevTools protocol and drives the editor through its main
  * flows, including real mouse gestures. Fails on any broken check or page
- * error. Needs a Chromium build on PATH (or CHROMIUM=/path/to/chrome).
+ * error. Needs Node and a Chromium build on PATH (or NODE=…, CHROMIUM=…).
  *
  *   bun run smoke            # writes smoke.png in the system temp folder
  *   bun run smoke out.png    # choose the screenshot path
@@ -21,9 +21,9 @@ const vite = process.env.SMOKE_URL
   ? undefined
   : Bun.spawn(
       [
-        'bun',
-        'x',
-        'vite',
+        // Vite runs on Node; spawning it directly lets one kill stop it.
+        process.env.NODE ?? 'node',
+        join(import.meta.dir, '../node_modules/vite/bin/vite.js'),
         '--host',
         '127.0.0.1',
         '--port',
@@ -61,6 +61,14 @@ const shutdown = () => {
   vite?.kill();
   rmSync(scratch, { recursive: true, force: true });
 };
+// A step that throws must not leave Chromium and Vite running.
+const abort = (error: unknown) => {
+  console.error(error);
+  shutdown();
+  process.exit(1);
+};
+process.on('uncaughtException', abort);
+process.on('unhandledRejection', abort);
 let target: { webSocketDebuggerUrl: string } | undefined;
 for (let i = 0; i < 50 && !target; i++) {
   await Bun.sleep(200);
@@ -626,6 +634,56 @@ await Bun.sleep(300);
   );
   await key('z', 2, 'KeyZ');
   check('undo erase', (await doc()).nodes.length === n0count);
+}
+
+// Mermaid import through the real dialog and its worker.
+{
+  const chart = await Bun.file(
+    new URL('../examples/mermaid/checkout.mmd', import.meta.url),
+  ).text();
+  await evaluate(`document.querySelector('#import-infrastructure').click()`);
+  await evaluate(`(() => {
+    const dialog = document.querySelector('[aria-label="Import a diagram"]');
+    const source = dialog.querySelector('[data-source]');
+    source.value = ${JSON.stringify(chart)};
+    source.oninput();
+    dialog.querySelector('[data-preview]').click();
+  })()`);
+  for (
+    let i = 0;
+    i < 50 &&
+    (await evaluate(
+      `document.querySelector('[aria-label="Import a diagram"] [data-apply]').disabled`,
+    ));
+    i++
+  )
+    await Bun.sleep(100);
+  const summary = await evaluate(
+    `document.querySelector('[aria-label="Import a diagram"] [data-summary]').textContent`,
+  );
+  check(
+    'mermaid preview summarises',
+    /Mermaid flowchart · 12 shapes · 1 groups · 13 connections/.test(summary),
+  );
+  await evaluate(
+    `document.querySelector('[aria-label="Import a diagram"] [data-apply]').click()`,
+  );
+  await Bun.sleep(400);
+  const imported = await doc();
+  check(
+    'mermaid import replaces board',
+    imported.title === 'Checkout flow' && imported.nodes.length === 13,
+  );
+  check(
+    'mermaid decisions become diamonds',
+    imported.nodes.filter((n: DiagramNode) => n.shape === 'decision').length ===
+      2,
+  );
+  await key('z', 2, 'KeyZ');
+  check(
+    'undo restores the previous board',
+    (await doc()).title !== 'Checkout flow',
+  );
 }
 
 // Example with detail diagrams, navigate in and out.

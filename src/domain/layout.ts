@@ -6,9 +6,22 @@ const GAP_X = 120,
   PADDING = 70,
   HEADER = 70;
 const grid = (n: number) => Math.ceil(n / 10) * 10;
+/** Which way flow runs: layers advance left to right, or top to bottom. */
+export type LayoutDirection = 'right' | 'down';
 /** Deterministic layered packing, from the innermost boundary outwards. */
-export function layoutDocument(input: DiagramDocument): DiagramDocument {
+export function layoutDocument(
+  input: DiagramDocument,
+  direction: LayoutDirection = 'right',
+): DiagramDocument {
   const doc = structuredClone(input);
+  const down = direction === 'down';
+  // Layers advance along the main axis; a layer's members spread across it.
+  const along = (n: DiagramNode) => (down ? n.depth : n.width);
+  const across = (n: DiagramNode) => (down ? n.width : n.depth);
+  const place = (n: DiagramNode, main: number, cross: number) => {
+    n.x = grid(down ? cross : main);
+    n.z = grid(down ? main : cross);
+  };
   const nodes = new Map(doc.nodes.map((n) => [n.id, n]));
   const children = new Map<string | undefined, DiagramNode[]>();
   for (const n of doc.nodes) {
@@ -78,28 +91,32 @@ export function layoutDocument(input: DiagramDocument): DiagramDocument {
       column.push(n);
       columns.set(r, column);
     }
-    let x = 0,
-      maxDepth = 0;
+    const gapAlong = down ? GAP_Z : GAP_X,
+      gapAcross = down ? GAP_X : GAP_Z;
+    let main = 0,
+      maxCross = 0;
     for (const [, column] of [...columns].sort((a, b) => a[0] - b[0])) {
       column.sort((a, b) => a.id.localeCompare(b.id));
       // Wrap wide independent sets into rows instead of a very tall column.
       const slots = Math.max(1, Math.ceil(Math.sqrt(column.length)));
-      const columnWidth = Math.max(...column.map((n) => n.width));
-      let z = 0;
+      const columnSize = Math.max(...column.map(along));
+      let cross = 0;
       for (let i = 0; i < column.length; i += slots) {
         const row = column.slice(i, i + slots);
-        const depth = Math.max(...row.map((n) => n.depth));
-        for (const [j, n] of row.entries()) {
-          n.x = grid(x + j * (columnWidth + GAP_X) + columnWidth / 2);
-          n.z = grid(z + depth / 2);
-        }
-        z += depth + GAP_Z;
+        const rowSize = Math.max(...row.map(across));
+        for (const [j, n] of row.entries())
+          place(
+            n,
+            main + j * (columnSize + gapAlong) + columnSize / 2,
+            cross + rowSize / 2,
+          );
+        cross += rowSize + gapAcross;
       }
-      x += slots * (columnWidth + GAP_X);
-      maxDepth = Math.max(maxDepth, z - GAP_Z);
+      main += slots * (columnSize + gapAlong);
+      maxCross = Math.max(maxCross, cross - gapAcross);
     }
-    const width = x - GAP_X,
-      depth = maxDepth;
+    const width = down ? maxCross : main - gapAlong,
+      depth = down ? main - gapAlong : maxCross;
     for (const n of list) {
       n.x = grid(n.x - width / 2);
       n.z = grid(n.z - depth / 2 + HEADER / 2);
@@ -120,8 +137,11 @@ export function layoutDocument(input: DiagramDocument): DiagramDocument {
   }
   return doc;
 }
-export function layoutEdit(doc: DiagramDocument): Edit {
-  const laid = layoutDocument(doc);
+export function layoutEdit(
+  doc: DiagramDocument,
+  direction: LayoutDirection = 'right',
+): Edit {
+  const laid = layoutDocument(doc, direction);
   return {
     type: 'graph',
     label: 'Automatic layout',

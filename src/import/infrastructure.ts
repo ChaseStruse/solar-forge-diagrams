@@ -7,6 +7,7 @@ import { parseDocument, serializeDocument } from '../domain/document';
 import { importAws } from './aws';
 import { importCompose } from './compose';
 import { parseHcl } from './hcl';
+import { importMermaid, looksLikeMermaid } from './mermaid';
 import {
   type ImportResult,
   type InfrastructureFile,
@@ -14,7 +15,12 @@ import {
   obj,
   type Resource,
 } from './types';
-export type ImportFormat = 'auto' | 'terraform' | 'cloudformation' | 'compose';
+export type ImportFormat =
+  | 'auto'
+  | 'terraform'
+  | 'cloudformation'
+  | 'compose'
+  | 'mermaid';
 /** Terraform arguments that placement, routing or firewall analysis reads. */
 const networkAttributes = new Set([
   'vpc_id',
@@ -392,7 +398,18 @@ export function importInfrastructure(
     requested === 'terraform' ||
     (requested === 'auto' && files.some((f) => /\.tf$/i.test(f.name)));
   let result: ImportResult;
-  if (terraform && files.every((f) => /\.tf$/i.test(f.name))) {
+  const mermaid =
+    requested === 'mermaid' ||
+    (requested === 'auto' &&
+      files.some(
+        (f) => /\.(mmd|mermaid)$/i.test(f.name) || looksLikeMermaid(f.content),
+      ));
+  if (mermaid) {
+    const [file] = files;
+    if (files.length !== 1 || !file)
+      throw Error('Choose one Mermaid file at a time');
+    result = importMermaid(file.content, file.name);
+  } else if (terraform && files.every((f) => /\.tf$/i.test(f.name))) {
     const blocks = files.flatMap((f) => parseHcl(f.content)),
       parameters: Record<string, unknown> = {};
     for (const b of blocks) {
