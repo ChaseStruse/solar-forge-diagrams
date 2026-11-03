@@ -6,7 +6,6 @@ import {
   DirectionalLight,
   DynamicDrawUsage,
   EdgesGeometry,
-  ExtrudeGeometry,
   FogExp2,
   GridHelper,
   Group,
@@ -20,7 +19,6 @@ import {
   Plane,
   Raycaster,
   Scene,
-  Shape,
   SphereGeometry,
   Vector2,
   Vector3,
@@ -54,13 +52,17 @@ import { defaultTheme, type ScenePalette } from '../themes';
 import { createAnnotation, NOTE_HEIGHT } from './annotations';
 import { AntialiasPass, OVERLAY_LAYER, overlay } from './antialias';
 import { createBackdrop } from './backdrop';
+import { drawCaption } from './caption';
+import { createFlowGeometries } from './flow-shapes';
 import { JourneyPlayer } from './journey';
 import { LabelAtlas, rasterBucket } from './labels';
+import { OverlayLine } from './overlay-line';
 import {
   nodesInSelectionRect,
   type ScreenPoint,
   selectionRect,
 } from './selection';
+import { type Rect, snapToNeighbours } from './smart-guides';
 import { TileBodies } from './tile-bodies';
 import { TileDetails } from './tile-details';
 import { BoardView, type ViewMode } from './view';
@@ -72,12 +74,6 @@ const FOG_DENSITY = 0.00012;
 /** Marching-dash defaults; themes may override them via flowStyle. */
 const DEFAULT_FLOW = { width: 3.6, dash: 12, gap: 38, speed: 40 };
 
-interface Rect {
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-}
 interface Box {
   x: number;
   z: number;
@@ -286,25 +282,35 @@ export class DiagramScene {
   /** Selection affordances: resize squares on the outline, connect dots outside it. */
   private readonly ports = new Group();
   private connectionStart: { id: string; port?: Port } | undefined;
-  private readonly previewMaterial = new LineMaterial({
-    color: '#ffc778',
-    linewidth: 2,
-    transparent: true,
-    opacity: 0.85,
-    depthTest: false,
-    dashed: true,
-    dashSize: 10,
-    gapSize: 7,
-  });
-  private preview: LineSegments2 | undefined;
-  private readonly inkMaterial = new LineMaterial({
-    color: '#ffc778',
-    linewidth: 3,
-    transparent: true,
-    opacity: 0.9,
-    depthTest: false,
-  });
-  private ink: LineSegments2 | undefined;
+  /** Dashed line from a connection's start to the pointer. */
+  private readonly preview = new OverlayLine(
+    this.scene,
+    new LineMaterial({
+      color: '#ffc778',
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.85,
+      depthTest: false,
+      dashed: true,
+      dashSize: 10,
+      gapSize: 7,
+    }),
+    11,
+    () => this.invalidate(),
+  );
+  /** The sketch tool's live pen stroke. */
+  private readonly ink = new OverlayLine(
+    this.scene,
+    new LineMaterial({
+      color: '#ffc778',
+      linewidth: 3,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+    }),
+    12,
+    () => this.invalidate(),
+  );
   /** The pen stroke being drawn with the sketch tool. */
   private stroke:
     | {
@@ -392,17 +398,22 @@ export class DiagramScene {
         others: Rect[];
       }
     | undefined;
-  private readonly guideMaterial = new LineMaterial({
-    color: '#ff2a6d',
-    linewidth: 1.5,
-    transparent: true,
-    opacity: 0.9,
-    depthTest: false,
-    dashed: true,
-    dashSize: 8,
-    gapSize: 6,
-  });
-  private guides: LineSegments2 | undefined;
+  /** Smart guides shown while dragging. */
+  private readonly guides = new OverlayLine(
+    this.scene,
+    new LineMaterial({
+      color: '#ff2a6d',
+      linewidth: 1.5,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+      dashed: true,
+      dashSize: 8,
+      gapSize: 6,
+    }),
+    11,
+    () => this.invalidate(),
+  );
   private pan: { x: number; z: number } | undefined;
   private activePointer: number | undefined;
   private readonly selectionBox = document.createElement('div');
@@ -580,10 +591,10 @@ export class DiagramScene {
     this.scene.add(this.grid);
     this.portMaterial.color.set(palette.port);
     this.handleMaterial.color.set(palette.handle);
-    this.previewMaterial.color.set(palette.edgeSelected);
-    this.inkMaterial.color.set(palette.edgeSelected);
+    this.preview.material.color.set(palette.edgeSelected);
+    this.ink.material.color.set(palette.edgeSelected);
     this.flowMaterial.color.set(palette.flow);
-    this.guideMaterial.color.set(palette.guide);
+    this.guides.material.color.set(palette.guide);
     this.haloMaterial.opacity = palette.haloOpacity;
     const width = palette.edgeWidth ?? 1.6;
     this.edgeMaterial.linewidth = width;
@@ -1410,69 +1421,12 @@ export class DiagramScene {
       this.pixelSize(
         new Vector3((box.minX + box.maxX) / 2, 0, (box.minZ + box.maxZ) / 2),
       );
-    const lines = (min: number, max: number) => [min, (min + max) / 2, max];
-    let bestX: { diff: number; at: number; other: Rect } | undefined;
-    let bestZ: { diff: number; at: number; other: Rect } | undefined;
-    for (const other of drag.others) {
-      for (const a of lines(box.minX + dx, box.maxX + dx))
-        for (const b of lines(other.minX, other.maxX)) {
-          const diff = b - a;
-          if (
-            Math.abs(diff) < threshold &&
-            (!bestX || Math.abs(diff) < Math.abs(bestX.diff))
-          )
-            bestX = { diff, at: b, other };
-        }
-      for (const a of lines(box.minZ + dz, box.maxZ + dz))
-        for (const b of lines(other.minZ, other.maxZ)) {
-          const diff = b - a;
-          if (
-            Math.abs(diff) < threshold &&
-            (!bestZ || Math.abs(diff) < Math.abs(bestZ.diff))
-          )
-            bestZ = { diff, at: b, other };
-        }
-    }
-    if (bestX) dx += bestX.diff;
-    if (bestZ) dz += bestZ.diff;
-    const segments: number[] = [];
-    const y = 16;
-    if (bestX) {
-      const from = Math.min(box.minZ + dz, bestX.other.minZ) - 30;
-      const to = Math.max(box.maxZ + dz, bestX.other.maxZ) + 30;
-      segments.push(bestX.at, y, from, bestX.at, y, to);
-    }
-    if (bestZ) {
-      const from = Math.min(box.minX + dx, bestZ.other.minX) - 30;
-      const to = Math.max(box.maxX + dx, bestZ.other.maxX) + 30;
-      segments.push(from, y, bestZ.at, to, y, bestZ.at);
-    }
-    this.showGuides(segments);
-    return { dx, dz };
+    const snapped = snapToNeighbours(box, drag.others, dx, dz, threshold);
+    this.showGuides(snapped.segments);
+    return { dx: snapped.dx, dz: snapped.dz };
   }
   private showGuides(positions: number[]): void {
-    if (!positions.length) {
-      if (this.guides) {
-        this.scene.remove(this.guides);
-        this.guides.geometry.dispose();
-        this.guides = undefined;
-        this.invalidate();
-      }
-      return;
-    }
-    if (this.guides) {
-      this.scene.remove(this.guides);
-      this.guides.geometry.dispose();
-    }
-    this.guides = new LineSegments2(
-      new LineSegmentsGeometry().setPositions(positions),
-      this.guideMaterial,
-    );
-    this.guides.computeLineDistances();
-    this.guides.frustumCulled = false;
-    this.guides.renderOrder = 11;
-    this.scene.add(overlay(this.guides));
-    this.invalidate();
+    this.guides.set(positions);
   }
   private applySize(tile: Tile): void {
     const mesh = tile.group.children[0];
@@ -1550,22 +1504,10 @@ export class DiagramScene {
       const b = points[i] as { x: number; z: number };
       positions.push(a.x, 30, a.z, b.x, 30, b.z);
     }
-    this.clearInk();
-    this.ink = new LineSegments2(
-      new LineSegmentsGeometry().setPositions(positions),
-      this.inkMaterial,
-    );
-    this.ink.frustumCulled = false;
-    this.ink.renderOrder = 12;
-    this.scene.add(overlay(this.ink));
-    this.invalidate();
+    this.ink.set(positions);
   }
   private clearInk(): void {
-    if (!this.ink) return;
-    this.scene.remove(this.ink);
-    this.ink.geometry.dispose();
-    this.ink = undefined;
-    this.invalidate();
+    this.ink.clear();
   }
   /** Mark whatever the eraser is over; boundaries are left alone. */
   private eraseAt(event: PointerEvent): void {
@@ -1593,25 +1535,10 @@ export class DiagramScene {
       ? portPosition(tile.node, start.port, this.nodeIndex)
       : { x: tile.group.position.x, z: tile.group.position.z };
     const y = tile.group.position.y + 14;
-    const positions = [from.x, y, from.z, point.x, y, point.z];
-    if (!this.preview) {
-      this.preview = new LineSegments2(
-        new LineSegmentsGeometry().setPositions(positions),
-        this.previewMaterial,
-      );
-      this.preview.frustumCulled = false;
-      this.preview.renderOrder = 11;
-      this.scene.add(overlay(this.preview));
-    } else this.preview.geometry.setPositions(positions);
-    this.preview.computeLineDistances();
-    this.invalidate();
+    this.preview.set([from.x, y, from.z, point.x, y, point.z]);
   }
   private clearPreview(): void {
-    if (!this.preview) return;
-    this.scene.remove(this.preview);
-    this.preview.geometry.dispose();
-    this.preview = undefined;
-    this.invalidate();
+    this.preview.clear();
   }
   public refreshPosition(id: string): void {
     this.refreshPositions([id]);
@@ -2476,47 +2403,8 @@ export class DiagramScene {
     canvas.height = Math.max(1, Math.round(source.height * scale));
     const context = canvas.getContext('2d');
     context?.drawImage(source, 0, 0, canvas.width, canvas.height);
-    if (context && this.journeyCaption) {
-      const size = Math.max(12, Math.round(canvas.width / 48));
-      context.font = `${size}px sans-serif`;
-      const lines: string[] = [];
-      for (const paragraph of this.journeyCaption.split('\n')) {
-        let line = '';
-        for (const char of paragraph) {
-          if (
-            context.measureText(line + char).width > canvas.width - 48 &&
-            line
-          ) {
-            lines.push(line);
-            line = '';
-          }
-          line += char;
-        }
-        lines.push(line);
-      }
-      const visible = lines.slice(
-        0,
-        Math.max(1, Math.floor(canvas.height / (size * 3))),
-      );
-      if (visible.length < lines.length) visible[visible.length - 1] += '…';
-      const height = visible.length * size * 1.4 + 16;
-      context.fillStyle = '#111827';
-      context.fillRect(
-        8,
-        canvas.height - height - 8,
-        canvas.width - 16,
-        height,
-      );
-      context.fillStyle = '#ffffff';
-      context.textAlign = 'center';
-      visible.forEach((line, i) => {
-        context.fillText(
-          line,
-          canvas.width / 2,
-          canvas.height - height + size + i * size * 1.4,
-        );
-      });
-    }
+    if (context && this.journeyCaption)
+      drawCaption(context, canvas.width, canvas.height, this.journeyCaption);
     return canvas;
   }
   public png(): Promise<Blob> {
@@ -2541,10 +2429,8 @@ export class DiagramScene {
     this.grid.dispose();
     for (const geometry of Object.values(this.shapeGeometries))
       geometry.dispose();
-    this.clearPreview();
-    this.previewMaterial.dispose();
-    this.clearInk();
-    this.inkMaterial.dispose();
+    this.preview.dispose();
+    this.ink.dispose();
     this.portGeometry.dispose();
     this.portMaterial.dispose();
     this.handleGeometry.dispose();
@@ -2555,8 +2441,7 @@ export class DiagramScene {
     this.haloMaterial.dispose();
     this.flowMaterial.dispose();
     this.journey?.dispose();
-    this.showGuides([]);
-    this.guideMaterial.dispose();
+    this.guides.dispose();
     this.animators.clear();
     this.edgeMaterial.dispose();
     this.backdrop.dispose();
@@ -2565,41 +2450,4 @@ export class DiagramScene {
     this.renderer.domElement.remove();
     this.selectionBox.remove();
   }
-}
-
-function createFlowGeometries(): Record<
-  'process' | 'decision' | 'terminal',
-  BoxGeometry | ExtrudeGeometry
-> {
-  const diamond = new Shape();
-  diamond.moveTo(0, -0.5);
-  diamond.lineTo(0.5, 0);
-  diamond.lineTo(0, 0.5);
-  diamond.lineTo(-0.5, 0);
-  diamond.closePath();
-  const rounded = new Shape();
-  rounded.moveTo(-0.3, -0.5);
-  rounded.lineTo(0.3, -0.5);
-  rounded.quadraticCurveTo(0.5, -0.5, 0.5, -0.3);
-  rounded.lineTo(0.5, 0.3);
-  rounded.quadraticCurveTo(0.5, 0.5, 0.3, 0.5);
-  rounded.lineTo(-0.3, 0.5);
-  rounded.quadraticCurveTo(-0.5, 0.5, -0.5, 0.3);
-  rounded.lineTo(-0.5, -0.3);
-  rounded.quadraticCurveTo(-0.5, -0.5, -0.3, -0.5);
-  const extrude = (shape: Shape) => {
-    const geometry = new ExtrudeGeometry(shape, {
-      depth: 1,
-      bevelEnabled: false,
-      curveSegments: 6,
-    });
-    geometry.rotateX(-Math.PI / 2);
-    geometry.translate(0, -0.5, 0);
-    return geometry;
-  };
-  return {
-    process: new BoxGeometry(1, 1, 1),
-    decision: extrude(diamond),
-    terminal: extrude(rounded),
-  };
 }
