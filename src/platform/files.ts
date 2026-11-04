@@ -84,7 +84,10 @@ export async function openInfrastructureFiles(): Promise<
   { name: string; content: string }[]
 > {
   if (isTauri()) return invoke('open_infrastructure');
-  const files = await pickFiles('.mmd,.mermaid,.tf,.json,.yaml,.yml', true);
+  const files = await pickFiles(
+    '.mmd,.mermaid,.tf,.tfvars,.json,.yaml,.yml',
+    true,
+  );
   if (
     files.length > 256 ||
     files.reduce((sum, f) => sum + f.size, 0) > 50_000_000
@@ -97,10 +100,44 @@ export async function openInfrastructureFiles(): Promise<
     })),
   );
 }
-function pickFiles(accept: string, multiple: boolean): Promise<File[]> {
+/**
+ * A Terraform project folder: its `.tf` and `.tfvars` files, named by their
+ * path inside the folder (`modules/net/main.tf`) so local modules resolve.
+ * Hidden folders and `.terraform` caches are skipped.
+ */
+export async function openInfrastructureFolder(): Promise<
+  { name: string; content: string }[]
+> {
+  if (isTauri()) return invoke('open_infrastructure_folder');
+  const files = (await pickFiles('', true, true)).filter((file) => {
+    const path = file.webkitRelativePath || file.name;
+    return (
+      /\.(tf|tfvars)$/i.test(path) &&
+      !path.split('/').some((part) => part.startsWith('.'))
+    );
+  });
+  if (
+    files.length > 256 ||
+    files.reduce((sum, f) => sum + f.size, 0) > 50_000_000
+  )
+    throw Error('Choose a folder with up to 256 Terraform files (50 MB)');
+  return Promise.all(
+    files.map(async (file) => ({
+      // Drop the chosen folder's own name: paths start inside it.
+      name: (file.webkitRelativePath || file.name).replace(/^[^/]+\//, ''),
+      content: await file.text(),
+    })),
+  );
+}
+function pickFiles(
+  accept: string,
+  multiple: boolean,
+  folder = false,
+): Promise<File[]> {
   return new Promise<File[]>((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
+    input.webkitdirectory = folder;
     input.multiple = multiple;
     input.accept = accept;
     input.onchange = () => {

@@ -6,12 +6,12 @@ import {
 import { parseDocument, serializeDocument } from '../domain/document';
 import { importAws } from './aws';
 import { importCompose } from './compose';
-import { parseHcl } from './hcl';
 import {
   importMermaid,
   looksLikeMermaid,
   type MermaidOptions,
 } from './mermaid';
+import { networkAttributes, terraformResources } from './terraform';
 import {
   type ImportResult,
   type InfrastructureFile,
@@ -25,50 +25,6 @@ export type ImportFormat =
   | 'cloudformation'
   | 'compose'
   | 'mermaid';
-/** Terraform arguments that placement, routing or firewall analysis reads. */
-const networkAttributes = new Set([
-  'vpc_id',
-  'subnet_id',
-  'subnet_ids',
-  'subnets',
-  'availability_zone',
-  'cidr_block',
-  'private_ip',
-  'public_ip',
-  'associate_public_ip_address',
-  'map_public_ip_on_launch',
-  'vpc_security_group_ids',
-  'security_groups',
-  'security_group_id',
-  'ingress',
-  'egress',
-  'route',
-  'network_acl_id',
-  'route_table_id',
-  'destination_cidr_block',
-  'gateway_id',
-  'nat_gateway_id',
-  'internet_gateway_id',
-  'instance_id',
-  'network_interface_id',
-  'transit_gateway_id',
-  'vpc_peering_connection_id',
-  'db_subnet_group_name',
-  'type',
-  'protocol',
-  'ip_protocol',
-  'from_port',
-  'to_port',
-  'cidr_blocks',
-  'cidr_ipv4',
-  'self',
-  'source_security_group_id',
-  'referenced_security_group_id',
-  'rule_no',
-  'rule_number',
-  'rule_action',
-  'action',
-]);
 const cfnTypes: Record<string, string> = {
   VPC: 'aws_vpc',
   Subnet: 'aws_subnet',
@@ -385,6 +341,22 @@ function terraformJson(
   }
   return resources;
 }
+/** An expression or template the import could not evaluate. */
+function complex(value: unknown): boolean {
+  if (typeof value === 'string')
+    return (
+      (value.includes('${') || value.includes('%{')) &&
+      /[({]/.test(value.replace(/\$\{/g, ''))
+    );
+  if (Array.isArray(value)) return value.some(complex);
+  const record = obj(value);
+  if (
+    typeof record.$expr === 'string' &&
+    (record.$expr.startsWith('[') || /[({]/.test(record.$expr))
+  )
+    return true;
+  return Object.values(record).some(complex);
+}
 export function importInfrastructure(
   files: InfrastructureFile[],
   requested: ImportFormat = 'auto',
@@ -414,79 +386,17 @@ export function importInfrastructure(
     if (files.length !== 1 || !file)
       throw Error('Choose one Mermaid file at a time');
     result = importMermaid(file.content, file.name, options);
-  } else if (terraform && files.every((f) => /\.tf$/i.test(f.name))) {
-    const blocks = files.flatMap((f) => parseHcl(f.content)),
-      parameters: Record<string, unknown> = {};
-    for (const b of blocks) {
-      if (b.type === 'variable' && b.labels[0] && b.body.default !== undefined)
-        parameters[`var.${b.labels[0]}`] = b.body.default;
-      if (b.type === 'locals')
-        for (const [k, v] of Object.entries(b.body))
-          parameters[`local.${k}`] = v;
-    }
-    const defaultRegion = blocks.find(
-      (b) => b.type === 'provider' && b.labels[0] === 'aws',
-    )?.body.region;
-    const resources: Resource[] = [];
-    for (const b of blocks) {
-      if (b.type === 'module') {
-        warnings.push(
-          `Module ${b.labels[0]} is not expanded; import terraform show -json for evaluated modules`,
-        );
-        continue;
-      }
-      if (b.type !== 'resource') continue;
-      const type = b.labels[0],
-        name = b.labels[1];
-      if (!type || !name) throw Error('Terraform resource needs type and name');
-      const values = obj(resolve(b.body, parameters));
-      let count = typeof values.count === 'number' ? values.count : 1;
-      const invalidCount = count < 0 || !Number.isInteger(count) || count > 100;
-      if (invalidCount) {
-        values.__incomplete =
-          'Terraform count is outside the supported 0–100 range; instances were not expanded';
-        warnings.push(`${type}.${name}: ${values.__incomplete}`);
-        count = 1;
-      }
-      if (
-        values.for_each ||
-        (values.count !== undefined && typeof values.count !== 'number')
-      ) {
-        values.__incomplete =
-          'for_each/count is unresolved; import evaluated Terraform JSON';
-        warnings.push(`${type}.${name}: instances were not expanded`);
-      }
-      const complex = (value: unknown): boolean => {
-        if (typeof value === 'string')
-          return (
-            (value.includes('${') || value.includes('%{')) &&
-            /[({]/.test(value.replace(/\$\{/g, ''))
-          );
-        if (Array.isArray(value)) return value.some(complex);
-        const record = obj(value);
-        if (
-          typeof record.$expr === 'string' &&
-          (record.$expr.startsWith('[') || /[({]/.test(record.$expr))
-        )
-          return true;
-        return Object.values(record).some(complex);
-      };
-      // Only attributes the network model reads can make a resource incomplete;
-      // computed tags, names or descriptions do not affect reachability.
+  } else if (terraform && files.every((f) => /\.(tf|tfvars)$/i.test(f.name))) {
+    const resources = terraformResources(files, warnings);
+    // Only arguments the network model reads can make a resource incomplete;
+    // computed tags, names or descriptions do not affect reachability.
+    for (const resource of resources) {
+      const { values } = resource;
       const unsupported = Object.keys(values).filter(
         (key) => networkAttributes.has(key) && complex(values[key]),
       );
       if (unsupported.length)
         values.__incomplete ??= `Unsupported Terraform expression in ${unsupported.join(', ')}; import evaluated Terraform JSON`;
-      for (let i = 0; i < count; i++)
-        resources.push({
-          id: `${type}.${name}${values.count !== undefined && !invalidCount && typeof values.count === 'number' ? `[${i}]` : ''}`,
-          type,
-          values: structuredClone(values),
-          ...(typeof resolve(defaultRegion, parameters) === 'string'
-            ? { region: String(resolve(defaultRegion, parameters)) }
-            : {}),
-        });
     }
     result = importAws(resources, title, 'Terraform HCL', warnings);
   } else {

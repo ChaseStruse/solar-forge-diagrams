@@ -3,7 +3,10 @@ import { importInWorker } from '../import/client';
 import type { ImportFormat } from '../import/infrastructure';
 import { looksLikeMermaid } from '../import/mermaid';
 import type { ImportResult, InfrastructureFile } from '../import/types';
-import { openInfrastructureFiles } from '../platform/files';
+import {
+  openInfrastructureFiles,
+  openInfrastructureFolder,
+} from '../platform/files';
 
 export function infrastructureImporter(host: {
   apply: (doc: DiagramDocument) => Promise<boolean>;
@@ -13,7 +16,7 @@ export function infrastructureImporter(host: {
   panel.className = 'workspace-dialog';
   panel.hidden = true;
   panel.setAttribute('aria-label', 'Import a diagram');
-  panel.innerHTML = `<div class="dialog-heading"><h2>Import</h2><button data-close aria-label="Close import">×</button></div><p>Choose a Mermaid flowchart, state or architecture diagram, .tf files together, or a Terraform JSON, CloudFormation, or Compose file. Files stay on this computer; code is never executed.</p><label>Format<select data-format><option value="auto">Detect format</option><option value="terraform">Terraform HCL / show JSON</option><option value="cloudformation">CloudFormation YAML / JSON</option><option value="compose">Docker Compose</option><option value="mermaid">Mermaid chart</option></select></label><label class="check"><input type="checkbox" data-lanes> Mermaid subgraphs become swimlanes</label><button data-files>Choose files…</button><p data-names>No files selected</p><label>Or paste Mermaid or infrastructure code<textarea data-source rows="9" spellcheck="false" placeholder="Paste a Mermaid chart or infrastructure code; use Format to select Terraform for pasted HCL"></textarea></label><button data-preview>Preview import</button><div data-summary role="status"></div><ul data-warnings></ul><div class="dialog-actions"><button data-apply disabled>Import diagram</button></div>`;
+  panel.innerHTML = `<div class="dialog-heading"><h2>Import</h2><button data-close aria-label="Close import">×</button></div><p>Choose a Mermaid flowchart, state or architecture diagram, .tf files together (or a Terraform folder, to include its local modules and .tfvars), or a Terraform JSON, CloudFormation, or Compose file. Files stay on this computer; code is never executed.</p><label>Format<select data-format><option value="auto">Detect format</option><option value="terraform">Terraform HCL / show JSON</option><option value="cloudformation">CloudFormation YAML / JSON</option><option value="compose">Docker Compose</option><option value="mermaid">Mermaid chart</option></select></label><label class="check"><input type="checkbox" data-lanes> Mermaid subgraphs become swimlanes</label><button data-files>Choose files…</button> <button data-folder>Choose Terraform folder…</button><p data-names>No files selected</p><label>Or paste Mermaid or infrastructure code<textarea data-source rows="9" spellcheck="false" placeholder="Paste a Mermaid chart or infrastructure code; use Format to select Terraform for pasted HCL"></textarea></label><button data-preview>Preview import</button><div data-summary role="status"></div><ul data-warnings></ul><div class="dialog-actions"><button data-apply disabled>Import diagram</button></div>`;
   document.body.append(panel);
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
@@ -117,11 +120,11 @@ export function infrastructureImporter(host: {
       }
     }
   };
-  find('[data-files]').onclick = () => {
+  const choose = (open: () => Promise<InfrastructureFile[]>) => () => {
     if (busy) return;
     void (async () => {
       try {
-        const chosen = await openInfrastructureFiles();
+        const chosen = await open();
         if (!chosen.length) return;
         files = chosen;
         source.value = '';
@@ -132,6 +135,13 @@ export function infrastructureImporter(host: {
       }
     })();
   };
+  find('[data-files]').onclick = choose(openInfrastructureFiles);
+  find('[data-folder]').onclick = choose(async () => {
+    const chosen = await openInfrastructureFolder();
+    if (!chosen.length) host.notify('No .tf or .tfvars files in that folder');
+    else format.value = 'terraform';
+    return chosen;
+  });
   find('[data-preview]').onclick = () => void prepare();
   apply.onclick = () => {
     if (!preview || busy) return;

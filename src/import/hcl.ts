@@ -7,6 +7,16 @@ interface Token {
   value: string;
   string?: boolean;
   newline?: boolean;
+  /** Source offsets, so an expression keeps its original text. */
+  start: number;
+  end: number;
+}
+/** Two-character operators; `=` alone assigns, these never do. */
+const OPERATORS = ['==', '!=', '<=', '>=', '=>'];
+/** A nested `dynamic "label" { … }` block, kept for expansion. */
+export interface HclDynamic {
+  label: string;
+  body: Record<string, unknown>;
 }
 /** Find the outer closing quote while retaining nested interpolation strings verbatim. */
 function quotedEnd(source: string, start: number, depth = 0): number {
@@ -53,12 +63,23 @@ function quotedEnd(source: string, start: number, depth = 0): number {
 }
 /** Static HCL reader. It preserves expressions as references and never evaluates code. */
 export function parseHcl(source: string): HclBlock[] {
+  return parseHclFile(source).blocks;
+}
+/**
+ * Read a whole HCL file: its blocks, plus top-level attributes (as in a
+ * `.tfvars` file). Expressions are kept as `{ $expr }` with their source text;
+ * strings with templates are kept raw.
+ */
+export function parseHclFile(source: string): {
+  blocks: HclBlock[];
+  attributes: Record<string, unknown>;
+} {
   const tokens: Token[] = [];
   let i = 0;
   while (i < source.length) {
     const ch = source[i] ?? '';
     if (ch === '\n') {
-      tokens.push({ value: '\n', newline: true });
+      tokens.push({ value: '\n', newline: true, start: i, end: i + 1 });
       i++;
       continue;
     }
@@ -88,6 +109,8 @@ export function parseHcl(source: string): HclBlock[] {
               ? raw
               : JSON.parse(source.slice(start, i)),
           string: true,
+          start,
+          end: i,
         });
       } catch {
         throw Error('Invalid HCL quoted string');
@@ -102,21 +125,35 @@ export function parseHcl(source: string): HclBlock[] {
           source.slice(start),
         );
       if (!end) throw Error('Unterminated HCL heredoc');
+      const from = i;
+      i = start + end.index + end[0].length;
       tokens.push({
         value: source.slice(start, start + end.index),
         string: true,
+        start: from,
+        end: i,
       });
-      i = start + end.index + end[0].length;
+      continue;
+    }
+    if (OPERATORS.includes(source.slice(i, i + 2))) {
+      tokens.push({ value: source.slice(i, i + 2), start: i, end: i + 2 });
+      i += 2;
       continue;
     }
     if ('{}[]=,():'.includes(ch)) {
-      tokens.push({ value: ch });
+      tokens.push({ value: ch, start: i, end: i + 1 });
       i++;
       continue;
     }
     const start = i;
-    while (i < source.length && !/[\s{}[\]=,():]/.test(source[i] ?? '')) i++;
-    tokens.push({ value: source.slice(start, i) });
+    while (
+      i < source.length &&
+      !/[\s{}[\]=,():]/.test(source[i] ?? '') &&
+      !OPERATORS.includes(source.slice(i, i + 2)) &&
+      source[i] !== '"'
+    )
+      i++;
+    tokens.push({ value: source.slice(start, i), start, end: i });
   }
   let at = 0,
     depth = 0;
@@ -155,10 +192,10 @@ export function parseHcl(source: string): HclBlock[] {
       if (t?.value === 'null') return null;
       if (t && /^-?\d+(\.\d+)?$/.test(t.value)) return Number(t.value);
     }
+    const first = parts[0];
+    const last = parts.at(-1);
     return {
-      $expr: parts
-        .map((t) => (t.string ? JSON.stringify(t.value) : t.value))
-        .join(''),
+      $expr: first && last ? source.slice(first.start, last.end).trim() : '',
     };
   };
   const comprehension = (): boolean => {
@@ -212,11 +249,17 @@ export function parseHcl(source: string): HclBlock[] {
         const child = body(true),
           block = { type: name, labels, body: child.attributes };
         blocks.push(block);
-        const existing = attributes[name];
-        attributes[name] = [
-          ...(Array.isArray(existing) ? existing : []),
-          block.body,
-        ];
+        // `dynamic "ingress" { … }` generates `ingress` blocks; keep its label.
+        const key = name === 'dynamic' && labels[0] ? '__dynamic' : name;
+        const entry: unknown =
+          key === '__dynamic'
+            ? ({
+                label: labels[0] ?? '',
+                body: block.body,
+              } satisfies HclDynamic)
+            : block.body;
+        const existing = attributes[key];
+        attributes[key] = [...(Array.isArray(existing) ? existing : []), entry];
       }
       separators();
     }
@@ -226,5 +269,5 @@ export function parseHcl(source: string): HclBlock[] {
     depth--;
     return { attributes, blocks };
   };
-  return body(false).blocks;
+  return body(false);
 }

@@ -173,6 +173,85 @@ async fn open_infrastructure(
     .await
     .map_err(|e| e.to_string())?
 }
+/// Terraform files under `root`, named by their path inside it with `/`.
+/// Hidden folders are skipped and links are not followed, so the walk stays
+/// inside the chosen folder.
+fn terraform_files(root: &Path) -> Result<Vec<InfrastructureSource>, String> {
+    let mut result = Vec::new();
+    let mut total = 0;
+    let mut pending = vec![(root.to_path_buf(), 0usize)];
+    while let Some((dir, depth)) = pending.pop() {
+        let mut entries: Vec<_> = fs::read_dir(&dir)
+            .map_err(|e| e.to_string())?
+            .filter_map(Result::ok)
+            .collect();
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            let kind = entry.file_type().map_err(|e| e.to_string())?;
+            let path = entry.path();
+            if kind.is_dir() {
+                if depth < 16 {
+                    pending.push((path, depth + 1));
+                }
+                continue;
+            }
+            let lower = name.to_ascii_lowercase();
+            if !kind.is_file() || !(lower.ends_with(".tf") || lower.ends_with(".tfvars")) {
+                continue;
+            }
+            if result.len() >= 256 {
+                return Err("Choose a folder with at most 256 Terraform files".into());
+            }
+            let mut content = String::new();
+            fs::File::open(&path)
+                .map_err(|e| e.to_string())?
+                .take(50_000_001)
+                .read_to_string(&mut content)
+                .map_err(|e| e.to_string())?;
+            total += content.len();
+            if total > 50_000_000 {
+                return Err("Terraform folder exceeds 50 MB".into());
+            }
+            let relative = path
+                .strip_prefix(root)
+                .map_err(|e| e.to_string())?
+                .components()
+                .map(|part| part.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/");
+            result.push(InfrastructureSource {
+                name: relative,
+                content,
+            });
+        }
+    }
+    result.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(result)
+}
+#[tauri::command]
+async fn open_infrastructure_folder(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+) -> Result<Vec<InfrastructureSource>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(folder) = app
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .set_title("Choose a Terraform folder")
+            .blocking_pick_folder()
+        else {
+            return Ok(Vec::new());
+        };
+        terraform_files(&folder.into_path().map_err(|e| e.to_string())?)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
 #[tauri::command]
 async fn save_document(
     app: tauri::AppHandle,
@@ -734,6 +813,7 @@ fn main() {
             dial::tablet_dial_status,
             open_document,
             open_infrastructure,
+            open_infrastructure_folder,
             save_document,
             export_png,
             export_gif,
@@ -758,6 +838,31 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terraform_folders_list_nested_modules_and_skip_hidden_files() {
+        let root =
+            std::env::temp_dir().join(format!("solar-forge-terraform-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        for (path, content) in [
+            ("main.tf", "module \"net\" { source = \"./modules/net\" }"),
+            ("prod.tfvars", "cidr = \"10.0.0.0/16\""),
+            ("modules/net/main.tf", "resource \"aws_vpc\" \"v\" {}"),
+            ("README.md", "not terraform"),
+            (".terraform/modules/cache.tf", "cached"),
+        ] {
+            let file = root.join(path);
+            fs::create_dir_all(file.parent().unwrap()).unwrap();
+            fs::write(file, content).unwrap();
+        }
+        let names: Vec<_> = terraform_files(&root)
+            .unwrap()
+            .into_iter()
+            .map(|f| f.name)
+            .collect();
+        assert_eq!(names, ["main.tf", "modules/net/main.tf", "prod.tfvars"]);
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn atomic_replacement_preserves_complete_documents() {
