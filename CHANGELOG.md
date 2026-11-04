@@ -6,6 +6,7 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 
 ### Added
 
+- **Swimlanes in exports:** SVG draws the lane bands and names; draw.io gets real swimlane containers holding their steps; Mermaid and PlantUML wrap each lane's steps in a subgraph or rectangle and follow the flow's direction. Mermaid and PlantUML exports also keep each step's owner as a comment.
 - **Pen input:** handles, connection hit areas and the tool rail grow while a pen is in use; a pen tap no longer nudges the component under it; a barrel button that sends a right or middle click pans, as those mouse buttons do; a pen's eraser end deletes the components and connections it passes over in one undoable step.
 - **Loading screen** while the app starts, instead of a blank black window: the Solar Forge mark and a progress bar, fading out once the board is drawn. The desktop window also opens in the app's background colour.
 - **Feature tours** in Examples: Building blocks, Detail diagrams, Network flow, and Journeys and forks. Each is a small board with a sticky note that walks through the feature step by step.

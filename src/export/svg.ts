@@ -1,6 +1,7 @@
 import { findService } from '../catalog/services';
 import type { DiagramDocument } from '../domain/document';
 import { worldPosition } from '../domain/document';
+import { LANE_HEADER, LANE_HUES, laneBands, laneName } from '../domain/lanes';
 import { fansOf, obstaclesOf, routeEdge } from '../domain/routing';
 import { fitText, fontSize, serviceCaption } from '../domain/text';
 
@@ -16,6 +17,62 @@ const xmlText = (text: string) =>
         "'": '&apos;',
       })[c] ?? c,
   );
+/**
+ * Swimlane bands as drawn on the board floor: a tinted strip per owner, a
+ * stronger title strip where the flow starts, a divider and the lane name.
+ * Returns the corners too, so the export's bounds include them.
+ */
+export function laneSvg(
+  doc: DiagramDocument,
+  measure: (text: string, size: number) => number,
+): { markup: string; xs: number[]; zs: number[] } {
+  const lanes = laneBands(doc);
+  if (!lanes) return { markup: '', xs: [], zs: [] };
+  const down = lanes.direction === 'down';
+  const header = LANE_HEADER - 60;
+  const length = lanes.to - lanes.from;
+  // Board rectangle from along-the-flow (main) and across (cross) extents.
+  const rect = (
+    main: number,
+    cross: number,
+    long: number,
+    wide: number,
+    paint: string,
+  ) =>
+    `<rect x="${down ? cross : main}" y="${down ? main : cross}" width="${down ? wide : long}" height="${down ? long : wide}" ${paint}/>`;
+  const markup = lanes.bands
+    .map((band, i) => {
+      const hue = LANE_HUES[i % LANE_HUES.length] ?? '#35e0f0';
+      const size = band.end - band.start;
+      const name = laneName(band.owner);
+      const { size: font, lines } = fitText(
+        name,
+        (down ? size : header) - 24,
+        (down ? header : size) - 24,
+        22,
+        measure,
+      );
+      const cx = down ? band.start + size / 2 : lanes.from + header / 2;
+      const cy = down ? lanes.from + header / 2 : band.start + size / 2;
+      const top = cy - (lines.length * font * 1.28) / 2;
+      const text = lines
+        .map(
+          (line, j) =>
+            `<tspan x="${cx}" y="${top + (j + 0.85) * font * 1.28}">${xmlText(line)}</tspan>`,
+        )
+        .join('');
+      return `<g><title>${xmlText(name)}</title>${rect(lanes.from, band.start, length, size, `fill="${hue}" fill-opacity="${i % 2 ? 0.07 : 0.12}"`)}${rect(lanes.from, band.start, header, size, `fill="${hue}" fill-opacity="0.28"`)}${rect(lanes.from, band.start, length, 3, `fill="${hue}" fill-opacity="0.7"`)}<text text-anchor="middle" font-size="${font}" font-weight="700" fill="#243449">${text}</text></g>`;
+    })
+    .join('');
+  const first = lanes.bands[0]?.start ?? 0;
+  const last = lanes.bands.at(-1)?.end ?? 0;
+  return {
+    markup,
+    xs: down ? [first, last] : [lanes.from, lanes.to],
+    zs: down ? [lanes.from, lanes.to] : [first, last],
+  };
+}
+
 export async function exportSvg(
   doc: DiagramDocument,
   font = 'system-ui, sans-serif',
@@ -37,7 +94,9 @@ export async function exportSvg(
     edge,
     ...routeEdge(edge, nodes, obstacles, fans),
   }));
+  const lanes = laneSvg(doc, (text, size) => measure(text, size, 700));
   const xs = [
+    ...lanes.xs,
     ...positioned.flatMap(({ node, p }) => [
       p.x - node.width / 2,
       p.x + node.width / 2,
@@ -45,6 +104,7 @@ export async function exportSvg(
     ...routes.flatMap((r) => r.points.map((p) => p.x)),
   ];
   const zs = [
+    ...lanes.zs,
     ...positioned.flatMap(({ node, p }) => [
       p.z - node.depth / 2 - 30,
       p.z + node.depth / 2 + (node.kind === 'service' ? node.depth + 40 : 60),
@@ -141,5 +201,5 @@ export async function exportSvg(
       return `<g>${note ? `<rect x="${x}" y="${z}" width="${node.width}" height="${node.depth}" rx="3" fill="${node.color}" stroke="#00000022"/>` : ''}<text x="${x + padding}" y="${z + padding}" font-size="${size}" font-weight="${note ? 500 : 600}" fill="${note ? '#2a2010' : '#172c43'}">${text}</text></g>`;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minZ} ${width} ${height}" role="img" aria-label="${xmlText(doc.title)}"><title>${xmlText(doc.title)}</title><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="#576b84"/></marker></defs><rect x="${minX}" y="${minZ}" width="${width}" height="${height}" fill="#fff"/><g font-family="${xmlText(font)}">${groups}${edges}${services}${annotations}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minZ} ${width} ${height}" role="img" aria-label="${xmlText(doc.title)}"><title>${xmlText(doc.title)}</title><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="#576b84"/></marker></defs><rect x="${minX}" y="${minZ}" width="${width}" height="${height}" fill="#fff"/><g font-family="${xmlText(font)}">${lanes.markup}${groups}${edges}${services}${annotations}</g></svg>`;
 }
