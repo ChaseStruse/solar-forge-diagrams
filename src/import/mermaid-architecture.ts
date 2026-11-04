@@ -242,6 +242,18 @@ export function importArchitecture(
   // Keep a link's named sides only where they face each other after layout;
   // otherwise the router picks sides rather than looping around a tile.
   const index = new Map(result.document.nodes.map((n) => [n.id, n]));
+  // The layout only ranks left to right. Where a link says one tile sits
+  // above another in the same column, put them that way round.
+  for (const edge of result.document.edges) {
+    const a = index.get(edge.source),
+      b = index.get(edge.target);
+    if (!a || !b || a.parentId !== b.parentId || Math.abs(a.x - b.x) > 1)
+      continue;
+    const below =
+      (edge.sourcePort === 'south' && b.z < a.z) ||
+      (edge.sourcePort === 'north' && b.z > a.z);
+    if (below) [a.z, b.z] = [b.z, a.z];
+  }
   for (const edge of result.document.edges) {
     const a = index.get(edge.source),
       b = index.get(edge.target);

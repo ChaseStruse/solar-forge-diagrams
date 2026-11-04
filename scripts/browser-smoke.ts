@@ -686,6 +686,70 @@ await Bun.sleep(300);
   );
 }
 
+// Mermaid architecture and state charts, and subgraphs as lanes, through the
+// same dialog: the checkbox reaches the worker.
+{
+  const importChart = async (file: string, lanes: boolean) => {
+    const chart = await Bun.file(
+      new URL(`../examples/mermaid/${file}`, import.meta.url),
+    ).text();
+    await evaluate(`document.querySelector('#import-infrastructure').click()`);
+    await evaluate(`(() => {
+      const dialog = document.querySelector('[aria-label="Import a diagram"]');
+      const box = dialog.querySelector('[data-lanes]');
+      box.checked = ${lanes};
+      box.onchange();
+      const source = dialog.querySelector('[data-source]');
+      source.value = ${JSON.stringify(chart)};
+      source.oninput();
+      dialog.querySelector('[data-preview]').click();
+    })()`);
+    for (
+      let i = 0;
+      i < 50 &&
+      (await evaluate(
+        `document.querySelector('[aria-label="Import a diagram"] [data-apply]').disabled`,
+      ));
+      i++
+    )
+      await Bun.sleep(100);
+    const summary: string = await evaluate(
+      `document.querySelector('[aria-label="Import a diagram"] [data-summary]').textContent`,
+    );
+    await evaluate(
+      `document.querySelector('[aria-label="Import a diagram"] [data-apply]').click()`,
+    );
+    await Bun.sleep(400);
+    return summary;
+  };
+  const architecture = await importChart('web-architecture.mmd', false);
+  const arch = await doc();
+  check(
+    'mermaid architecture imports with AWS icons',
+    architecture.startsWith('Mermaid architecture diagram') &&
+      arch.nodes.some((n: DiagramNode) => n.serviceId === 'aws.lambda'),
+  );
+  const states = await importChart('order-states.mmd', false);
+  check(
+    'mermaid state diagram imports',
+    states.startsWith('Mermaid state diagram') &&
+      (await doc()).nodes.some((n: DiagramNode) => n.label === 'Start'),
+  );
+  await importChart('checkout.mmd', true);
+  const laned = await doc();
+  check(
+    'mermaid subgraphs become lanes',
+    laned.lanes?.order[0] === 'Payment service' &&
+      !laned.nodes.some((n: DiagramNode) => n.kind === 'group'),
+  );
+  await importChart('order-states.mmd', false);
+  check('lane-free import clears lanes', (await doc()).lanes === undefined);
+  for (let i = 0; i < 4; i++) await key('z', 2, 'KeyZ');
+  await evaluate(
+    `document.querySelector('[aria-label="Import a diagram"] [data-lanes]').checked = false`,
+  );
+}
+
 // Swimlanes: owners from the inspector, L toggles, a drop changes owner.
 {
   await evaluate(

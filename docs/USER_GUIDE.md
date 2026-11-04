@@ -99,20 +99,35 @@ Journeys call out each **handoff**, a connection between steps with different ow
 - **draw.io** turns each lane into an editable swimlane container holding its steps.
 - **Mermaid** and **PlantUML** have no swimlanes, so each lane becomes a subgraph (Mermaid) or rectangle (PlantUML) around its steps, and the chart runs in the direction of the flow. A `%% Lane` comment records each lane's owner, and `%% Owner` comments record every step's owner, lanes shown or not.
 
-## Import a Mermaid flowchart
+## Import a Mermaid chart
 
 Choose **File menu → Import Mermaid or infrastructure…**, then choose a `.mmd` or `.mermaid` file or paste the chart's text. Mermaid is detected automatically; the **Format** selector can force it. **Preview import** lists anything that was skipped before **Import diagram** replaces the board (one undoable step).
 
-- `flowchart` and `graph` charts import, in any direction; `TD`/`TB` charts lay out top to bottom and `LR` charts left to right (`BT` and `RL` use the forward direction). Other Mermaid diagram types, such as sequence diagrams, are refused with a message.
+Flowcharts, state diagrams and architecture diagrams import. Other Mermaid diagram types, such as sequence diagrams, are refused with a message.
+
+### Flowcharts
+
+- `flowchart` and `graph` charts import, in any direction; `TD`/`TB` charts lay out top to bottom and `LR` charts left to right (`BT` and `RL` use the forward direction).
 - Diamonds `{…}` become Decision shapes, stadiums `([…])` and circles `((…))` become Start / end, and every other shape becomes a Process step.
 - Subgraphs become groups and can nest; a node mentioned inside a subgraph moves into it, as in Mermaid. Linking to a subgraph's name connects to the group.
+- Tick **Mermaid subgraphs become swimlanes** to show the board as lanes instead: each top-level subgraph becomes a lane named after it, its steps are owned by that lane, and steps outside every subgraph go in the Unassigned lane. Subgraphs nested inside a lane stay groups. Links to a whole lane are skipped with a warning.
 - Every link form imports, including chains (`a --> b --> c`) and `&` lists. Link labels (`-->|text|`, `-- text -->`) are kept; dotted links (`-.->`) become dependency connections.
+- Colours from `classDef`, `class`, `:::name` and `style` lines (including `classDef default`) colour the tiles and groups. Each tile has one colour, so a fill is used where there is one, otherwise the stroke. Hex, `rgb()` and common colour names are understood. `linkStyle` and `click` lines are skipped and listed as warnings.
 - Text entities (`#quot;`, `#35;`), `<br/>` line breaks and markdown strings are decoded. A `title:` front matter block, or the `%% Title` comment written by Export Mermaid source, names the board.
-- Styling, classes and click handlers are skipped and listed as warnings.
+
+### State diagrams
+
+`stateDiagram-v2` (and `stateDiagram`) charts become flowcharts. `[*]` becomes a **Start** or **End** in each scope, transitions keep their labels, `state "Name" as id` and `id : text` lines set the caption, `<<choice>>` states become Decisions, `<<fork>>`/`<<join>>` become short steps, composite states `state X { … }` become groups with their own Start and End, and notes become sticky notes beside their state. `direction LR` lays the chart out across. Concurrent regions (`--`) are shown together in one group.
+
+### Architecture diagrams
+
+`architecture-beta` charts keep their structure: `group`s become boundaries (and can nest with `in`), `service`s become components, `junction`s become small joints, and edges become connections. A service with an icon from the catalog uses that component, such as `logos:aws-lambda` → Lambda or `logos:docker-icon` → Docker; `internet` is the Internet actor. Mermaid's other built-in icons (`cloud`, `database`, `disk`, `server`) and icons the catalog doesn't have become plain tiles. Edges keep the sides they name (`a:R --> L:b`) where the layout puts the tiles that way round; `<-->` draws both directions, `-[label]-` keeps its label, and `{group}` connects the surrounding group. Links without arrowheads are drawn as arrows.
+
+### Layout and round trips
 
 Imported charts use a flowchart layout: each step sits a layer after the steps leading to it, branches spread side by side, links that skip steps run straight past the steps between, loops are drawn back up instead of collapsing into one row, and forward links leave from the side facing the flow. Long labels wrap on wider shapes.
 
-Charts exported with **Export Mermaid source** import back with the same node IDs, labels, groups, connections and walkthrough captions; positions are laid out again. Try [examples/mermaid/checkout.mmd](../examples/mermaid/checkout.mmd).
+Charts exported with **Export Mermaid source** import back with the same node IDs, labels, groups, connections, walkthrough captions and owners, and a board exported with lanes shown comes back as lanes; positions are laid out again. Try the files in [examples/mermaid](../examples/mermaid): a checkout flowchart, an order state diagram and a serverless architecture.
 
 ## Import existing infrastructure
 

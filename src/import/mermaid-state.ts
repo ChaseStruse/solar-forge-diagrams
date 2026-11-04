@@ -52,6 +52,7 @@ export function importStateDiagram(
   let direction: LayoutDirection = 'down';
   let notes = 0;
   let concurrent = false;
+  const placed: { note: DiagramNode; anchor: DiagramNode; side: string }[] = [];
   const skipped = new Set<string>();
 
   const add = (node: DiagramNode) => {
@@ -157,7 +158,6 @@ export function importStateDiagram(
         node.shape = 'decision';
         node.serviceId = 'flow.decision';
         node.color = decision?.color ?? node.color;
-        if (!text) node.label = '';
       } else if (special) {
         // Forks and joins are bars in Mermaid; a short step reads the same.
         node.label = text ? node.label : special === 'fork' ? 'Fork' : 'Join';
@@ -198,6 +198,7 @@ export function importStateDiagram(
       };
       // A note sits beside its state, inside the same composite state.
       add(node);
+      if (anchor) placed.push({ note: node, anchor, side: note[1] ?? 'right' });
       if (anchor?.parentId) node.parentId = anchor.parentId;
       else if (anchor) delete node.parentId;
       continue;
@@ -232,7 +233,7 @@ export function importStateDiagram(
     const color = styles.colorOf(id);
     if (color) node.color = color;
   }
-  return finishChart({
+  const result = finishChart({
     title: chartTitle(source, name),
     nodes: [...nodes.values()],
     edges,
@@ -240,4 +241,17 @@ export function importStateDiagram(
     warnings,
     format: 'Mermaid state diagram',
   });
+  // Move top-level notes beside their state, a little above it, on the side
+  // the chart asks for. Notes in a composite keep their laid-out place, so
+  // they stay inside it.
+  const laid = new Map(result.document.nodes.map((n) => [n.id, n]));
+  for (const { note, anchor, side } of placed) {
+    const n = laid.get(note.id),
+      a = laid.get(anchor.id);
+    if (!n || !a || n.parentId || a.parentId) continue;
+    const gap = 40;
+    n.x = a.x + (side === 'left' ? -1 : 1) * (a.width / 2 + n.width / 2 + gap);
+    n.z = a.z - a.depth / 2 - n.depth / 2 - gap;
+  }
+  return result;
 }

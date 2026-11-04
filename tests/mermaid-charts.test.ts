@@ -208,6 +208,7 @@ stateDiagram-v2
   expect(node(doc, '[*]end:').label).toBe('End');
   expect(node(doc, 'Waiting').label).toBe('Waiting for payment');
   expect(node(doc, 'check').shape).toBe('decision');
+  expect(node(doc, 'check').label).toBe('check');
   expect(node(doc, 'Paid').label).toBe('Paid\nMoney captured\nReceipt sent');
   expect(links(doc)).toContain('Draft>Waiting:submit');
   expect(links(doc)).toContain('check>Draft:declined');
@@ -231,6 +232,10 @@ stateDiagram-v2
   expect(warnings).toEqual([
     'Concurrent regions (--) are shown together in one group',
   ]);
+  // A top-level note sits beside its state, on the side it names.
+  const timeout = byLabel(doc, 'Times out after a day');
+  expect(timeout.x).toBeGreaterThan(node(doc, 'Waiting').x);
+  expect(timeout.z).toBeLessThan(node(doc, 'Waiting').z);
   // LR runs across: the end is to the right of the start.
   expect(node(doc, '[*]end:').x).toBeGreaterThan(start.x);
   valid(doc);
@@ -302,5 +307,20 @@ test('architecture diagrams: groups, icons, junctions and sides', () => {
   expect(text).toContain('1 link(s) name a service');
   expect(text).toContain('Links without arrowheads');
   expect(text).toContain('no matching icon): logos:not-a-real-thing');
+  valid(doc);
+});
+
+test('the architecture example stacks tiles the way its links say', async () => {
+  const source = await Bun.file(
+    new URL('../examples/mermaid/web-architecture.mmd', import.meta.url),
+  ).text();
+  const { document: doc, warnings } = importMermaid(source);
+  expect(warnings).toEqual([]);
+  // `orders:B --> T:files`: the bucket sits below the function.
+  expect(node(doc, 'files').z).toBeGreaterThan(node(doc, 'orders').z);
+  const down = doc.edges.find((e) => e.target === 'files');
+  expect(down?.sourcePort).toBe('south');
+  expect(down?.targetPort).toBe('north');
+  expect(node(doc, 'table').serviceId).toBe('aws.dynamodb');
   valid(doc);
 });
