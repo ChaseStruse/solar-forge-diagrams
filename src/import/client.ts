@@ -1,4 +1,5 @@
 import type { ImportFormat } from './infrastructure';
+import type { MermaidOptions } from './mermaid';
 import type { ImportResult, InfrastructureFile } from './types';
 
 /** One disposable worker per preview: parsing, validation and layout stay off the UI thread. */
@@ -6,6 +7,7 @@ export function importInWorker(
   files: InfrastructureFile[],
   requested: ImportFormat,
   signal?: AbortSignal,
+  options: MermaidOptions = {},
 ): Promise<ImportResult> {
   if (signal?.aborted)
     return Promise.reject(new DOMException('Import cancelled', 'AbortError'));
@@ -39,7 +41,7 @@ export function importInWorker(
       reject(Error('Could not read infrastructure import result'));
     };
     try {
-      worker.postMessage({ files, requested });
+      worker.postMessage({ files, requested, options });
     } catch (error) {
       cleanup();
       reject(error);

@@ -1,19 +1,35 @@
 import { findService } from '../catalog/services';
-import type {
-  DiagramDocument,
-  DiagramEdge,
-  DiagramNode,
-} from '../domain/document';
-import { MAX_TEXT, worldPosition } from '../domain/document';
-import { type LayoutDirection, layoutDocument } from '../domain/layout';
+import type { DiagramEdge, DiagramNode } from '../domain/document';
+import type { LayoutDirection } from '../domain/layout';
+import { importArchitecture } from './mermaid-architecture';
+import {
+  chartTitle,
+  exporterComments,
+  finishChart,
+  MAX_EDGES,
+  MAX_NODES,
+  meaningfulLines,
+  mermaidText,
+  originalId,
+  trimOwner,
+} from './mermaid-common';
+import { importStateDiagram } from './mermaid-state';
+import { MermaidStyles } from './mermaid-styles';
 import type { ImportResult } from './types';
 
-/** Mermaid diagram types other than flowcharts, for a clear refusal. */
+export { mermaidText } from './mermaid-common';
+
+/** Mermaid diagram types the importer can't read, for a clear refusal. */
 const OTHER_DIAGRAMS =
-  /^(sequenceDiagram|classDiagram(-v2)?|stateDiagram(-v2)?|erDiagram|journey|gantt|pie|gitGraph|mindmap|timeline|quadrantChart|requirementDiagram|C4\w+|sankey(-beta)?|xychart(-beta)?|block(-beta)?|packet(-beta)?|kanban|architecture(-beta)?)\b/;
+  /^(sequenceDiagram|classDiagram(-v2)?|erDiagram|journey|gantt|pie|gitGraph|mindmap|timeline|quadrantChart|requirementDiagram|C4\w+|sankey(-beta)?|xychart(-beta)?|block(-beta)?|packet(-beta)?|kanban|architecture)\b/;
+const STATE = /^stateDiagram(-v2)?\s*$/;
+const ARCHITECTURE = /^architecture-beta\s*$/;
 const HEADER = /^(flowchart|graph)\b(?:\s+(TB|TD|BT|LR|RL))?\s*;?\s*$/i;
-const MAX_NODES = 2000;
-const MAX_EDGES = 4000;
+
+export interface MermaidOptions {
+  /** Top-level subgraphs become swimlanes, named for their owners. */
+  subgraphLanes?: boolean;
+}
 
 type Shape = 'process' | 'decision' | 'terminal';
 /** Node shape delimiters, longest opener first so `([` wins over `(`. */
@@ -40,70 +56,15 @@ const LABELLED_LINK =
   /^\s*([<ox]?)(--|==|-\.)\s+(?![>\-=.])(.+?)\s+(-{2,}|={2,}|\.+-)([>ox]?)\s*/;
 /** A plain link: `-->`, `---`, `-.->`, `==>`, `<-->`, `--o`, `--x`. */
 const LINK = /^\s*([<ox]?)(-{2,}|={2,}|-\.+-)([>ox]?)\s*/;
-const NAMED_ENTITIES: Record<string, string> = {
-  quot: '"',
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  nbsp: ' ',
-  apos: "'",
-};
-
-/** Decode Mermaid text: quotes, `#…;` entities, HTML entities and `<br>`. */
-export function mermaidText(raw: string): string {
-  let text = raw.trim();
-  if (text.length >= 2 && text.startsWith('"') && text.endsWith('"'))
-    text = text.slice(1, -1);
-  // Markdown strings: "`**bold** text`" keep their words, not the markup.
-  if (text.length >= 2 && text.startsWith('`') && text.endsWith('`'))
-    text = text.slice(1, -1).replace(/\*\*|__|\*|_/g, '');
-  return text
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/[#&](#?)(x[0-9a-f]+|\d+|[a-z]+);/gi, (match, _hash, code) => {
-      const value = String(code);
-      if (/^\d+$/.test(value)) return safeCodePoint(Number(value), match);
-      if (/^x[0-9a-f]+$/i.test(value))
-        return safeCodePoint(Number.parseInt(value.slice(1), 16), match);
-      return NAMED_ENTITIES[value.toLowerCase()] ?? match;
-    })
-    .slice(0, MAX_TEXT);
-}
-function safeCodePoint(code: number, fallback: string): string {
-  return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : fallback;
-}
-
-/** IDs written by this app's exporter (`n` + UTF-8 hex) decode to the original. */
-function originalId(id: string): string {
-  if (!/^n(?:[0-9a-f]{2})+$/.test(id)) return id;
-  const bytes = id
-    .slice(1)
-    .match(/../g)
-    ?.map((pair) => Number.parseInt(pair, 16));
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(
-      new Uint8Array(bytes ?? []),
-    );
-  } catch {
-    return id;
-  }
-}
-
-/** Whether text looks like a Mermaid flowchart (or another Mermaid diagram). */
+/** Whether text looks like a Mermaid chart the importer knows (or refuses). */
 export function looksLikeMermaid(source: string): boolean {
   const first = meaningfulLines(source)[0] ?? '';
-  return HEADER.test(first) || OTHER_DIAGRAMS.test(first);
-}
-
-/** Source lines without blanks, `%%` comments or a `---` front-matter block. */
-function meaningfulLines(source: string): string[] {
-  const lines = source.replace(/\r\n?/g, '\n').split('\n');
-  if (lines[0]?.trim() === '---') {
-    const end = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
-    if (end > 0) lines.splice(0, end + 1);
-  }
-  return lines
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith('%%'));
+  return (
+    HEADER.test(first) ||
+    STATE.test(first) ||
+    ARCHITECTURE.test(first) ||
+    OTHER_DIAGRAMS.test(first)
+  );
 }
 
 /** Split a line into `;`-separated statements, ignoring `;` inside text. */
@@ -129,6 +90,8 @@ interface NodeRef {
   id: string;
   label?: string;
   shape?: Shape;
+  /** Classes from `:::name` shorthand. */
+  classes?: string[];
 }
 
 /** Read one node reference at the start of `text`: `id`, `id[label]`, `id{label}`… */
@@ -154,8 +117,12 @@ function readNode(text: string): { node: NodeRef; rest: string } | undefined {
     rest = body.slice(end + close.length);
     break;
   }
-  // Class shorthand: `A:::important` styles the node; styles are not imported.
-  rest = rest.replace(/^:::[\w-]+/, '');
+  // Class shorthand: `A:::important` styles the node.
+  const shorthand = /^:::([\w-]+)/.exec(rest);
+  if (shorthand?.[1]) {
+    node.classes = [shorthand[1]];
+    rest = rest.slice(shorthand[0].length);
+  }
   return { node, rest };
 }
 
@@ -207,49 +174,60 @@ function readLink(text: string): { link: Link; rest: string } | undefined {
 }
 
 /**
- * Import a Mermaid flowchart as a board: nodes become flowchart shapes,
- * subgraphs become groups, links become connections, and the result is laid
- * out in the chart's direction. Styling, click handlers and other diagram
- * types are not imported.
+ * Import a Mermaid chart as a board. Flowcharts, state diagrams and
+ * architecture diagrams are read; other Mermaid diagrams are refused.
  */
-export function importMermaid(source: string, name = 'Mermaid'): ImportResult {
-  const warnings: string[] = [];
+export function importMermaid(
+  source: string,
+  name = 'Mermaid',
+  options: MermaidOptions = {},
+): ImportResult {
   const lines = meaningfulLines(source);
   const header = lines.shift() ?? '';
+  if (STATE.test(header)) return importStateDiagram(source, lines, name);
+  if (ARCHITECTURE.test(header)) return importArchitecture(source, lines, name);
   const other = OTHER_DIAGRAMS.exec(header);
   if (other)
     throw Error(
-      `Only Mermaid flowcharts can be imported; this is a ${other[1]} diagram`,
+      `Mermaid ${other[1]} diagrams can't be imported; use a flowchart, state or architecture diagram`,
     );
   const head = HEADER.exec(header);
   if (!head)
-    throw Error('Mermaid flowcharts start with "flowchart" or "graph"');
-  const way = (head[2] ?? 'TB').toUpperCase();
+    throw Error(
+      'Mermaid charts start with "flowchart", "graph", "stateDiagram-v2" or "architecture-beta"',
+    );
+  return importFlowchart(source, lines, name, head[2] ?? 'TB', options);
+}
+
+/**
+ * Flowcharts: nodes become flowchart shapes, subgraphs become groups (or
+ * swimlanes), links become connections, and styles become tile colours.
+ */
+function importFlowchart(
+  source: string,
+  lines: string[],
+  name: string,
+  written: string,
+  options: MermaidOptions,
+): ImportResult {
+  const warnings: string[] = [];
+  const way = written.toUpperCase();
   const direction: LayoutDirection =
     way === 'LR' || way === 'RL' ? 'right' : 'down';
   if (way === 'RL' || way === 'BT')
     warnings.push(
       `Direction ${way} is laid out as ${way === 'RL' ? 'LR' : 'TB'}`,
     );
-
-  let title = `Imported · ${name}`;
-  const titleComment = /^\s*%%\s*Title:\s*(".*")\s*$/m.exec(source);
-  if (titleComment?.[1]) {
-    try {
-      const value: unknown = JSON.parse(titleComment[1]);
-      if (typeof value === 'string' && value.trim()) title = value;
-    } catch {}
-  }
-  const frontTitle = /^---\s*\n(?:.*\n)*?\s*title:\s*(.+)\n(?:.*\n)*?---/m.exec(
-    source.replace(/\r\n?/g, '\n'),
-  );
-  if (frontTitle?.[1]) title = mermaidText(frontTitle[1]);
+  let title = chartTitle(source, name);
 
   const nodes = new Map<string, DiagramNode>();
   const edges: DiagramEdge[] = [];
   const parents: string[] = [];
   const process = findService('flow.process');
   const ignored = new Set<string>();
+  const styles = new MermaidStyles();
+  /** Each node's id as written in the chart, for styles and comments. */
+  const writtenIds = new Map<string, string>();
 
   /** Whether `id` is `of` or one of its enclosing groups. */
   const isAncestor = (id: string, of: string): boolean => {
@@ -278,6 +256,7 @@ export function importMermaid(source: string, name = 'Mermaid'): ImportResult {
         ...(parentId ? { parentId } : {}),
       };
       nodes.set(id, node);
+      writtenIds.set(id, ref.id);
     }
     // As in Mermaid, mentioning a node inside a subgraph moves it there.
     const inside = parents.at(-1);
@@ -288,6 +267,7 @@ export function importMermaid(source: string, name = 'Mermaid'): ImportResult {
       node.shape = ref.shape;
       node.serviceId = `flow.${ref.shape}`;
     }
+    for (const name of ref.classes ?? []) styles.addClass(ref.id, name);
     return node;
   };
 
@@ -301,7 +281,8 @@ export function importMermaid(source: string, name = 'Mermaid'): ImportResult {
           .trim()
           .replace(/^([\p{L}\p{N}_.-]+)\s+(?=\[)/u, '$1');
         const read = readNode(rest);
-        const id = originalId(read?.node.id ?? `subgraph-${nodes.size}`);
+        const writtenId = read?.node.id ?? `subgraph-${nodes.size}`;
+        const id = originalId(writtenId);
         const label =
           read?.node.label ??
           (read && !read.rest.trim() ? read.node.id : mermaidText(rest));
@@ -321,6 +302,7 @@ export function importMermaid(source: string, name = 'Mermaid'): ImportResult {
           color: '#334d80',
           ...(parentId ? { parentId } : {}),
         });
+        writtenIds.set(groupId, writtenId);
         parents.push(groupId);
         continue;
       }
@@ -342,7 +324,12 @@ export function importMermaid(source: string, name = 'Mermaid'): ImportResult {
         ].includes(keyword) &&
         !/^\w+\s*(-->|---|-\.|==|&|\[|\(|\{|>)/.test(statement)
       ) {
-        if (!['direction', 'accTitle', 'accDescr'].includes(keyword))
+        if (['classDef', 'class', 'style'].includes(keyword)) {
+          if (!styles.read(statement))
+            warnings.push(
+              `Skipped unreadable style: ${statement.slice(0, 80)}`,
+            );
+        } else if (!['direction', 'accTitle', 'accDescr'].includes(keyword))
           ignored.add(keyword);
         if (keyword === 'title') title = mermaidText(statement.slice(5));
         continue;
@@ -383,59 +370,78 @@ export function importMermaid(source: string, name = 'Mermaid'): ImportResult {
   if (parents.length) warnings.push('A subgraph was missing its "end"');
   if (ignored.size)
     warnings.push(
-      `Styling and interaction lines were skipped (${[...ignored].sort().join(', ')})`,
+      `Interaction and link styling lines were skipped (${[...ignored].sort().join(', ')})`,
+    );
+  if (styles.unreadable.length)
+    warnings.push(
+      `${styles.unreadable.length} style line(s) set no fill or stroke colour the board can show`,
+    );
+  const missing = styles.undefinedClasses;
+  if (missing.length)
+    warnings.push(`Classes used but never defined: ${missing.join(', ')}`);
+  for (const [id, node] of nodes) {
+    const color = styles.colorOf(writtenIds.get(id) ?? id);
+    if (color) node.color = color;
+  }
+
+  // Comments written by this app's exporter: captions and owners.
+  for (const [writtenId, caption] of exporterComments(source, 'Caption')) {
+    const node = nodes.get(originalId(writtenId));
+    if (node) node.journeyCaption = caption.slice(0, 1000);
+  }
+  for (const [writtenId, owner] of exporterComments(source, 'Owner')) {
+    const node = nodes.get(originalId(writtenId));
+    if (node && trimOwner(owner)) node.owner = trimOwner(owner);
+  }
+  const lanes = subgraphLanes(source, nodes, writtenIds, edges, options);
+  if (lanes.dropped)
+    warnings.push(
+      `${lanes.dropped} link(s) to a whole lane were skipped; lanes are not steps`,
     );
 
-  // Captions written by this app's exporter: `%% Caption <id>: "text"`.
-  for (const match of source.matchAll(
-    /^\s*%%\s*Caption\s+(\S+):\s*(".*")\s*$/gm,
-  )) {
-    const node = nodes.get(originalId(match[1] ?? ''));
-    try {
-      const caption: unknown = JSON.parse(match[2] ?? '');
-      if (node && typeof caption === 'string')
-        node.journeyCaption = caption.slice(0, 1000);
-    } catch {}
-  }
-  if (!nodes.size) throw Error('The flowchart has no nodes to import');
-  // Long labels get a wider tile and wrap, rather than shrinking to fit.
-  for (const node of nodes.values()) {
-    if (node.kind !== 'service') continue;
-    const longest = Math.max(...node.label.split('\n').map((l) => l.length));
-    if (longest > 14) {
-      node.width = Math.min(260, 160 + (longest - 14) * 6);
-      node.wrap = true;
-    }
-    if (node.shape === 'decision') node.depth = 120;
-  }
-
-  const document: DiagramDocument = {
-    version: 1,
-    title: title.slice(0, 200),
+  return finishChart({
+    title,
     nodes: [...nodes.values()],
-    edges,
-  };
-  const laid = layoutDocument(document, direction, 'flow');
-  // Forward links leave from the side facing the flow and enter from the
-  // opposite side, as flowcharts read; links that loop back route freely.
-  const index = new Map(laid.nodes.map((n) => [n.id, n]));
-  for (const edge of laid.edges) {
-    const source = index.get(edge.source);
-    const target = index.get(edge.target);
-    if (!source || !target) continue;
-    const a = worldPosition(source, index);
-    const b = worldPosition(target, index);
-    const forward =
-      direction === 'down'
-        ? b.z - target.depth / 2 > a.z + source.depth / 2
-        : b.x - target.width / 2 > a.x + source.width / 2;
-    if (!forward) continue;
-    edge.sourcePort = direction === 'down' ? 'south' : 'east';
-    edge.targetPort = direction === 'down' ? 'north' : 'west';
-  }
-  return {
-    document: laid,
+    edges: lanes.edges,
+    direction,
     warnings,
     format: 'Mermaid flowchart',
-  };
+    ...(lanes.order ? { lanes: lanes.order } : {}),
+  });
+}
+
+/**
+ * Turn lane subgraphs into owners. Lanes are the subgraphs this app's
+ * exporter marked with `%% Lane`, or every top-level subgraph when asked.
+ * Their contents move to the top level, owned by the lane, and the subgraph
+ * itself goes away.
+ */
+function subgraphLanes(
+  source: string,
+  nodes: Map<string, DiagramNode>,
+  writtenIds: Map<string, string>,
+  edges: DiagramEdge[],
+  options: MermaidOptions,
+): { order?: string[]; edges: DiagramEdge[]; dropped: number } {
+  const marked = exporterComments(source, 'Lane');
+  const lanes = [...nodes.values()].filter((node) => {
+    if (node.kind !== 'group' || node.parentId !== undefined) return false;
+    return options.subgraphLanes || marked.has(writtenIds.get(node.id) ?? '');
+  });
+  if (!lanes.length) return { edges, dropped: 0 };
+  const order: string[] = [];
+  for (const lane of lanes) {
+    const comment = marked.get(writtenIds.get(lane.id) ?? '');
+    const owner = trimOwner(comment ?? lane.label.replace(/\s+/g, ' '));
+    if (!order.includes(owner)) order.push(owner);
+    for (const node of nodes.values()) {
+      if (node.parentId !== lane.id) continue;
+      delete node.parentId;
+      if (owner) node.owner = owner;
+      else delete node.owner;
+    }
+    nodes.delete(lane.id);
+  }
+  const kept = edges.filter((e) => nodes.has(e.source) && nodes.has(e.target));
+  return { order, edges: kept, dropped: edges.length - kept.length };
 }

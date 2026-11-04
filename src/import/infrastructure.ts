@@ -7,7 +7,11 @@ import { parseDocument, serializeDocument } from '../domain/document';
 import { importAws } from './aws';
 import { importCompose } from './compose';
 import { parseHcl } from './hcl';
-import { importMermaid, looksLikeMermaid } from './mermaid';
+import {
+  importMermaid,
+  looksLikeMermaid,
+  type MermaidOptions,
+} from './mermaid';
 import {
   type ImportResult,
   type InfrastructureFile,
@@ -384,6 +388,7 @@ function terraformJson(
 export function importInfrastructure(
   files: InfrastructureFile[],
   requested: ImportFormat = 'auto',
+  options: MermaidOptions = {},
 ): ImportResult {
   if (!files.length || files.length > 256)
     throw Error('Choose 1–256 infrastructure files');
@@ -408,7 +413,7 @@ export function importInfrastructure(
     const [file] = files;
     if (files.length !== 1 || !file)
       throw Error('Choose one Mermaid file at a time');
-    result = importMermaid(file.content, file.name);
+    result = importMermaid(file.content, file.name, options);
   } else if (terraform && files.every((f) => /\.tf$/i.test(f.name))) {
     const blocks = files.flatMap((f) => parseHcl(f.content)),
       parameters: Record<string, unknown> = {};

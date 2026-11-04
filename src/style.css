@@ -1426,6 +1426,16 @@ input[type="color"] {
   font-size: 12px;
   margin: 12px 0;
 }
+.workspace-dialog label.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.workspace-dialog label.check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
 .workspace-dialog textarea {
   width: 100%;
   font: 12px / 1.5 monospace;
