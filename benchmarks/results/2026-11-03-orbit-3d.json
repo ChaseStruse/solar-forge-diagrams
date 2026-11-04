@@ -1,0 +1,455 @@
+{
+  "date": "2026-11-03",
+  "purpose": "Experimental 3D orbit (M6 MVP) vs main, release + diagnostics builds, same machine and window, runs alternated",
+  "window": "997x1216 tiled Hyprland window, DPR 1, WebKitGTK 2.54.1",
+  "builds": {
+    "main": "41a8a6e",
+    "experimental-3d": "f04e20e"
+  },
+  "runs": {
+    "main": [
+      {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+        "viewport": [997, 1216],
+        "pixelRatio": 2,
+        "navigationToDiagnosticsMs": 2728,
+        "build": "optimized shell / production frontend / diagnostics feature",
+        "gpu": {
+          "renderer": "Apple GPU",
+          "vendor": "Apple Inc."
+        },
+        "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+        "rectangleSelection": "pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented",
+        "editorWorkflows": "pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection",
+        "idleFramesOver500ms": 0,
+        "500nodes": {
+          "loadMs": 517,
+          "panEventToFrameP95Ms": 40,
+          "panRenderSubmissionP95Ms": 13,
+          "textures": 10,
+          "drawCalls": 17,
+          "renderSubmissionP95Ms": 10,
+          "cameraChangeToFrameP95Ms": 105
+        },
+        "2000nodes": {
+          "loadMs": 1644,
+          "panEventToFrameP95Ms": 58,
+          "panRenderSubmissionP95Ms": 24,
+          "textures": 34,
+          "drawCalls": 41,
+          "renderSubmissionP95Ms": 24,
+          "cameraChangeToFrameP95Ms": 197
+        },
+        "repeatedOpenTextureCheck": {
+          "cycles": 10,
+          "textures": 4
+        },
+        "contextLossRecovery": true
+      },
+      {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+        "viewport": [997, 1216],
+        "pixelRatio": 2,
+        "navigationToDiagnosticsMs": 2665,
+        "build": "optimized shell / production frontend / diagnostics feature",
+        "gpu": {
+          "renderer": "Apple GPU",
+          "vendor": "Apple Inc."
+        },
+        "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+        "rectangleSelection": "pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented",
+        "editorWorkflows": "pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection",
+        "idleFramesOver500ms": 0,
+        "500nodes": {
+          "loadMs": 509,
+          "panEventToFrameP95Ms": 43,
+          "panRenderSubmissionP95Ms": 10,
+          "textures": 10,
+          "drawCalls": 17,
+          "renderSubmissionP95Ms": 11,
+          "cameraChangeToFrameP95Ms": 109
+        },
+        "2000nodes": {
+          "loadMs": 1495,
+          "panEventToFrameP95Ms": 58,
+          "panRenderSubmissionP95Ms": 20,
+          "textures": 34,
+          "drawCalls": 41,
+          "renderSubmissionP95Ms": 22,
+          "cameraChangeToFrameP95Ms": 183
+        },
+        "repeatedOpenTextureCheck": {
+          "cycles": 10,
+          "textures": 4
+        },
+        "contextLossRecovery": true
+      },
+      {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+        "viewport": [2014, 1216],
+        "pixelRatio": 2,
+        "navigationToDiagnosticsMs": 2675,
+        "build": "optimized shell / production frontend / diagnostics feature",
+        "gpu": {
+          "renderer": "Apple GPU",
+          "vendor": "Apple Inc."
+        },
+        "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+        "rectangleSelection": "pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented",
+        "editorWorkflows": "pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection",
+        "idleFramesOver500ms": 0,
+        "500nodes": {
+          "loadMs": 615,
+          "panEventToFrameP95Ms": 55,
+          "panRenderSubmissionP95Ms": 10,
+          "textures": 11,
+          "drawCalls": 18,
+          "renderSubmissionP95Ms": 129,
+          "cameraChangeToFrameP95Ms": 184
+        },
+        "2000nodes": {
+          "loadMs": 1463,
+          "panEventToFrameP95Ms": 69,
+          "panRenderSubmissionP95Ms": 22,
+          "textures": 34,
+          "drawCalls": 41,
+          "renderSubmissionP95Ms": 27,
+          "cameraChangeToFrameP95Ms": 229
+        },
+        "repeatedOpenTextureCheck": {
+          "cycles": 10,
+          "textures": 4
+        },
+        "contextLossRecovery": true
+      },
+      {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+        "viewport": [997, 1216],
+        "pixelRatio": 2,
+        "navigationToDiagnosticsMs": 2599,
+        "build": "optimized shell / production frontend / diagnostics feature",
+        "gpu": {
+          "renderer": "Apple GPU",
+          "vendor": "Apple Inc."
+        },
+        "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+        "rectangleSelection": "pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented",
+        "editorWorkflows": "pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection",
+        "idleFramesOver500ms": 0,
+        "500nodes": {
+          "loadMs": 518,
+          "panEventToFrameP95Ms": 42,
+          "panRenderSubmissionP95Ms": 10,
+          "textures": 10,
+          "drawCalls": 17,
+          "renderSubmissionP95Ms": 14,
+          "cameraChangeToFrameP95Ms": 89
+        },
+        "2000nodes": {
+          "loadMs": 1411,
+          "panEventToFrameP95Ms": 47,
+          "panRenderSubmissionP95Ms": 18,
+          "textures": 34,
+          "drawCalls": 41,
+          "renderSubmissionP95Ms": 19,
+          "cameraChangeToFrameP95Ms": 148
+        },
+        "repeatedOpenTextureCheck": {
+          "cycles": 10,
+          "textures": 4
+        },
+        "contextLossRecovery": true
+      },
+      {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+        "viewport": [997, 1216],
+        "pixelRatio": 2,
+        "navigationToDiagnosticsMs": 2585,
+        "build": "optimized shell / production frontend / diagnostics feature",
+        "gpu": {
+          "renderer": "Apple GPU",
+          "vendor": "Apple Inc."
+        },
+        "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+        "rectangleSelection": "pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented",
+        "editorWorkflows": "pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection",
+        "idleFramesOver500ms": 0,
+        "500nodes": {
+          "loadMs": 510,
+          "panEventToFrameP95Ms": 37,
+          "panRenderSubmissionP95Ms": 11,
+          "textures": 10,
+          "drawCalls": 17,
+          "renderSubmissionP95Ms": 12,
+          "cameraChangeToFrameP95Ms": 99
+        },
+        "2000nodes": {
+          "loadMs": 1421,
+          "panEventToFrameP95Ms": 47,
+          "panRenderSubmissionP95Ms": 21,
+          "textures": 34,
+          "drawCalls": 41,
+          "renderSubmissionP95Ms": 27,
+          "cameraChangeToFrameP95Ms": 141
+        },
+        "repeatedOpenTextureCheck": {
+          "cycles": 10,
+          "textures": 4
+        },
+        "contextLossRecovery": true
+      }
+    ],
+    "experimental-3d": [
+      {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+        "viewport": [997, 1216],
+        "pixelRatio": 2,
+        "navigationToDiagnosticsMs": 2689,
+        "build": "optimized shell / production frontend / diagnostics feature",
+        "gpu": {
+          "renderer": "Apple GPU",
+          "vendor": "Apple Inc."
+        },
+        "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+        "rectangleSelection": "pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented",
+        "editorWorkflows": "pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection",
+        "idleFramesOver500ms": 0,
+        "500nodes": {
+          "loadMs": 531,
+          "panEventToFrameP95Ms": 32,
+          "panRenderSubmissionP95Ms": 12,
+          "textures": 10,
+          "drawCalls": 17,
+          "renderSubmissionP95Ms": 18,
+          "cameraChangeToFrameP95Ms": 97,
+          "orbit3d": {
+            "eventToFrameP95Ms": 37,
+            "renderSubmissionP95Ms": 13,
+            "drawCallsTurned": 17,
+            "idleFramesOver500msTurned": 1
+          }
+        },
+        "2000nodes": {
+          "loadMs": 1529,
+          "panEventToFrameP95Ms": 52,
+          "panRenderSubmissionP95Ms": 24,
+          "textures": 34,
+          "drawCalls": 41,
+          "renderSubmissionP95Ms": 24,
+          "cameraChangeToFrameP95Ms": 166,
+          "orbit3d": {
+            "eventToFrameP95Ms": 52,
+            "renderSubmissionP95Ms": 21,
+            "drawCallsTurned": 41,
+            "idleFramesOver500msTurned": 1
+          }
+        },
+        "repeatedOpenTextureCheck": {
+          "cycles": 10,
+          "textures": 4
+        },
+        "contextLossRecovery": true
+      },
+      {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+        "viewport": [997, 1216],
+        "pixelRatio": 2,
+        "navigationToDiagnosticsMs": 2740,
+        "build": "optimized shell / production frontend / diagnostics feature",
+        "gpu": {
+          "renderer": "Apple GPU",
+          "vendor": "Apple Inc."
+        },
+        "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+        "rectangleSelection": "pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented",
+        "editorWorkflows": "pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection",
+        "idleFramesOver500ms": 0,
+        "500nodes": {
+          "loadMs": 619,
+          "panEventToFrameP95Ms": 52,
+          "panRenderSubmissionP95Ms": 10,
+          "textures": 10,
+          "drawCalls": 17,
+          "renderSubmissionP95Ms": 11,
+          "cameraChangeToFrameP95Ms": 131,
+          "orbit3d": {
+            "eventToFrameP95Ms": 46,
+            "renderSubmissionP95Ms": 10,
+            "drawCallsTurned": 17,
+            "idleFramesOver500msTurned": 1
+          }
+        },
+        "2000nodes": {
+          "loadMs": 1857,
+          "panEventToFrameP95Ms": 61,
+          "panRenderSubmissionP95Ms": 23,
+          "textures": 34,
+          "drawCalls": 41,
+          "renderSubmissionP95Ms": 33,
+          "cameraChangeToFrameP95Ms": 200,
+          "orbit3d": {
+            "eventToFrameP95Ms": 65,
+            "renderSubmissionP95Ms": 25,
+            "drawCallsTurned": 41,
+            "idleFramesOver500msTurned": 1
+          }
+        },
+        "repeatedOpenTextureCheck": {
+          "cycles": 10,
+          "textures": 4
+        },
+        "contextLossRecovery": true
+      },
+      {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+        "viewport": [997, 1216],
+        "pixelRatio": 2,
+        "navigationToDiagnosticsMs": 2625,
+        "build": "optimized shell / production frontend / diagnostics feature",
+        "gpu": {
+          "renderer": "Apple GPU",
+          "vendor": "Apple Inc."
+        },
+        "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+        "rectangleSelection": "pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented",
+        "editorWorkflows": "pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection",
+        "idleFramesOver500ms": 0,
+        "500nodes": {
+          "loadMs": 659,
+          "panEventToFrameP95Ms": 81,
+          "panRenderSubmissionP95Ms": 11,
+          "textures": 11,
+          "drawCalls": 18,
+          "renderSubmissionP95Ms": 128,
+          "cameraChangeToFrameP95Ms": 209,
+          "orbit3d": {
+            "eventToFrameP95Ms": 75,
+            "renderSubmissionP95Ms": 10,
+            "drawCallsTurned": 18,
+            "idleFramesOver500msTurned": 1
+          }
+        },
+        "2000nodes": {
+          "loadMs": 1675,
+          "panEventToFrameP95Ms": 79,
+          "panRenderSubmissionP95Ms": 20,
+          "textures": 34,
+          "drawCalls": 41,
+          "renderSubmissionP95Ms": 23,
+          "cameraChangeToFrameP95Ms": 229,
+          "orbit3d": {
+            "eventToFrameP95Ms": 84,
+            "renderSubmissionP95Ms": 21,
+            "drawCallsTurned": 41,
+            "idleFramesOver500msTurned": 1
+          }
+        },
+        "repeatedOpenTextureCheck": {
+          "cycles": 10,
+          "textures": 4
+        },
+        "contextLossRecovery": true
+      },
+      {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+        "viewport": [997, 1216],
+        "pixelRatio": 2,
+        "navigationToDiagnosticsMs": 2602,
+        "build": "optimized shell / production frontend / diagnostics feature",
+        "gpu": {
+          "renderer": "Apple GPU",
+          "vendor": "Apple Inc."
+        },
+        "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+        "rectangleSelection": "pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented",
+        "editorWorkflows": "pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection",
+        "idleFramesOver500ms": 0,
+        "500nodes": {
+          "loadMs": 508,
+          "panEventToFrameP95Ms": 48,
+          "panRenderSubmissionP95Ms": 12,
+          "textures": 10,
+          "drawCalls": 17,
+          "renderSubmissionP95Ms": 14,
+          "cameraChangeToFrameP95Ms": 93,
+          "orbit3d": {
+            "eventToFrameP95Ms": 35,
+            "renderSubmissionP95Ms": 11,
+            "drawCallsTurned": 17,
+            "idleFramesOver500msTurned": 1
+          }
+        },
+        "2000nodes": {
+          "loadMs": 1440,
+          "panEventToFrameP95Ms": 47,
+          "panRenderSubmissionP95Ms": 21,
+          "textures": 34,
+          "drawCalls": 41,
+          "renderSubmissionP95Ms": 23,
+          "cameraChangeToFrameP95Ms": 149,
+          "orbit3d": {
+            "eventToFrameP95Ms": 47,
+            "renderSubmissionP95Ms": 19,
+            "drawCallsTurned": 41,
+            "idleFramesOver500msTurned": 1
+          }
+        },
+        "repeatedOpenTextureCheck": {
+          "cycles": 10,
+          "textures": 4
+        },
+        "contextLossRecovery": true
+      },
+      {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+        "viewport": [997, 1216],
+        "pixelRatio": 2,
+        "navigationToDiagnosticsMs": 2593,
+        "build": "optimized shell / production frontend / diagnostics feature",
+        "gpu": {
+          "renderer": "Apple GPU",
+          "vendor": "Apple Inc."
+        },
+        "syntheticSnappedDrag": "pass: one completed gesture, coordinates snapped to grid",
+        "rectangleSelection": "pass: forward/reverse, Shift-add, cancel, no document edits, native drag defaults prevented",
+        "editorWorkflows": "pass: group/ungroup history, clipboard graph, one resize, one multiselection drag, named-port connection",
+        "idleFramesOver500ms": 0,
+        "500nodes": {
+          "loadMs": 497,
+          "panEventToFrameP95Ms": 44,
+          "panRenderSubmissionP95Ms": 11,
+          "textures": 10,
+          "drawCalls": 17,
+          "renderSubmissionP95Ms": 13,
+          "cameraChangeToFrameP95Ms": 98,
+          "orbit3d": {
+            "eventToFrameP95Ms": 36,
+            "renderSubmissionP95Ms": 9,
+            "drawCallsTurned": 17,
+            "idleFramesOver500msTurned": 1
+          }
+        },
+        "2000nodes": {
+          "loadMs": 1423,
+          "panEventToFrameP95Ms": 51,
+          "panRenderSubmissionP95Ms": 19,
+          "textures": 34,
+          "drawCalls": 41,
+          "renderSubmissionP95Ms": 17,
+          "cameraChangeToFrameP95Ms": 141,
+          "orbit3d": {
+            "eventToFrameP95Ms": 51,
+            "renderSubmissionP95Ms": 18,
+            "drawCallsTurned": 41,
+            "idleFramesOver500msTurned": 1
+          }
+        },
+        "repeatedOpenTextureCheck": {
+          "cycles": 10,
+          "textures": 4
+        },
+        "contextLossRecovery": true
+      }
+    ]
+  }
+}
