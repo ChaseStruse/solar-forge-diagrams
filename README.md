@@ -21,7 +21,7 @@ The installer checks the bundle's checksums and package identity, then installs 
 
 - **Editing:** Plan and 2.5D views, multi-select, grouping, resize, connections, clipboard, undo/redo, text and sticky notes, bulk architecture details, themes and board fonts, and a built-in Features tour.
 - **Catalog:** official AWS and Kubernetes icons, container/DevOps/networking pictograms, flowchart shapes, and an example browser.
-- **Import:** Mermaid flowcharts, Terraform (`.tf` or `terraform show -json`), CloudFormation YAML/JSON and Docker Compose, parsed locally. No Terraform, Docker or network access is needed.
+- **Import:** Mermaid flowcharts, state and architecture diagrams, Terraform (`.tf` or `terraform show -json`), CloudFormation YAML/JSON and Docker Compose, parsed locally. No Terraform, Docker or network access is needed.
 - **Network checks:** security groups, network ACLs and route tables feed a reachability matrix with explained Allowed / Denied / Unknown decisions.
 - **Journeys:** animated traffic walkthroughs with saved scenarios, captions and branch choices.
 - **Swimlanes:** give steps an owner and show any board as lanes, with handoffs called out during journeys.

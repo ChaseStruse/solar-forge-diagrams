@@ -6,6 +6,7 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 
 ### Added
 
+- **Mermaid state and architecture diagrams** import: states, choices and composite states become flowchart steps, decisions and groups; architecture groups, services (with catalog icons such as `logos:aws-lambda`), junctions and edge sides carry over. Flowchart and state colours from `classDef`, `class`, `:::` and `style` now colour the tiles. Exported owners and lanes import back, and **Mermaid subgraphs become swimlanes** turns any flowchart's top-level subgraphs into lanes.
 - **Swimlanes in exports:** SVG draws the lane bands and names; draw.io gets real swimlane containers holding their steps; Mermaid and PlantUML wrap each lane's steps in a subgraph or rectangle and follow the flow's direction. Mermaid and PlantUML exports also keep each step's owner as a comment.
 - **Pen input:** handles, connection hit areas and the tool rail grow while a pen is in use; a pen tap no longer nudges the component under it; a barrel button that sends a right or middle click pans, as those mouse buttons do; a pen's eraser end deletes the components and connections it passes over in one undoable step.
 - **Loading screen** while the app starts, instead of a blank black window: the Solar Forge mark and a progress bar, fading out once the board is drawn. The desktop window also opens in the app's background colour.
@@ -26,6 +27,7 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 
 ### Changed
 
+- Importing a diagram onto a board shown as lanes no longer leaves the lane view on; the import sets lanes only when the chart has them.
 - Connections between two components in both directions are drawn as two parallel one-way lanes.
 - Component captions stay on one line by default, shrinking to fit.
 - Data-flow animation runs at half its previous speed.

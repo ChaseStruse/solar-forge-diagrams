@@ -1,0 +1,21 @@
+---
+title: Serverless web app
+---
+architecture-beta
+  %% Icons named logos:aws-… use the matching AWS component.
+  service users(internet)[Customers]
+
+  group cloud(cloud)[AWS account]
+  service cdn(logos:aws-cloudfront)[CloudFront] in cloud
+  service api(logos:aws-api-gateway)[API Gateway] in cloud
+
+  group app(cloud)[Application] in cloud
+  service orders(logos:aws-lambda)[Orders function] in app
+  service table(logos:aws-dynamodb)[Orders table] in app
+  service files(logos:aws-s3)[Receipts bucket] in app
+
+  users:R --> L:cdn
+  cdn:R --> L:api
+  api:R --> L:orders
+  orders:R -[writes]-> L:table
+  orders:B --> T:files

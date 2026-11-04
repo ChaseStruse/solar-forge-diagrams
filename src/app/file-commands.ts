@@ -189,6 +189,8 @@ export function installFileCommands(
           title: doc.title,
           nodes: [...nodeChanges.values()],
           edges: [...edgeChanges.values()],
+          // The import replaces the board, lane view included.
+          lanes: doc.lanes ?? null,
         },
         [],
       );

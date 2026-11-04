@@ -134,7 +134,7 @@ test('top-down charts run downwards, left-right charts run across', () => {
   expect(importMermaid('flowchart RL\n a --> b').warnings[0]).toContain('RL');
 });
 
-test('styling, comments and front matter are handled, not imported', () => {
+test('styling, comments and front matter are handled', () => {
   const result = importMermaid(`---
 title: Checkout flow
 ---
@@ -147,8 +147,10 @@ flowchart LR
   linkStyle 0 stroke:red`);
   expect(result.document.title).toBe('Checkout flow');
   expect(links(result.document)).toEqual(['A>B']);
-  expect(result.warnings.join(' ')).toContain(
-    'classDef, click, linkStyle, style',
+  expect(result.warnings.join(' ')).toContain('(click, linkStyle)');
+  // The class fill wins: `style` only set A's stroke.
+  expect(result.document.nodes.find((n) => n.id === 'A')?.color).toBe(
+    '#ff9966',
   );
 });
 
@@ -164,6 +166,9 @@ test('other Mermaid diagrams and non-Mermaid text are refused clearly', () => {
     'sequenceDiagram',
   );
   expect(() => importMermaid('hello world')).toThrow('flowchart');
+  expect(() => importMermaid('classDiagram\n A <|-- B')).toThrow(
+    'classDiagram',
+  );
   expect(() => importMermaid('flowchart LR\n%% nothing')).toThrow('no nodes');
   expect(looksLikeMermaid('%% c\n\ngraph TD\n a-->b')).toBe(true);
   expect(looksLikeMermaid('erDiagram\n A ||--o{ B : has')).toBe(true);

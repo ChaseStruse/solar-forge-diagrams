@@ -13,7 +13,7 @@ export function infrastructureImporter(host: {
   panel.className = 'workspace-dialog';
   panel.hidden = true;
   panel.setAttribute('aria-label', 'Import a diagram');
-  panel.innerHTML = `<div class="dialog-heading"><h2>Import</h2><button data-close aria-label="Close import">×</button></div><p>Choose a Mermaid flowchart, .tf files together, or a Terraform JSON, CloudFormation, or Compose file. Files stay on this computer; code is never executed.</p><label>Format<select data-format><option value="auto">Detect format</option><option value="terraform">Terraform HCL / show JSON</option><option value="cloudformation">CloudFormation YAML / JSON</option><option value="compose">Docker Compose</option><option value="mermaid">Mermaid flowchart</option></select></label><button data-files>Choose files…</button><p data-names>No files selected</p><label>Or paste Mermaid or infrastructure code<textarea data-source rows="9" spellcheck="false" placeholder="Paste a Mermaid flowchart or infrastructure code; use Format to select Terraform for pasted HCL"></textarea></label><button data-preview>Preview import</button><div data-summary role="status"></div><ul data-warnings></ul><div class="dialog-actions"><button data-apply disabled>Import diagram</button></div>`;
+  panel.innerHTML = `<div class="dialog-heading"><h2>Import</h2><button data-close aria-label="Close import">×</button></div><p>Choose a Mermaid flowchart, state or architecture diagram, .tf files together, or a Terraform JSON, CloudFormation, or Compose file. Files stay on this computer; code is never executed.</p><label>Format<select data-format><option value="auto">Detect format</option><option value="terraform">Terraform HCL / show JSON</option><option value="cloudformation">CloudFormation YAML / JSON</option><option value="compose">Docker Compose</option><option value="mermaid">Mermaid chart</option></select></label><label class="check"><input type="checkbox" data-lanes> Mermaid subgraphs become swimlanes</label><button data-files>Choose files…</button><p data-names>No files selected</p><label>Or paste Mermaid or infrastructure code<textarea data-source rows="9" spellcheck="false" placeholder="Paste a Mermaid chart or infrastructure code; use Format to select Terraform for pasted HCL"></textarea></label><button data-preview>Preview import</button><div data-summary role="status"></div><ul data-warnings></ul><div class="dialog-actions"><button data-apply disabled>Import diagram</button></div>`;
   document.body.append(panel);
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
@@ -27,7 +27,8 @@ export function infrastructureImporter(host: {
     format = find<HTMLSelectElement>('[data-format]'),
     apply = find<HTMLButtonElement>('[data-apply]'),
     summary = find('[data-summary]'),
-    warnings = find('[data-warnings]');
+    warnings = find('[data-warnings]'),
+    lanes = find<HTMLInputElement>('[data-lanes]');
   let files: InfrastructureFile[] = [],
     preview: ImportResult | undefined,
     busy = false;
@@ -53,6 +54,7 @@ export function infrastructureImporter(host: {
     invalidate();
   };
   format.onchange = invalidate;
+  lanes.onchange = invalidate;
   const prepare = async () => {
     if (busy) return;
     invalidate();
@@ -85,10 +87,11 @@ export function infrastructureImporter(host: {
         chosen,
         format.value as ImportFormat,
         controller.signal,
+        { subgraphLanes: lanes.checked },
       );
       if (controller.signal.aborted || request !== revision) return;
       preview = result;
-      const flowchart = preview.format === 'Mermaid flowchart';
+      const flowchart = preview.format.startsWith('Mermaid');
       const shapes = preview.document.nodes.filter(
         (n) => n.kind !== 'group',
       ).length;

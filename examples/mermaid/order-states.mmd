@@ -1,0 +1,27 @@
+---
+title: Order states
+---
+stateDiagram-v2
+  %% An order's life: payment can be declined, and fulfilment packs and ships.
+  direction LR
+  [*] --> Draft
+  state "Waiting for payment" as Waiting
+  Draft --> Waiting : submit
+  Waiting --> approved
+  state approved <<choice>>
+  approved --> Paid : card approved
+  approved --> Draft : declined
+  Paid : Receipt sent
+
+  state Fulfilment {
+    [*] --> Packing
+    Packing --> Shipped
+    Shipped --> [*]
+  }
+  Paid --> Fulfilment
+  Fulfilment --> Delivered
+  Delivered --> [*]
+
+  note right of Waiting : Cancelled after 24 hours
+  classDef happy fill:#58e39b
+  class Paid, Delivered happy

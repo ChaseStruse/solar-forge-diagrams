@@ -35,7 +35,11 @@ test('import workers terminate on completion, parser failure, crash, cancellatio
   const files = [{ name: 'main.tf', content: 'resource "aws_vpc" "main" {}' }];
   try {
     const pending = importInWorker(files, 'terraform');
-    expect(last().message).toEqual({ files, requested: 'terraform' });
+    expect(last().message).toEqual({
+      files,
+      requested: 'terraform',
+      options: {},
+    });
     const result = {
       document: starterDocument(),
       warnings: [],
