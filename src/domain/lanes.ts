@@ -17,6 +17,15 @@ const LAYER_GAP = 200;
 /** Space between steps stacked in the same lane and layer. */
 const STACK_GAP = 60;
 const grid = (n: number) => Math.round(n / 10) * 10;
+/** Lane tints, cycled; quiet enough to sit under tiles in every theme. */
+export const LANE_HUES = [
+  '#35e0f0',
+  '#b48cff',
+  '#ffb547',
+  '#58e39b',
+  '#ff6fa8',
+  '#6aa8ff',
+];
 
 /** The lane a node belongs to: its owner, or '' for Unassigned. */
 export const laneKey = (node: DiagramNode) => node.owner ?? '';
@@ -243,6 +252,24 @@ export function laneBands(doc: DiagramDocument): LaneBands | undefined {
       LANE_PAD,
     to: Math.max(...roots.map((n) => mainAt(n) + along(n) / 2)) + LANE_PAD,
   };
+}
+
+/**
+ * The steps and boundaries in each lane, in lane order, for exports. Empty
+ * when the board is not shown as lanes. Nested nodes travel with their
+ * top-level boundary; text and notes belong to no lane.
+ */
+export function laneMembers(
+  doc: DiagramDocument,
+): { owner: string; nodes: DiagramNode[] }[] {
+  if (!doc.lanes) return [];
+  const roots = participants(doc);
+  return laneOrder(doc)
+    .map((owner) => ({
+      owner,
+      nodes: roots.filter((n) => laneKey(n) === owner),
+    }))
+    .filter((lane) => lane.nodes.length);
 }
 
 /** The owner of the band under a board point, if any. */

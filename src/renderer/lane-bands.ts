@@ -5,18 +5,14 @@ import {
   type Object3D,
   PlaneGeometry,
 } from 'three';
-import { LANE_HEADER, type LaneBands, laneName } from '../domain/lanes';
+import {
+  LANE_HEADER,
+  LANE_HUES,
+  type LaneBands,
+  laneName,
+} from '../domain/lanes';
 import type { ScenePalette } from '../themes';
 
-/** Lane tints, cycled; quiet enough to sit under tiles in every theme. */
-const LANE_HUES = [
-  '#35e0f0',
-  '#b48cff',
-  '#ffb547',
-  '#58e39b',
-  '#ff6fa8',
-  '#6aa8ff',
-];
 /** Just above the grid, below every tile and connection. */
 const FLOOR = -10;
 
