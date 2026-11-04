@@ -124,6 +124,7 @@ export function installShortcuts(app: App, commands: ShortcutCommands): void {
           'fit',
           'iso',
           'top',
+          'view-3d',
           'tool-group',
           'ungroup',
           'duplicate',

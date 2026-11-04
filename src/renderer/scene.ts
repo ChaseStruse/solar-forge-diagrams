@@ -803,6 +803,22 @@ export class DiagramScene {
     this.onZoom(this.view.percent);
     this.invalidate();
   }
+  /** Experimental 3D: right-drag orbits the 2.5D camera while this is on. */
+  public orbit3d = false;
+  /** Turn 3D orbit on or off; off returns to the standard 2.5D angle. */
+  public setOrbit(enabled: boolean): void {
+    this.orbit3d = enabled;
+    if (!enabled) this.view.resetOrbit();
+    this.setView('isometric');
+  }
+  /** Orbit by a screen drag in pixels. */
+  public orbitBy(dx: number, dy: number): void {
+    if (!this.orbit3d || this.mode !== 'isometric') return;
+    this.inMotion();
+    this.fitted = false;
+    this.view.orbit(dx, dy);
+    this.invalidate();
+  }
   public setQuality(ratio: number): void {
     this.renderer.setPixelRatio(
       Math.min(devicePixelRatio, Math.min(2, Math.max(1, ratio))),
@@ -857,10 +873,16 @@ export class DiagramScene {
     if (!from || !across || !along) return;
     this.inMotion();
     this.fitted = false;
-    // Both views keep board rows horizontal: screen x is board x, screen y is
-    // board z. Taking one axis from each ray drops perspective's sideways drift.
-    this.target.x += across.x - from.x;
-    this.target.z += along.z - from.z;
+    if (this.view.orbited) {
+      // A turned 3D view: screen directions run diagonally across the board.
+      this.target.x += across.x - from.x + along.x - from.x;
+      this.target.z += across.z - from.z + along.z - from.z;
+    } else {
+      // Both views keep board rows horizontal: screen x is board x, screen y
+      // is board z. One axis from each ray drops perspective's sideways drift.
+      this.target.x += across.x - from.x;
+      this.target.z += along.z - from.z;
+    }
     this.setView(this.mode);
     this.invalidate();
   }
@@ -986,6 +1008,8 @@ export class DiagramScene {
       },
       refreshPositions: (ids) => this.refreshPositions(ids),
       updatePositions: () => this.updatePositions(),
+      orbitEnabled: () => this.orbit3d && this.mode === 'isometric',
+      orbitBy: (dx, dy) => this.orbitBy(dx, dy),
       panBoard: (dx, dz) => {
         this.fitted = false;
         this.target.x += dx;

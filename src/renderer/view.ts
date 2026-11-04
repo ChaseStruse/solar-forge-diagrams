@@ -20,6 +20,11 @@ const REFERENCE_DISTANCE = 1600;
 /** Roughly where a small board fits; farther away, fog stops thickening. */
 const FOG_DISTANCE = 2800;
 const MIN_ZOOM = 0.05;
+/** Orbit tilt limits: low enough to see tiles side-on, never upside down. */
+export const MIN_PITCH = (12 * Math.PI) / 180;
+export const MAX_PITCH = (89 * Math.PI) / 180;
+/** Radians of orbit per screen pixel dragged. */
+const ORBIT_SPEED = 0.006;
 const MAX_ZOOM = 4;
 export class BoardView {
   public readonly target = new Vector3();
@@ -30,6 +35,9 @@ export class BoardView {
   private height = 1;
   private distance = REFERENCE_DISTANCE;
   private rightInset = 260;
+  /** Experimental 3D orbit: turn around the target and tilt the view. */
+  private yaw = 0;
+  private pitch = ELEVATION;
   public get camera(): PerspectiveCamera | OrthographicCamera {
     return this.mode === 'top' ? this.plan : this.spatial;
   }
@@ -57,12 +65,14 @@ export class BoardView {
     if (this.mode === 'top') {
       camera.up.set(0, 0, -1);
       camera.position.set(this.target.x, 3000, this.target.z);
-    } else
+    } else {
+      const flat = this.distance * Math.cos(this.pitch);
       camera.position.set(
-        this.target.x,
-        this.target.y + this.distance * Math.sin(ELEVATION),
-        this.target.z + this.distance * Math.cos(ELEVATION),
+        this.target.x + flat * Math.sin(this.yaw),
+        this.target.y + this.distance * Math.sin(this.pitch),
+        this.target.z + flat * Math.cos(this.yaw),
       );
+    }
     camera.lookAt(this.target);
     camera.setViewOffset(
       this.width,
@@ -121,10 +131,29 @@ export class BoardView {
     this.mode = previousMode;
     this.update();
   }
+  /** Turn and tilt the 2.5D camera by a screen drag, in pixels. */
+  public orbit(dx: number, dy: number): void {
+    this.yaw = (this.yaw - dx * ORBIT_SPEED) % (Math.PI * 2);
+    this.pitch = Math.min(
+      MAX_PITCH,
+      Math.max(MIN_PITCH, this.pitch + dy * ORBIT_SPEED),
+    );
+    this.update();
+  }
+  /** Back to the standard 2.5D angle. */
+  public resetOrbit(): void {
+    this.yaw = 0;
+    this.pitch = ELEVATION;
+    this.update();
+  }
+  /** Whether the camera has been turned from the standard angle. */
+  public get orbited(): boolean {
+    return this.yaw !== 0 || this.pitch !== ELEVATION;
+  }
   /** Everything needed to put the camera back exactly where it was. */
   public snapshot(): () => void {
     const target = this.target.clone();
-    const { distance, rightInset, mode } = this;
+    const { distance, rightInset, mode, yaw, pitch } = this;
     const spatialZoom = this.spatial.zoom;
     const planZoom = this.plan.zoom;
     return () => {
@@ -132,6 +161,8 @@ export class BoardView {
       this.distance = distance;
       this.rightInset = rightInset;
       this.mode = mode;
+      this.yaw = yaw;
+      this.pitch = pitch;
       this.spatial.zoom = spatialZoom;
       this.plan.zoom = planZoom;
       this.update();

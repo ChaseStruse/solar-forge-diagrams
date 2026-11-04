@@ -219,15 +219,20 @@ element('tool-connect').onclick = () => {
     'Choose a source, then a target. Or drag a port dot to another component.',
   );
 };
-element('iso').onclick = () => {
-  scene.setView('isometric');
-  element('iso').setAttribute('aria-pressed', 'true');
-  element('top').setAttribute('aria-pressed', 'false');
+/** 2.5D, Plan or the experimental 3D orbit view. */
+const showView = (view: 'iso' | 'top' | 'view-3d') => {
+  if (view === 'top') scene.setView('top');
+  else scene.setOrbit(view === 'view-3d');
+  for (const id of ['iso', 'top', 'view-3d'])
+    element(id).setAttribute('aria-pressed', String(id === view));
 };
-element('top').onclick = () => {
-  scene.setView('top');
-  element('iso').setAttribute('aria-pressed', 'false');
-  element('top').setAttribute('aria-pressed', 'true');
+element('iso').onclick = () => showView('iso');
+element('top').onclick = () => showView('top');
+element('view-3d').onclick = () => {
+  showView('view-3d');
+  notify(
+    '3D (experimental): right-drag to orbit and tilt. 2.5D resets the angle.',
+  );
 };
 for (const id of ['fit', 'tool-fit']) element(id).onclick = () => scene.fit();
 element('zoom-in').onclick = () => scene.zoomBy(1.2);

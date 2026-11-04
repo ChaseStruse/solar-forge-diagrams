@@ -750,6 +750,36 @@ await Bun.sleep(300);
   );
 }
 
+// Experimental 3D: right-drag orbits only in 3D, and 2.5D resets the angle.
+{
+  const camera = () =>
+    evaluate(
+      `window.solarForge.scene.camera.position.toArray().map(Math.round).join()`,
+    );
+  await evaluate(`document.querySelector('#iso').click()`);
+  const level = await camera();
+  await evaluate(`document.querySelector('#view-3d').click()`);
+  await dragFrom({ x: 640, y: 420 }, { x: 820, y: 360 }, 'right');
+  await key('Escape');
+  const turned = await camera();
+  check(
+    '3D right-drag orbits the camera',
+    turned !== level &&
+      (await evaluate(
+        `document.querySelector('#view-3d').getAttribute('aria-pressed')`,
+      )) === 'true',
+  );
+  await evaluate(`document.querySelector('#iso').click()`);
+  check('2.5D restores the standard angle', (await camera()) === level);
+  await dragFrom({ x: 640, y: 420 }, { x: 820, y: 360 }, 'right');
+  await key('Escape');
+  const panned: string = await camera();
+  const [lx, ly] = level.split(',');
+  const [px, py] = panned.split(',');
+  check('right-drag still pans in 2.5D', px !== lx && py === ly);
+  await evaluate(`window.solarForge.scene.fit()`);
+}
+
 // Swimlanes: owners from the inspector, L toggles, a drop changes owner.
 {
   await evaluate(

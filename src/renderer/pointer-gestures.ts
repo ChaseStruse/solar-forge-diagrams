@@ -87,6 +87,10 @@ export interface GestureBoard {
   updatePositions(): void;
   /** Move the camera target by a board-space offset. */
   panBoard(dx: number, dz: number): void;
+  /** Whether right-drag orbits the camera (experimental 3D view). */
+  orbitEnabled(): boolean;
+  /** Orbit the camera by a screen drag in pixels. */
+  orbitBy(dx: number, dy: number): void;
   setCursor(cursor: string): void;
   /** The cursor of the active tool over empty board. */
   toolCursor(): string;
@@ -154,6 +158,8 @@ export class PointerGestures {
       }
     | undefined;
   private pan: { x: number; z: number } | undefined;
+  /** Last screen point of a 3D orbit drag. */
+  private orbiting: { x: number; y: number } | undefined;
   private marquee:
     | {
         start: ScreenPoint;
@@ -252,6 +258,7 @@ export class PointerGestures {
     this.dragOrigins = [];
     this.resizing = undefined;
     this.pan = undefined;
+    this.orbiting = undefined;
     this.connectionStart = undefined;
     this.preview.clear();
     this.stroke = undefined;
@@ -295,6 +302,7 @@ export class PointerGestures {
     this.drag = undefined;
     this.dragOrigins = [];
     this.pan = undefined;
+    this.orbiting = undefined;
     this.guides.clear();
     this.connectionStart = undefined;
     this.preview.clear();
@@ -337,6 +345,10 @@ export class PointerGestures {
     if (!point) return;
     this.activePointer = event.pointerId;
     if (event.isTrusted) board.canvas.setPointerCapture(event.pointerId);
+    if (event.button === 2 && board.orbitEnabled()) {
+      this.orbiting = { x: event.clientX, y: event.clientY };
+      return;
+    }
     if (
       event.button === 1 ||
       event.button === 2 ||
@@ -503,6 +515,15 @@ export class PointerGestures {
     if (event.pointerId !== this.activePointer) return;
     event.preventDefault();
     board.inMotion();
+    // Orbiting follows the screen, even where the pointer leaves the floor.
+    if (this.orbiting) {
+      board.orbitBy(
+        event.clientX - this.orbiting.x,
+        event.clientY - this.orbiting.y,
+      );
+      this.orbiting = { x: event.clientX, y: event.clientY };
+      return;
+    }
     if (this.erasing) {
       this.eraseAt(event);
       return;
@@ -797,6 +818,7 @@ export class PointerGestures {
     this.drag = undefined;
     this.dragOrigins = [];
     this.pan = undefined;
+    this.orbiting = undefined;
     this.guides.clear();
     if (moves.length === 1) {
       const move = moves[0];

@@ -79,3 +79,54 @@ test('zoom-in reach grows with the board instead of capping at 4x the fit', () =
   expect(view.clampZoom(1000)).toBe(4);
   expect(view.clampZoom(0)).toBe(0.05);
 });
+
+test('3D orbit turns and tilts around the target, within limits', () => {
+  const view = new BoardView();
+  view.resize(1440, 1000);
+  const bounds = { minX: -470, maxX: 470, minZ: -305, maxZ: 305, maxY: 80 };
+  view.fit(bounds);
+  const target = view.target.clone();
+  const start = view.camera.position.clone();
+  const reach = start.distanceTo(target);
+  expect(view.orbited).toBe(false);
+  // A quarter turn: the camera swings round to the side of the board.
+  view.orbit(-Math.PI / 2 / 0.006, 0);
+  expect(view.orbited).toBe(true);
+  expect(view.camera.position.distanceTo(target)).toBeCloseTo(reach, 6);
+  expect(view.camera.position.x).toBeGreaterThan(target.x + reach / 2);
+  // The target stays in the middle of the view.
+  const middle = target.clone().project(view.camera);
+  expect(Math.abs(middle.y)).toBeLessThan(0.05);
+  // Tilt is clamped: never below the floor or past straight down.
+  view.orbit(0, -100000);
+  expect(view.camera.position.y).toBeGreaterThan(target.y);
+  const low = view.camera.position.y;
+  view.orbit(0, 100000);
+  expect(view.camera.position.y).toBeGreaterThan(low);
+  expect(view.camera.up.y).toBe(1);
+  // Fitting keeps the turned angle and still fits the board.
+  view.fit(bounds);
+  expect(view.orbited).toBe(true);
+  for (const x of [-470, 470])
+    for (const z of [-305, 305]) {
+      const p = new Vector3(x, 0, z).project(view.camera);
+      expect(Math.abs(p.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(p.y)).toBeLessThanOrEqual(1);
+    }
+  view.resetOrbit();
+  expect(view.orbited).toBe(false);
+  view.fit(bounds);
+  expect(view.camera.position.distanceTo(start)).toBeLessThan(1e-6);
+});
+
+test('a camera snapshot restores the orbit angle', () => {
+  const view = new BoardView();
+  view.resize(1440, 1000);
+  view.fit({ minX: -200, maxX: 200, minZ: -200, maxZ: 200, maxY: 40 });
+  view.orbit(120, 40);
+  const turned = view.camera.position.clone();
+  const restore = view.snapshot();
+  view.resetOrbit();
+  restore();
+  expect(view.camera.position.distanceTo(turned)).toBeLessThan(1e-9);
+});
