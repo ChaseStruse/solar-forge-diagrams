@@ -6,6 +6,7 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 
 ### Added
 
+- **3D view (experimental):** a 3D button beside 2.5D and Plan. Right-drag orbits and tilts the camera around the board; 2.5D returns to the standard angle. Editing stays on the floor plane.
 - **Mermaid state and architecture diagrams** import: states, choices and composite states become flowchart steps, decisions and groups; architecture groups, services (with catalog icons such as `logos:aws-lambda`), junctions and edge sides carry over. Flowchart and state colours from `classDef`, `class`, `:::` and `style` now colour the tiles. Exported owners and lanes import back, and **Mermaid subgraphs become swimlanes** turns any flowchart's top-level subgraphs into lanes.
 - **Swimlanes in exports:** SVG draws the lane bands and names; draw.io gets real swimlane containers holding their steps; Mermaid and PlantUML wrap each lane's steps in a subgraph or rectangle and follow the flow's direction. Mermaid and PlantUML exports also keep each step's owner as a comment.
 - **Pen input:** handles, connection hit areas and the tool rail grow while a pen is in use; a pen tap no longer nudges the component under it; a barrel button that sends a right or middle click pans, as those mouse buttons do; a pen's eraser end deletes the components and connections it passes over in one undoable step.

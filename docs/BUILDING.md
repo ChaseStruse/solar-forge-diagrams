@@ -1,6 +1,6 @@
 # Build and package
 
-The installed app is native and offline. Bun, Rust, Docker and development servers are build tools, not runtime requirements. The packaging target is x86_64 Omarchy (validated on 4.0.4), using its native pacman package format. AppImage and optional M6 3D exploration remain deferred by the plan.
+The installed app is native and offline. Bun, Rust, Docker and development servers are build tools, not runtime requirements. The packaging target is x86_64 Omarchy (validated on 4.0.4), using its native pacman package format. AppImage remains deferred; M6 3D is an experimental orbit view only.
 
 ## Native development
 

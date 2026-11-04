@@ -4,7 +4,7 @@ Last updated 2026-10-20. Keep this page short and current; append dated detail t
 
 ## Where things stand
 
-- **Alpha, feature-complete for milestones M1–M5** of the [implementation plan](../IMPLEMENTATION_PLAN.md). Optional M6 (free 3D orbit and placement) is deferred.
+- **Alpha, feature-complete for milestones M1–M5** of the [implementation plan](../IMPLEMENTATION_PLAN.md). M6 has an experimental minimal slice: a 3D view that orbits and tilts the camera; elevation, free 3D placement and camera bookmarks are not planned unless the orbit view proves useful.
 - **License:** MIT ([LICENSE](../LICENSE)). Bundled AWS and Kubernetes artwork keeps its own terms ([THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)).
 - **Platform:** x86_64 Omarchy (validated on 4.0.4). Distribution is an Omarchy install bundle published as a GitHub Release asset; see [RELEASING.md](RELEASING.md).
 - **Release:** 0.2.0 (2026-10-20) is the first public release, built in Docker with `scripts/docker-release.sh`. Changes are listed in [CHANGELOG.md](../CHANGELOG.md).

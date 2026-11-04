@@ -283,32 +283,55 @@ export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
     const rect = canvas.getBoundingClientRect();
     const cx = rect.left + rect.width * 0.4;
     const cy = rect.top + rect.height * 0.5;
-    canvas.dispatchEvent(
-      new PointerEvent('pointerdown', {
-        clientX: cx,
-        clientY: cy,
-        pointerId: 2,
-        button: 2,
-      }),
-    );
-    const panTimes: number[] = [];
-    const panRenders: number[] = [];
-    for (let step = 0; step < 50; step++) {
-      const before = performance.now();
+    /** Right-drag back and forth: pans in 2.5D, orbits in experimental 3D. */
+    const rightDrag = async () => {
       canvas.dispatchEvent(
-        new PointerEvent('pointermove', {
-          clientX: cx + (step % 2) * 6,
-          clientY: cy + (step % 2) * 4,
+        new PointerEvent('pointerdown', {
+          clientX: cx,
+          clientY: cy,
           pointerId: 2,
+          button: 2,
         }),
       );
-      await frame();
-      if (step >= 10) {
-        panTimes.push(performance.now() - before);
-        panRenders.push(scene.metrics.lastRenderMs);
+      const times: number[] = [];
+      const renders: number[] = [];
+      for (let step = 0; step < 50; step++) {
+        const before = performance.now();
+        canvas.dispatchEvent(
+          new PointerEvent('pointermove', {
+            clientX: cx + (step % 2) * 6,
+            clientY: cy + (step % 2) * 4,
+            pointerId: 2,
+          }),
+        );
+        await frame();
+        if (step >= 10) {
+          times.push(performance.now() - before);
+          renders.push(scene.metrics.lastRenderMs);
+        }
       }
-    }
-    canvas.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2 }));
+      canvas.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2 }));
+      return { times, renders };
+    };
+    const pan = await rightDrag();
+    const panTimes = pan.times;
+    const panRenders = pan.renders;
+    // Experimental 3D: the same drag orbits; then hold a turned angle and
+    // check it still draws nothing while idle.
+    scene.setOrbit(true);
+    scene.fit();
+    await frame();
+    const orbit = await rightDrag();
+    scene.orbitBy(180, -40);
+    await frame();
+    await frame();
+    const orbitDrawCalls = scene.metrics.drawCalls;
+    const orbitFramesBefore = scene.metrics.frames;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const orbitIdleFrames = scene.metrics.frames - orbitFramesBefore;
+    scene.setOrbit(false);
+    scene.fit();
+    await frame();
     results[`${nodes}nodes`] = {
       loadMs,
       panEventToFrameP95Ms: percentile(panTimes),
@@ -317,6 +340,12 @@ export async function runNativeDiagnostics(scene: DiagramScene): Promise<void> {
       drawCalls: scene.metrics.drawCalls,
       renderSubmissionP95Ms: percentile(renderTimes),
       cameraChangeToFrameP95Ms: percentile(eventToFrame),
+      orbit3d: {
+        eventToFrameP95Ms: percentile(orbit.times),
+        renderSubmissionP95Ms: percentile(orbit.renders),
+        drawCallsTurned: orbitDrawCalls,
+        idleFramesOver500msTurned: orbitIdleFrames,
+      },
     };
   }
   scene.load(starterDocument());

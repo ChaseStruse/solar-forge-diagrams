@@ -58,7 +58,9 @@ PNG captures the current view, including all rendered text and icons. SVG is a s
 
 This is an alpha. On the reference laptop (Intel i9, integrated graphics), a 500-node board used about 603 MiB of memory (summed process RSS; 350 MiB PSS), above the 250 MiB goal. Panning a 500-node board updated within 23–29 ms (p95) after the latest performance work; 2,000-node stress boards are slower. Exact 60 Hz, cold-start and fractional-DPI behavior have not been certified. Current figures are tracked in docs/STATUS.md in the source repository. The app never changes your display configuration.
 
-Unrestricted 3D orbit/elevation, live AWS discovery, cloud sync and collaboration remain outside this alpha. Offline infrastructure imports and automatic layout are available in the file menu. The plan's M6 3D exploration remains optional/deferred.
+**3D (experimental)** in the view dock lets you look at the board from any side: right-drag turns the view around the board and tilts it up or down. Middle-drag, Alt-drag, the Pan tool and WASD still pan (WASD follows the turned view), Fit keeps the angle, and editing works as usual on the floor. Press **2.5D** to return to the standard angle; Plan is unchanged. Components stay on the floor: there is no elevation or free 3D placement, and the angle is not saved with the board.
+
+Live AWS discovery, cloud sync and collaboration remain outside this alpha. Offline infrastructure imports and automatic layout are available in the file menu.
 
 ## Text, containers, and networking journeys
 
