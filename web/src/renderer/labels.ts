@@ -64,6 +64,8 @@ interface Page {
   y: number;
   rowHeight: number;
   batch?: InstancedMesh;
+  /** Drawn on since its texture was last uploaded. */
+  dirty: boolean;
 }
 const PAGE = 1024;
 const MAX_PAGE = 2048;
@@ -79,10 +81,28 @@ export function rasterBucket(wanted: number, max = MAX_SCALE): number {
  * Batched screen-facing captions and service glyphs; no DOM overlay to lose in
  * exports. Each label is drawn at the pixel density it is shown at, so text
  * stays sharp when zoomed in without holding oversized textures zoomed out.
+ * Drawn labels outlive a board reload: an edit draws only text it has not
+ * drawn before, and a new palette starts the atlas again.
  */
 export class LabelAtlas {
-  constructor(public palette: ScenePalette) {}
+  constructor(private colors: ScenePalette) {}
+  public get palette(): ScenePalette {
+    return this.colors;
+  }
+  public set palette(palette: ScenePalette) {
+    if (palette === this.colors) return;
+    this.colors = palette;
+    this.restart();
+  }
   private pages: Page[] = [];
+  /** Pages no batch draws from any more, freed by the next release callback. */
+  private stale: Page[] = [];
+  /** Drop every drawn label; the next `finish` draws what it needs afresh. */
+  private restart(): void {
+    this.stale.push(...this.pages);
+    this.pages = [];
+    this.regions.clear();
+  }
   private readonly specs = new Map<string, Spec>();
   private readonly regions = new Map<string, Region>();
   private entries: Entry[] = [];
@@ -135,15 +155,36 @@ export class LabelAtlas {
     this.entries.push({ object, key, kind });
     return object;
   }
-  /** Draw every label and add one instanced batch per atlas page. */
+  /**
+   * Draw the labels not drawn yet and add one instanced batch per atlas page.
+   * When labels no board shows fill most of the atlas, start it again.
+   */
   public finish(root: Group): void {
     this.root = root;
     if (this.hints.size > 50_000) this.hints.clear();
+    const used = new Set(this.entries.map((entry) => entry.key));
+    if (this.mostlyUnused(used)) this.restart();
+    for (const key of this.specs.keys())
+      if (!used.has(key)) this.specs.delete(key);
     for (const [key, spec] of this.specs)
-      this.draw(key, spec, this.hints.get(key) ?? 1);
+      if (!this.regions.has(key))
+        this.draw(key, spec, this.hints.get(key) ?? 1);
     for (const entry of this.entries)
       this.regions.get(entry.key)?.page.entries.push(entry);
-    for (const page of this.pages) this.batch(page, root);
+    for (const page of this.pages)
+      if (page.entries.length) this.batch(page, root);
+  }
+  /** Whether unused labels take more than half of a multi-page atlas. */
+  private mostlyUnused(used: ReadonlySet<string>): boolean {
+    if (this.pages.length < 2) return false;
+    let unused = 0;
+    let total = 0;
+    for (const [key, region] of this.regions) {
+      const area = region.pixelWidth * region.pixelHeight;
+      total += area;
+      if (!used.has(key)) unused += area;
+    }
+    return unused > total / 2;
   }
   private draw(key: string, spec: Spec, wanted: number): void {
     const { text, kind, bounds } = spec;
@@ -203,6 +244,7 @@ export class LabelAtlas {
     const pixelHeight = Math.ceil(height * scale);
     const page = this.place(pixelWidth, pixelHeight);
     const { x, y, context } = page;
+    page.dirty = true;
     context.setTransform(scale, 0, 0, scale, x, y);
     const palette = this.palette;
     if (kind === 'node' || kind === 'edge') {
@@ -293,12 +335,15 @@ export class LabelAtlas {
       x: 0,
       y: 0,
       rowHeight: 0,
+      dirty: true,
     };
     this.pages.push(page);
     return page;
   }
   private batch(page: Page, root: Group): void {
-    page.texture.needsUpdate = true;
+    // Upload only pages with new drawing; kept pages are already on the GPU.
+    if (page.dirty) page.texture.needsUpdate = true;
+    page.dirty = false;
     const geometry = new PlaneGeometry(1, 1);
     const rects = new Float32Array(page.entries.length * 4);
     for (const [index, entry] of page.entries.entries()) {
@@ -452,33 +497,48 @@ export class LabelAtlas {
    */
   public redraw(): () => void {
     const root = this.root;
-    const old = this.pages;
-    this.pages = [];
-    this.regions.clear();
     for (const [key, wanted] of this.wanted)
       this.hints.set(key, rasterBucket(wanted));
-    if (root) {
-      for (const page of old) if (page.batch) root.remove(page.batch);
-      this.finish(root);
+    if (!root) return () => {};
+    // restart() hands the pages, still holding their batches, to release().
+    for (const page of this.pages) {
+      if (page.batch) root.remove(page.batch);
+      page.entries = [];
     }
-    return () => release(old);
+    this.restart();
+    this.finish(root);
+    return this.releaseStale();
   }
   /**
-   * Start a fresh atlas now; the returned callback frees the old pages. The
-   * caller runs it after the next frame so new pages reuse the compiled shader.
+   * Detach the current board's labels, keeping what is drawn for the next one.
+   * The returned callback frees the old batches and any pages dropped by then;
+   * the caller runs it after the next frame so new batches reuse the shader.
    */
   public retire(): () => void {
-    const pages = this.pages;
-    this.pages = [];
+    const batches: InstancedMesh[] = [];
+    for (const page of this.pages) {
+      if (page.batch) batches.push(page.batch);
+      delete page.batch;
+      page.entries = [];
+    }
     this.entries = [];
-    this.specs.clear();
-    this.regions.clear();
     this.wanted.clear();
     this.root = undefined;
+    return () => {
+      for (const batch of batches) releaseBatch(batch);
+      this.releaseStale()();
+    };
+  }
+  private releaseStale(): () => void {
+    const pages = this.stale;
+    this.stale = [];
     return () => release(pages);
   }
   public dispose(): void {
     this.retire()();
+    this.restart();
+    this.releaseStale()();
+    this.specs.clear();
   }
 }
 /** Layout units per world unit for a component caption. */
@@ -491,14 +551,15 @@ function measuringContext(): CanvasRenderingContext2D {
   if (!measuring) throw new Error('Text canvas unavailable');
   return measuring;
 }
+function releaseBatch(batch: InstancedMesh): void {
+  batch.removeFromParent();
+  batch.dispose();
+  batch.geometry.dispose();
+  if (!Array.isArray(batch.material)) batch.material.dispose();
+}
 function release(pages: readonly Page[]): void {
   for (const page of pages) {
-    if (page.batch) {
-      page.batch.removeFromParent();
-      page.batch.dispose();
-      page.batch.geometry.dispose();
-      if (!Array.isArray(page.batch.material)) page.batch.material.dispose();
-    }
+    if (page.batch) releaseBatch(page.batch);
     page.texture.dispose();
     page.canvas.width = 0;
     page.canvas.height = 0;
