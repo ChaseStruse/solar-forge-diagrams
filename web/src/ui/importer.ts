@@ -7,25 +7,18 @@ import {
   openInfrastructureFiles,
   openInfrastructureFolder,
 } from '../platform/files';
+import { workspaceDialog } from './dom';
 
 export function infrastructureImporter(host: {
   apply: (doc: DiagramDocument) => Promise<boolean>;
   notify: (message: string) => void;
 }): { open: () => void; close: () => void } {
-  const panel = document.createElement('section');
-  panel.className = 'workspace-dialog';
-  panel.hidden = true;
-  panel.setAttribute('aria-label', 'Import a diagram');
-  panel.innerHTML = `<div class="dialog-heading"><h2>Import</h2><button data-close aria-label="Close import">×</button></div><p>Choose a Mermaid flowchart, state or architecture diagram, .tf files together (or a Terraform folder, to include its local modules and .tfvars), or a Terraform JSON, CloudFormation, or Compose file. Files stay on this computer; code is never executed.</p><label>Format<select data-format><option value="auto">Detect format</option><option value="terraform">Terraform HCL / show JSON</option><option value="cloudformation">CloudFormation YAML / JSON</option><option value="compose">Docker Compose</option><option value="mermaid">Mermaid chart</option></select></label><label class="check"><input type="checkbox" data-lanes> Mermaid subgraphs become swimlanes</label><button data-files>Choose files…</button> <button data-folder>Choose Terraform folder…</button><p data-names>No files selected</p><label>Or paste Mermaid or infrastructure code<textarea data-source rows="9" spellcheck="false" placeholder="Paste a Mermaid chart or infrastructure code; use Format to select Terraform for pasted HCL"></textarea></label><button data-preview>Preview import</button><div data-summary role="status"></div><ul data-warnings></ul><div class="dialog-actions"><button data-apply disabled>Import diagram</button></div>`;
-  document.body.append(panel);
-  panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-modal', 'true');
-  const app = document.getElementById('app');
-  const find = <T extends HTMLElement>(selector: string) => {
-    const element = panel.querySelector<T>(selector);
-    if (!element) throw Error('Missing importer control');
-    return element;
-  };
+  const dialog = workspaceDialog(
+    'workspace-dialog',
+    'Import a diagram',
+    `<div class="dialog-heading"><h2>Import</h2><button data-close aria-label="Close import">×</button></div><p>Choose a Mermaid flowchart, state or architecture diagram, .tf files together (or a Terraform folder, to include its local modules and .tfvars), or a Terraform JSON, CloudFormation, or Compose file. Files stay on this computer; code is never executed.</p><label>Format<select data-format><option value="auto">Detect format</option><option value="terraform">Terraform HCL / show JSON</option><option value="cloudformation">CloudFormation YAML / JSON</option><option value="compose">Docker Compose</option><option value="mermaid">Mermaid chart</option></select></label><label class="check"><input type="checkbox" data-lanes> Mermaid subgraphs become swimlanes</label><button data-files>Choose files…</button> <button data-folder>Choose Terraform folder…</button><p data-names>No files selected</p><label>Or paste Mermaid or infrastructure code<textarea data-source rows="9" spellcheck="false" placeholder="Paste a Mermaid chart or infrastructure code; use Format to select Terraform for pasted HCL"></textarea></label><button data-preview>Preview import</button><div data-summary role="status"></div><ul data-warnings></ul><div class="dialog-actions"><button data-apply disabled>Import diagram</button></div>`,
+  );
+  const { find } = dialog;
   const source = find<HTMLTextAreaElement>('[data-source]'),
     format = find<HTMLSelectElement>('[data-format]'),
     apply = find<HTMLButtonElement>('[data-apply]'),
@@ -149,10 +142,7 @@ export function infrastructureImporter(host: {
     void host
       .apply(preview.document)
       .then((applied) => {
-        if (applied) {
-          panel.hidden = true;
-          if (app) app.inert = false;
-        }
+        if (applied) dialog.close();
       })
       .catch(showError)
       .finally(() => {
@@ -162,22 +152,13 @@ export function infrastructureImporter(host: {
   const close = () => {
     if (!busy) {
       invalidate();
-      panel.hidden = true;
-      if (app) app.inert = false;
+      dialog.close();
     }
   };
-  find('[data-close]').onclick = close;
-  panel.addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      close();
-    }
-  });
+  dialog.onClose = close;
   return {
     open: () => {
-      panel.hidden = false;
-      if (app) app.inert = true;
+      dialog.open();
       format.focus();
     },
     close,
