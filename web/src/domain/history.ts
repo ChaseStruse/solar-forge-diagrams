@@ -122,8 +122,12 @@ export class DocumentHistory {
           source: T[],
           requested: Change<T>[],
         ) {
+          // First occurrence wins, as findIndex did.
+          const positions = new Map<string, number>();
+          for (const [i, item] of source.entries())
+            if (!positions.has(item.id)) positions.set(item.id, i);
           return requested.map((change) => {
-            const index = source.findIndex((item) => item.id === change.id);
+            const index = positions.get(change.id) ?? -1;
             const existing = source[index];
             const before = existing ? structuredClone(existing) : null;
             const after = change.value ? structuredClone(change.value) : null;
