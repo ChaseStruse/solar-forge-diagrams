@@ -111,8 +111,10 @@ function updateHeader(): void {
     `${state.current.title}${state.dirty ? ' •' : ''}`;
   element('count').textContent =
     `${state.current.nodes.length} objects · ${state.current.edges.length} connections`;
-  const count = (kind: DiagramNode['kind']) =>
-    state.current.nodes.filter((node) => node.kind === kind).length;
+  const kinds = new Map<DiagramNode['kind'], number>();
+  for (const { kind } of state.current.nodes)
+    kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+  const count = (kind: DiagramNode['kind']) => kinds.get(kind) ?? 0;
   const notes = count('text') + count('note');
   element('ground-summary').textContent =
     `${count('service')} services · ${count('group')} boundaries${notes ? ` · ${notes} notes` : ''}`;
@@ -279,11 +281,8 @@ function travelHistory(redo: boolean): void {
     } else {
       // A board switch has just loaded this exact document.
       if (!switched) scene.load(state.current);
-      scene.selectMany(
-        selection.filter((id) =>
-          state.current.nodes.some((node) => node.id === id),
-        ),
-      );
+      const present = new Set(state.current.nodes.map((node) => node.id));
+      scene.selectMany(selection.filter((id) => present.has(id)));
       if (edge && state.current.edges.some((e) => e.id === edge))
         scene.selectEdge(edge);
     }
