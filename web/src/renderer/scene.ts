@@ -96,6 +96,7 @@ interface Tile {
   group: Group;
   label: Object3D;
   headerIcon?: Object3D;
+  glyph?: Object3D;
   annotation?: { root: Group; dispose: () => void };
 }
 const isAnnotation = (node: DiagramNode) =>
@@ -546,66 +547,10 @@ export class DiagramScene {
       mesh.visible = false;
       group.add(mesh);
       this.pickables.push(mesh);
-      if (isAnnotation(node)) {
-        const annotation = createAnnotation(
-          node,
-          this.palette,
-          this.annotationScale,
-        );
-        group.add(annotation.root);
-        this.content.add(group);
-        // Annotations carry their own text; the placeholder keeps Tile uniform.
-        this.tiles.set(node.id, {
-          index,
-          node,
-          group,
-          label: new Group(),
-          annotation,
-        });
-        continue;
-      }
-      let headerIcon: Object3D | undefined;
-      const component = findService(node.serviceId ?? node.label);
-      if (node.kind === 'group' && component?.icon) {
-        headerIcon = this.labels.create(component.id, this.camera.zoom, 'icon');
-        group.add(headerIcon);
-      }
-      if (node.kind === 'service' && !node.shape) {
-        const glyph = this.labels.create(
-          component?.id ?? node.label,
-          this.camera.zoom,
-          'icon',
-        );
-        glyph.position.y = 28;
-        glyph.userData.nodeWidth = node.width;
-        glyph.userData.nodeDepth = node.depth;
-        group.add(glyph);
-      }
-      const label = this.labels.create(
-        node.label,
-        this.camera.zoom,
-        node.kind === 'group' ? 'group' : 'node',
-        {
-          width: node.width,
-          depth: node.depth,
-          ...(node.fontSize ? { fontSize: node.fontSize } : {}),
-          ...(node.wrap ? { wrap: true } : {}),
-        },
-      );
-      label.userData.captionBelow = node.kind === 'service' && !node.shape;
-      label.userData.nodeWidth = node.width;
-      label.userData.nodeDepth = node.depth;
-      placeLabel(label, node);
-      group.add(label);
+      // Annotations carry their own text; the placeholder keeps Tile uniform.
+      const tile: Tile = { index, node, group, label: new Group() };
+      this.drawTile(tile);
       this.content.add(group);
-      const tile: Tile = {
-        index,
-        node,
-        group,
-        label,
-        ...(headerIcon ? { headerIcon } : {}),
-      };
-      this.positionHeaderIcon(tile);
       this.tiles.set(node.id, tile);
     }
     const positions = new Float32Array(document.edges.length * 42);
@@ -654,29 +599,244 @@ export class DiagramScene {
       this.edgeIndex.set(edge.id, edge);
       this.edges.set(edge.id, index);
       this.paintEdge(edge.id);
-      if (edge.label) {
-        const label = this.labels.create(edge.label, this.camera.zoom, 'edge');
-        this.content.add(label);
-        this.edgeLabels.set(edge.id, label);
-      }
-      for (const id of [edge.source, edge.target]) {
-        const ids = this.incident.get(id) ?? new Set<string>();
-        ids.add(edge.id);
-        this.incident.set(id, ids);
-      }
+      this.drawEdgeLabel(edge);
+      this.connect(edge);
     }
-    const bands = laneBands(document);
-    if (bands) {
-      this.lanes = createLaneBands(bands, this.palette, (text) =>
-        this.labels.create(text, this.camera.zoom, 'group'),
-      );
-      this.content.add(this.lanes.root);
-    }
+    this.drawLanes(document);
     this.labels.finish(this.content);
     this.updatePositions();
+    this.drawn.nodes.clear();
+    this.drawn.edges.clear();
+    for (const node of document.nodes)
+      this.drawn.nodes.set(node.id, JSON.stringify(node));
+    for (const edge of document.edges)
+      this.drawn.edges.set(edge.id, JSON.stringify(edge));
     this.invalidate();
     this.onSelect(undefined);
     this.loadIcons(document);
+  }
+  /**
+   * Show an edit of the current board. When it has the same components and
+   * connections in the same order, only the changed ones are redrawn and
+   * re-routed; otherwise the board is loaded again. Selection is cleared
+   * either way, as `load` does.
+   */
+  public update(document: DiagramDocument): void {
+    if (!this.patch(document)) this.load(document);
+  }
+  /** What each component and connection looked like when last drawn. */
+  private readonly drawn = {
+    nodes: new Map<string, string>(),
+    edges: new Map<string, string>(),
+  };
+  private patch(document: DiagramDocument): boolean {
+    if (
+      document !== this.document ||
+      document.nodes.length !== this.tiles.size ||
+      document.edges.length !== this.edges.size
+    )
+      return false;
+    const nodes: { node: DiagramNode; json: string; moved: boolean }[] = [];
+    for (const [index, node] of document.nodes.entries()) {
+      const tile = this.tiles.get(node.id);
+      if (tile?.index !== index) return false;
+      const json = JSON.stringify(node);
+      const before = this.drawn.nodes.get(node.id);
+      if (json === before && tile.node === node) continue;
+      const old = before ? (JSON.parse(before) as DiagramNode) : undefined;
+      // A new kind, shape or parent changes how and where the tile is built.
+      if (
+        old?.kind !== node.kind ||
+        old.shape !== node.shape ||
+        old.parentId !== node.parentId
+      )
+        return false;
+      const moved =
+        old.x !== node.x ||
+        old.z !== node.z ||
+        old.width !== node.width ||
+        old.depth !== node.depth;
+      nodes.push({ node, json, moved });
+    }
+    const edges: { edge: DiagramEdge; json: string; old?: DiagramEdge }[] = [];
+    for (const [index, edge] of document.edges.entries()) {
+      if (this.edges.get(edge.id) !== index) return false;
+      const json = JSON.stringify(edge);
+      const before = this.drawn.edges.get(edge.id);
+      if (json === before && this.edgeIndex.get(edge.id) === edge) continue;
+      const old = before ? (JSON.parse(before) as DiagramEdge) : undefined;
+      edges.push({ edge, json, ...(old ? { old } : {}) });
+    }
+    this.gestures.reset();
+    this.stopJourney();
+    this.hoveredEdge = undefined;
+    this.setEdgeSelection(undefined);
+    this.setNodeSelection([]);
+    const replaced: Object3D[] = [];
+    for (const { node, json } of nodes) {
+      const tile = this.tiles.get(node.id);
+      if (!tile) continue;
+      tile.node = node;
+      this.nodeIndex.set(node.id, node);
+      replaced.push(...this.clearTile(tile));
+      this.drawTile(tile);
+      this.applySize(tile);
+      this.drawn.nodes.set(node.id, json);
+    }
+    // Connections whose route or colour may change: changed ones, and those
+    // sharing an end with them, since port sharing shifts their forks.
+    const routes = new Set<string>();
+    for (const { edge, json, old } of edges) {
+      if (old) this.disconnect(old);
+      this.edgeIndex.set(edge.id, edge);
+      this.connect(edge);
+      const label = this.edgeLabels.get(edge.id);
+      if (label) {
+        this.content.remove(label);
+        replaced.push(label);
+        this.edgeLabels.delete(edge.id);
+      }
+      this.drawEdgeLabel(edge);
+      for (const end of [edge.source, edge.target, old?.source, old?.target])
+        for (const id of (end && this.incident.get(end)) ?? []) routes.add(id);
+      routes.add(edge.id);
+      this.drawn.edges.set(edge.id, json);
+    }
+    const inactive = inactiveEdges(document);
+    for (const id of new Set([...this.inactive, ...inactive]))
+      if (this.inactive.has(id) !== inactive.has(id)) routes.add(id);
+    this.inactive = inactive;
+    this.hasFlowEdges = document.edges.some(
+      (e) => e.relationship !== 'dependency',
+    );
+    if (this.lanes || document.lanes) {
+      replaced.push(...this.laneLabels);
+      const lanes = this.lanes;
+      if (lanes) {
+        this.content.remove(lanes.root);
+        this.retired.push(() => lanes.dispose());
+      }
+      this.lanes = undefined;
+      this.drawLanes(document);
+    }
+    this.labels.remove(replaced);
+    this.retired.push(this.labels.rebatch());
+    // Only a new position or size moves a tile and its routes; other changes
+    // repaint it where it is.
+    this.refreshPositions(
+      nodes.filter(({ moved }) => moved).map(({ node }) => node.id),
+      [...routes],
+    );
+    for (const { node, moved } of nodes) {
+      const tile = this.tiles.get(node.id);
+      if (moved || !tile) continue;
+      this.bodies?.update(node, tile.group.position, false);
+      this.details?.update(tile.index, node, tile.group.position);
+    }
+    for (const id of routes) this.paintEdge(id);
+    this.invalidate();
+    this.onSelect(undefined);
+    this.loadIcons(document);
+    return true;
+  }
+  /** Build a tile's drawn text: its note, or its caption and icons. */
+  private drawTile(tile: Tile): void {
+    const { node, group } = tile;
+    if (isAnnotation(node)) {
+      tile.annotation = createAnnotation(
+        node,
+        this.palette,
+        this.annotationScale,
+      );
+      group.add(tile.annotation.root);
+      return;
+    }
+    const component = findService(node.serviceId ?? node.label);
+    if (node.kind === 'group' && component?.icon) {
+      tile.headerIcon = this.labels.create(
+        component.id,
+        this.camera.zoom,
+        'icon',
+      );
+      group.add(tile.headerIcon);
+    }
+    if (node.kind === 'service' && !node.shape) {
+      const glyph = this.labels.create(
+        component?.id ?? node.label,
+        this.camera.zoom,
+        'icon',
+      );
+      glyph.position.y = 28;
+      glyph.userData.nodeWidth = node.width;
+      glyph.userData.nodeDepth = node.depth;
+      group.add(glyph);
+      tile.glyph = glyph;
+    }
+    const label = this.labels.create(
+      node.label,
+      this.camera.zoom,
+      node.kind === 'group' ? 'group' : 'node',
+      {
+        width: node.width,
+        depth: node.depth,
+        ...(node.fontSize ? { fontSize: node.fontSize } : {}),
+        ...(node.wrap ? { wrap: true } : {}),
+      },
+    );
+    label.userData.captionBelow = node.kind === 'service' && !node.shape;
+    label.userData.nodeWidth = node.width;
+    label.userData.nodeDepth = node.depth;
+    placeLabel(label, node);
+    group.add(label);
+    tile.label = label;
+    this.positionHeaderIcon(tile);
+  }
+  /** Take a tile's drawn text off it; returns the atlas labels removed. */
+  private clearTile(tile: Tile): Object3D[] {
+    const old = tile.annotation;
+    if (old) {
+      tile.group.remove(old.root);
+      this.retired.push(old.dispose);
+      delete tile.annotation;
+    }
+    const labels = [tile.label, tile.headerIcon, tile.glyph].filter(
+      (label): label is Object3D => label !== undefined,
+    );
+    for (const label of labels) tile.group.remove(label);
+    delete tile.headerIcon;
+    delete tile.glyph;
+    tile.label = new Group();
+    return old ? [] : labels;
+  }
+  private drawEdgeLabel(edge: DiagramEdge): void {
+    if (!edge.label) return;
+    const label = this.labels.create(edge.label, this.camera.zoom, 'edge');
+    this.content.add(label);
+    this.edgeLabels.set(edge.id, label);
+  }
+  /** Lane title labels, so a redraw of the lanes can drop them. */
+  private laneLabels: Object3D[] = [];
+  private drawLanes(document: DiagramDocument): void {
+    this.laneLabels = [];
+    const bands = laneBands(document);
+    if (!bands) return;
+    this.lanes = createLaneBands(bands, this.palette, (text) => {
+      const label = this.labels.create(text, this.camera.zoom, 'group');
+      this.laneLabels.push(label);
+      return label;
+    });
+    this.content.add(this.lanes.root);
+  }
+  private connect(edge: DiagramEdge): void {
+    for (const id of [edge.source, edge.target]) {
+      const ids = this.incident.get(id) ?? new Set<string>();
+      ids.add(edge.id);
+      this.incident.set(id, ids);
+    }
+  }
+  private disconnect(edge: DiagramEdge): void {
+    for (const id of [edge.source, edge.target])
+      this.incident.get(id)?.delete(edge.id);
   }
   /** Fetch the icons this board shows that are not loaded yet, then redraw. */
   private loadIcons(document: DiagramDocument): void {
@@ -691,7 +851,7 @@ export class DiagramScene {
       .then(() => {
         if (this.disposed || this.document !== document) return;
         // Only the icon labels change; the rest of the board stays as it is.
-        this.retired.push(this.labels.refreshIcons());
+        this.retired.push(this.labels.rebatch());
         this.invalidate();
       })
       .catch((error) => this.onError(String(error)));
@@ -1099,17 +1259,20 @@ export class DiagramScene {
    * Re-place several moved nodes at once: tiles first, then each affected
    * route exactly once against the final obstacles.
    */
-  private refreshPositions(ids: readonly string[]): void {
+  private refreshPositions(
+    ids: readonly string[],
+    alsoRoute: readonly string[] = [],
+  ): void {
     const tiles: Tile[] = [];
     for (const id of ids) {
       const tile = this.tiles.get(id);
       if (tile) tiles.push(tile);
     }
-    if (!tiles.length) return;
+    if (!tiles.length && !alsoRoute.length) return;
     if (tiles.some((tile) => tile.node.kind === 'group'))
       this.updatePositions();
     else {
-      const routes = new Set<string>();
+      const routes = new Set<string>(alsoRoute);
       for (const tile of tiles)
         for (const edgeId of this.incident.get(tile.node.id) ?? [])
           routes.add(edgeId);

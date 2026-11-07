@@ -78,6 +78,11 @@ export function rasterBucket(wanted: number, max = MAX_SCALE): number {
   const scale = 2 ** (Math.ceil(Math.log2(Math.max(1e-3, wanted)) * 2) / 2);
   return Math.min(max, Math.max(MIN_SCALE, scale));
 }
+/** Hysteresis: redraw when soft, or when holding 2× more than needed. */
+const misfits = (region: Region, ideal: number) =>
+  (ideal > region.scale + 1e-6 && !region.capped) ||
+  ideal * 2 < region.scale - 1e-6;
+const area = (region: Region) => region.pixelWidth * region.pixelHeight;
 
 /**
  * Batched screen-facing captions and service glyphs; no DOM overlay to lose in
@@ -104,7 +109,10 @@ export class LabelAtlas {
     this.stale.push(...this.pages);
     this.pages = [];
     this.regions.clear();
+    this.wasted = 0;
   }
+  /** Atlas pixels of labels drawn again elsewhere, still taking page space. */
+  private wasted = 0;
   private readonly specs = new Map<string, Spec>();
   private readonly regions = new Map<string, Region>();
   private entries: Entry[] = [];
@@ -185,11 +193,18 @@ export class LabelAtlas {
       spec.kind === 'icon' && !region.image && serviceImages.has(spec.text)
     );
   }
+  /** Stop drawing these labels; `rebatch` applies the change. */
+  public remove(objects: Iterable<Object3D>): void {
+    const gone = new Set(objects);
+    if (gone.size)
+      this.entries = this.entries.filter((e) => !gone.has(e.object));
+  }
   /**
-   * Redraw icons whose images have loaded since they were drawn, rebuilding
-   * the batches in place. Returns a callback that frees the old batches.
+   * Rebuild the batches for the current labels after some were created or
+   * removed, drawing any new text and icons whose images have loaded since.
+   * Returns a callback that frees the old batches.
    */
-  public refreshIcons(): () => void {
+  public rebatch(): () => void {
     const root = this.root;
     if (!root) return () => {};
     const batches: InstancedMesh[] = [];
@@ -209,12 +224,11 @@ export class LabelAtlas {
   /** Whether unused labels take more than half of a multi-page atlas. */
   private mostlyUnused(used: ReadonlySet<string>): boolean {
     if (this.pages.length < 2) return false;
-    let unused = 0;
-    let total = 0;
+    let unused = this.wasted;
+    let total = this.wasted;
     for (const [key, region] of this.regions) {
-      const area = region.pixelWidth * region.pixelHeight;
-      total += area;
-      if (!used.has(key)) unused += area;
+      total += area(region);
+      if (!used.has(key)) unused += area(region);
     }
     return unused > total / 2;
   }
@@ -322,6 +336,8 @@ export class LabelAtlas {
         width - 20,
       );
     context.setTransform(1, 0, 0, 1, 0, 0);
+    const previous = this.regions.get(key);
+    if (previous) this.wasted += area(previous);
     this.regions.set(key, {
       page,
       x,
@@ -520,33 +536,31 @@ export class LabelAtlas {
     for (const [key, wanted] of this.wanted) {
       const region = this.regions.get(key);
       if (!region) continue;
-      const ideal = rasterBucket(wanted);
-      // Hysteresis: redraw when soft, or when holding 2× more than needed.
-      if (
-        (ideal > region.scale + 1e-6 && !region.capped) ||
-        ideal * 2 < region.scale - 1e-6
-      )
-        return true;
+      if (misfits(region, rasterBucket(wanted))) return true;
     }
     return false;
   }
   /**
-   * Redraw every label at the density it was last shown at. Returns a
-   * callback that frees the old pages; run it after the next frame.
+   * Redraw the labels drawn too soft, or far too large, for how they were
+   * last shown; the rest keep their pixels. Returns a callback that frees
+   * the old batches and pages; run it after the next frame.
    */
   public redraw(): () => void {
-    const root = this.root;
-    for (const [key, wanted] of this.wanted)
-      this.hints.set(key, rasterBucket(wanted));
-    if (!root) return () => {};
-    // restart() hands the pages, still holding their batches, to release().
-    for (const page of this.pages) {
-      if (page.batch) root.remove(page.batch);
-      page.entries = [];
+    for (const [key, wanted] of this.wanted) {
+      const ideal = rasterBucket(wanted);
+      this.hints.set(key, ideal);
+      const region = this.regions.get(key);
+      if (region && misfits(region, ideal)) {
+        this.wasted += area(region);
+        this.regions.delete(key);
+      }
     }
-    this.restart();
-    this.finish(root);
-    return this.releaseStale();
+    const release = this.rebatch();
+    const pages = this.releaseStale();
+    return () => {
+      release();
+      pages();
+    };
   }
   /**
    * Detach the current board's labels, keeping what is drawn for the next one.

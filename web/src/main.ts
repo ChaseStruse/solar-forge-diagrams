@@ -280,7 +280,7 @@ function travelHistory(redo: boolean): void {
       if (!switched) scene.refreshPosition(edit.id);
     } else {
       // A board switch has just loaded this exact document.
-      if (!switched) scene.load(state.current);
+      if (!switched) scene.update(state.current);
       const present = new Set(state.current.nodes.map((node) => node.id));
       scene.selectMany(selection.filter((id) => present.has(id)));
       if (edge && state.current.edges.some((e) => e.id === edge))
@@ -302,7 +302,7 @@ function commit(
   const edge = state.selectedEdge;
   if (!state.history.execute(edit)) return;
   deferInspect(() => {
-    scene.load(state.current);
+    scene.update(state.current);
     scene.selectMany(ids);
     if (!ids.length && edge && state.current.edges.some((e) => e.id === edge))
       scene.selectEdge(edge);

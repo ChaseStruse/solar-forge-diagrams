@@ -130,7 +130,7 @@ export function installComponentPalette(app: App): ComponentPalette {
         color: service.color,
       },
     });
-    deferInspect(() => scene.load(state.current));
+    deferInspect(() => scene.update(state.current));
     scene.select(id);
     scene.reveal(id);
     updateHeader();

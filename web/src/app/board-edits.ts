@@ -64,7 +64,7 @@ export function installBoardEdits(
         color: service.color,
       },
     });
-    deferInspect(() => scene.load(state.current));
+    deferInspect(() => scene.update(state.current));
     scene.select(id);
     updateHeader();
     selectTool('select');
@@ -181,7 +181,7 @@ export function installBoardEdits(
         color: service.color,
       },
     });
-    deferInspect(() => scene.load(state.current));
+    deferInspect(() => scene.update(state.current));
     scene.select(id);
     updateHeader();
     notify(`${service.label} added. Double-click to rename it.`);
