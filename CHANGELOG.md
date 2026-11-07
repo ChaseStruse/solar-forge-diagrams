@@ -32,6 +32,8 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 - Connections between two components in both directions are drawn as two parallel one-way lanes.
 - Component captions stay on one line by default, shrinking to fit.
 - Data-flow animation runs at half its previous speed.
+- Editing large boards is much faster: renaming, recolouring, resizing or relabelling now updates only what changed instead of redrawing the whole board (about 30 ms instead of about 300 ms on a 2,000-component board), and dragging a component re-routes only its own connections (about 0.3 ms per step instead of 8 ms).
+- PNG export and Copy image send the image to the desktop app as raw bytes instead of a list of numbers.
 
 ### Fixed
 
@@ -41,6 +43,7 @@ Notable changes to Solar Forge Diagrams. Versions follow [Semantic Versioning](h
 - Captions, icons and labels stay sharp while panning and zooming: they are drawn after the in-motion antialiasing pass instead of being smoothed by it.
 - Idle boards with data flow on no longer saturate integrated GPUs: animated frames use the cheap antialiasing pass, and full multisampling is kept for a board at rest (about 3× the idle frame rate on Intel UHD graphics).
 - Shorter stall when zooming stops: caption atlas pages upload about 4× faster.
+- SVG export no longer produces an unreadable file when a label contains a control character; those characters are dropped, as draw.io export already did.
 
 ## [0.2.0] — 2026-10-20
 
