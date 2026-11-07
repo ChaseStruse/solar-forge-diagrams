@@ -4,6 +4,7 @@ import {
   fansOf,
   nearestPort,
   obstaclesOf,
+  RoutingContext,
   routeEdge,
   routeMidpoint,
 } from '../src/domain/routing';
@@ -135,4 +136,76 @@ test('connections running both ways split into two parallel one-way lanes', () =
   // A one-way connection keeps the centre line.
   const single = routeEdge(edges[0] as DiagramEdge, nodes);
   expect(single.points[0]).toEqual({ x: 90, z: 0 });
+});
+
+test('a routing context kept up to date by moves matches one built afresh', () => {
+  let seed = 11;
+  const random = (limit: number) => {
+    seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+    return seed % limit;
+  };
+  const ports = ['north', 'south', 'east', 'west'] as const;
+  const group: DiagramNode = {
+    ...tile('vpc', 600, 400),
+    kind: 'group',
+    width: 900,
+    depth: 700,
+  };
+  const tiles = Array.from({ length: 60 }, (_, i) => ({
+    ...tile(`n${i}`, random(3000) - 1500, random(3000) - 1500),
+    ...(i % 4 === 0 ? { parentId: 'vpc', x: random(600) - 300, z: 0 } : {}),
+  }));
+  const nodes = board(group, ...tiles);
+  const edges: DiagramEdge[] = Array.from({ length: 120 }, (_, i) => {
+    const source = `n${random(60)}`;
+    const target = i % 10 === 0 ? source : `n${random(60)}`;
+    return {
+      id: `e${i}`,
+      source,
+      target:
+        target === source
+          ? `n${(random(59) + 1 + Number(source.slice(1))) % 60}`
+          : target,
+      label: '',
+      ...(i % 5 === 0 ? { sourcePort: ports[random(4)] } : {}),
+      ...(i % 7 === 0 ? { targetPort: ports[random(4)] } : {}),
+    };
+  });
+  // Some connections run both ways.
+  for (const edge of edges.slice(0, 10))
+    edges.push({
+      ...edge,
+      id: `${edge.id}-back`,
+      source: edge.target,
+      target: edge.source,
+    });
+  const context = new RoutingContext(nodes, edges);
+  // Build the spatial grid first, so moves have to keep it in step.
+  for (const edge of edges)
+    routeEdge(edge, nodes, context.obstacles, context.fans);
+  for (let step = 0; step < 40; step++) {
+    const moved = Array.from(
+      { length: 1 + random(3) },
+      () => tiles[random(60)] as DiagramNode,
+    );
+    for (const node of moved) {
+      node.x += random(800) - 400;
+      node.z += random(800) - 400;
+    }
+    const ids = new Set(moved.map((node) => node.id));
+    context.move(
+      ids,
+      edges.filter((e) => ids.has(e.source) || ids.has(e.target)),
+    );
+  }
+  expect(context.obstacles).toEqual(obstaclesOf(nodes));
+  expect(new Map([...context.fans].sort())).toEqual(
+    new Map([...fansOf(edges, nodes)].sort()),
+  );
+  const fresh = obstaclesOf(nodes);
+  const freshFans = fansOf(edges, nodes);
+  for (const edge of edges)
+    expect(routeEdge(edge, nodes, context.obstacles, context.fans)).toEqual(
+      routeEdge(edge, nodes, fresh, freshFans),
+    );
 });

@@ -106,22 +106,78 @@ function resolvePorts(
  */
 export type Fans = ReadonlyMap<string, number>;
 const pairKey = (source: string, target: string) => `${source}\0${target}`;
+/** The fan keys one connection counts towards, or none if an end is missing. */
+function fanKeys(
+  edge: DiagramEdge,
+  nodes: ReadonlyMap<string, DiagramNode>,
+): string[] {
+  if (!nodes.has(edge.source) || !nodes.has(edge.target)) return [];
+  const [out, into] = resolvePorts(edge, nodes);
+  return [
+    `${edge.source}:${out}`,
+    `${edge.target}:${into}`,
+    pairKey(edge.source, edge.target),
+  ];
+}
 export function fansOf(
   edges: Iterable<DiagramEdge>,
   nodes: ReadonlyMap<string, DiagramNode>,
 ): Map<string, number> {
   const fans = new Map<string, number>();
-  for (const edge of edges) {
-    if (!nodes.has(edge.source) || !nodes.has(edge.target)) continue;
-    const [out, into] = resolvePorts(edge, nodes);
-    for (const key of [
-      `${edge.source}:${out}`,
-      `${edge.target}:${into}`,
-      pairKey(edge.source, edge.target),
-    ])
+  for (const edge of edges)
+    for (const key of fanKeys(edge, nodes))
       fans.set(key, (fans.get(key) ?? 0) + 1);
-  }
   return fans;
+}
+/**
+ * A board's obstacles and fans, kept current while nodes move. Moving a
+ * component updates its own obstacle (and spatial-grid cells) and the fans of
+ * its own connections, instead of recomputing the whole board per frame.
+ */
+export class RoutingContext {
+  public readonly obstacles: Obstacle[];
+  public readonly fans = new Map<string, number>();
+  private readonly obstacleIndex = new Map<string, number>();
+  private readonly edgeFans = new Map<string, string[]>();
+  constructor(
+    private readonly nodes: ReadonlyMap<string, DiagramNode>,
+    edges: Iterable<DiagramEdge>,
+  ) {
+    this.obstacles = obstaclesOf(nodes);
+    for (const [index, obstacle] of this.obstacles.entries())
+      this.obstacleIndex.set(obstacle.id, index);
+    for (const edge of edges) this.countFans(edge, 1);
+  }
+  /**
+   * Nodes `ids` (not groups) moved; `edges` are every connection touching
+   * them. Their routes then need recomputing against this context.
+   */
+  public move(ids: Iterable<string>, edges: Iterable<DiagramEdge>): void {
+    for (const id of ids) {
+      const index = this.obstacleIndex.get(id);
+      const node = this.nodes.get(id);
+      if (index === undefined || !node) continue;
+      replaceObstacle(this.obstacles, index, {
+        id,
+        ...worldRect(node, this.nodes),
+      });
+    }
+    for (const edge of edges) {
+      this.countFans(edge, -1);
+      this.countFans(edge, 1);
+    }
+  }
+  private countFans(edge: DiagramEdge, sign: 1 | -1): void {
+    const keys =
+      sign > 0 ? fanKeys(edge, this.nodes) : (this.edgeFans.get(edge.id) ?? []);
+    for (const key of keys) {
+      const count = (this.fans.get(key) ?? 0) + sign;
+      if (count) this.fans.set(key, count);
+      else this.fans.delete(key);
+    }
+    if (sign > 0) this.edgeFans.set(edge.id, keys);
+    else this.edgeFans.delete(edge.id);
+  }
 }
 /** Gap between the two lanes of a connection pair that runs both ways. */
 const LANE_GAP = 14;
@@ -274,6 +330,19 @@ function addToCell(
   if (bucket) bucket.push(index);
   else cells.set(key, [index]);
 }
+/** The grid cells a box covers. */
+function cellKeysOf(box: Rect): number[] {
+  const x0 = Math.floor(box.minX / CELL),
+    x1 = Math.floor(box.maxX / CELL);
+  const z0 = Math.floor(box.minZ / CELL),
+    z1 = Math.floor(box.maxZ / CELL);
+  // Degenerate or absurdly large boxes go in one shared bucket.
+  if (!(x1 - x0 <= 64 && z1 - z0 <= 64)) return [-1];
+  const keys: number[] = [];
+  for (let ix = x0; ix <= x1; ix++)
+    for (let iz = z0; iz <= z1; iz++) keys.push(cellKey(ix, iz));
+  return keys;
+}
 function gridOf(all: readonly Obstacle[]): ObstacleGrid {
   let grid = grids.get(all);
   if (grid) return grid;
@@ -281,22 +350,27 @@ function gridOf(all: readonly Obstacle[]): ObstacleGrid {
   for (let index = 0; index < all.length; index++) {
     const box = all[index];
     if (!box) continue;
-    const x0 = Math.floor(box.minX / CELL),
-      x1 = Math.floor(box.maxX / CELL);
-    const z0 = Math.floor(box.minZ / CELL),
-      z1 = Math.floor(box.maxZ / CELL);
-    // Degenerate or absurdly large boxes go in one shared bucket.
-    if (!(x1 - x0 <= 64 && z1 - z0 <= 64)) {
-      addToCell(cells, -1, index);
-      continue;
-    }
-    for (let ix = x0; ix <= x1; ix++)
-      for (let iz = z0; iz <= z1; iz++)
-        addToCell(cells, cellKey(ix, iz), index);
+    for (const key of cellKeysOf(box)) addToCell(cells, key, index);
   }
   grid = { cells, seen: new Uint32Array(all.length), query: 0 };
   grids.set(all, grid);
   return grid;
+}
+/** Swap one obstacle for its moved box, keeping a built grid in step. */
+function replaceObstacle(all: Obstacle[], index: number, box: Obstacle): void {
+  const grid = grids.get(all);
+  const old = all[index];
+  if (grid && old)
+    for (const key of cellKeysOf(old)) {
+      const bucket = grid.cells.get(key);
+      const at = bucket?.indexOf(index) ?? -1;
+      if (!bucket || at < 0) continue;
+      bucket.splice(at, 1);
+      if (!bucket.length) grid.cells.delete(key);
+    }
+  all[index] = box;
+  if (grid)
+    for (const key of cellKeysOf(box)) addToCell(grid.cells, key, index);
 }
 /** Obstacles a segment passes through, excluding the two endpoint tiles. */
 function countCrossings(

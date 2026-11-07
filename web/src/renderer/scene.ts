@@ -41,11 +41,8 @@ import { isPort, worldPosition, worldRect } from '../domain/document';
 import { inactiveEdges } from '../domain/journey';
 import { laneBands } from '../domain/lanes';
 import {
-  type Fans,
-  fansOf,
-  type Obstacle,
-  obstaclesOf,
   portPosition,
+  RoutingContext,
   routeEdge,
   routeMidpoint,
 } from '../domain/routing';
@@ -215,16 +212,17 @@ export class DiagramScene {
   private readonly nodeIndex = new Map<string, DiagramNode>();
   private readonly edgeIndex = new Map<string, DiagramEdge>();
   private readonly incident = new Map<string, Set<string>>();
-  /** Tile footprints for routing; dropped whenever anything moves. */
-  private obstacleCache: Obstacle[] | undefined;
-  private fanCache: Fans | undefined;
-  private get obstacles(): Obstacle[] {
-    this.obstacleCache ??= obstaclesOf(this.nodeIndex);
-    return this.obstacleCache;
-  }
-  private get fans(): Fans {
-    this.fanCache ??= fansOf(this.edgeIndex.values(), this.nodeIndex);
-    return this.fanCache;
+  /**
+   * Tile footprints and shared sides for routing. Built lazily; dropped when
+   * the whole board is re-placed, updated in place when components move.
+   */
+  private routingCache: RoutingContext | undefined;
+  private get routing(): RoutingContext {
+    this.routingCache ??= new RoutingContext(
+      this.nodeIndex,
+      this.edgeIndex.values(),
+    );
+    return this.routingCache;
   }
   /** Invisible picking boxes, one per tile, rebuilt on load. */
   private pickables: Mesh[] = [];
@@ -710,8 +708,7 @@ export class DiagramScene {
       -width / 2 + Math.min(Math.max(30, width - 80) / 2, 150);
   }
   private updatePositions(): void {
-    this.obstacleCache = undefined;
-    this.fanCache = undefined;
+    this.routingCache = undefined;
     for (const tile of this.tiles.values()) {
       const p = worldPosition(tile.node, this.nodeIndex);
       this.positionHeaderIcon(tile);
@@ -735,8 +732,8 @@ export class DiagramScene {
     const { points, targetPort } = routeEdge(
       edge,
       this.nodeIndex,
-      this.obstacles,
-      this.fans,
+      this.routing.obstacles,
+      this.routing.fans,
     );
     const y = Math.max(source.group.position.y, target.group.position.y) + 8;
     const offset = index * 14;
@@ -1109,12 +1106,22 @@ export class DiagramScene {
       if (tile) tiles.push(tile);
     }
     if (!tiles.length) return;
-    this.obstacleCache = undefined;
-    this.fanCache = undefined;
     if (tiles.some((tile) => tile.node.kind === 'group'))
       this.updatePositions();
     else {
       const routes = new Set<string>();
+      for (const tile of tiles)
+        for (const edgeId of this.incident.get(tile.node.id) ?? [])
+          routes.add(edgeId);
+      const edges: DiagramEdge[] = [];
+      for (const id of routes) {
+        const edge = this.edgeIndex.get(id);
+        if (edge) edges.push(edge);
+      }
+      this.routing.move(
+        tiles.map((tile) => tile.node.id),
+        edges,
+      );
       for (const tile of tiles) {
         const position = worldPosition(tile.node, this.nodeIndex);
         tile.group.position.set(position.x, position.level * 4, position.z);
@@ -1124,8 +1131,6 @@ export class DiagramScene {
           this.selectedIds.has(tile.node.id),
         );
         this.details?.update(tile.index, tile.node, tile.group.position);
-        for (const edgeId of this.incident.get(tile.node.id) ?? [])
-          routes.add(edgeId);
       }
       for (const edgeId of routes) this.updateEdge(edgeId);
     }
@@ -1246,8 +1251,8 @@ export class DiagramScene {
     const { points } = routeEdge(
       edge,
       this.nodeIndex,
-      this.obstacles,
-      this.fans,
+      this.routing.obstacles,
+      this.routing.fans,
     );
     const { point } = routeMidpoint(points);
     const projected = new Vector3(point.x, 8, point.z).project(this.camera);
@@ -1430,8 +1435,8 @@ export class DiagramScene {
           return routeEdge(
             edge,
             this.nodeIndex,
-            this.obstacles,
-            this.fans,
+            this.routing.obstacles,
+            this.routing.fans,
           ).points.map((p) => new Vector3(p.x, y, p.z));
         },
         node: (id) => {
