@@ -1,4 +1,4 @@
-import type { DiagramDocument } from './document';
+import type { DiagramDocument, DiagramEdge } from './document';
 
 /**
  * Where a journey begins: the selected node if it leads anywhere, otherwise
@@ -55,27 +55,36 @@ export function journeyBranches(
  */
 export function inactiveEdges(doc: DiagramDocument): Set<string> {
   const inactive = new Set<string>();
+  if (!doc.nodes.some((node) => node.journey?.mode === 'fixed'))
+    return inactive;
+  const outgoing = new Map<string, DiagramEdge[]>();
+  const incomingCount = new Map<string, number>();
+  for (const edge of doc.edges) {
+    const list = outgoing.get(edge.source);
+    if (list) list.push(edge);
+    else outgoing.set(edge.source, [edge]);
+    incomingCount.set(edge.target, (incomingCount.get(edge.target) ?? 0) + 1);
+  }
+  const queue: DiagramEdge[] = [];
+  const switchOff = (edge: DiagramEdge) => {
+    if (inactive.has(edge.id)) return;
+    inactive.add(edge.id);
+    queue.push(edge);
+  };
   for (const node of doc.nodes) {
     if (node.journey?.mode !== 'fixed') continue;
     const { mode, edges } = journeyBranches(doc, node.id);
     if (mode !== 'fixed') continue;
-    for (const edge of doc.edges)
-      if (edge.source === node.id && !edges.includes(edge.id))
-        inactive.add(edge.id);
+    for (const edge of outgoing.get(node.id) ?? [])
+      if (!edges.includes(edge.id)) switchOff(edge);
   }
   // A node reached only through inactive connections passes that on.
-  for (let changed = inactive.size > 0; changed; ) {
-    changed = false;
-    for (const node of doc.nodes) {
-      const incoming = doc.edges.filter((e) => e.target === node.id);
-      if (!incoming.length || !incoming.every((e) => inactive.has(e.id)))
-        continue;
-      for (const edge of doc.edges)
-        if (edge.source === node.id && !inactive.has(edge.id)) {
-          inactive.add(edge.id);
-          changed = true;
-        }
-    }
+  const inactiveIncoming = new Map<string, number>();
+  for (let edge = queue.pop(); edge; edge = queue.pop()) {
+    const count = (inactiveIncoming.get(edge.target) ?? 0) + 1;
+    inactiveIncoming.set(edge.target, count);
+    if (count === incomingCount.get(edge.target))
+      for (const next of outgoing.get(edge.target) ?? []) switchOff(next);
   }
   return inactive;
 }

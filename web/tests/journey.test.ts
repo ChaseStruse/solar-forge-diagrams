@@ -116,6 +116,61 @@ test('an active route switches off the other branches of its fork only', () => {
   expect([...inactiveEdges(graph)]).toEqual([]);
 });
 
+/** The original fixed-point version of inactiveEdges, kept as a reference. */
+function inactiveReference(graph: DiagramDocument): Set<string> {
+  const inactive = new Set<string>();
+  for (const n of graph.nodes) {
+    if (n.journey?.mode !== 'fixed') continue;
+    const { mode, edges } = journeyBranches(graph, n.id);
+    if (mode !== 'fixed') continue;
+    for (const edge of graph.edges)
+      if (edge.source === n.id && !edges.includes(edge.id))
+        inactive.add(edge.id);
+  }
+  for (let changed = inactive.size > 0; changed; ) {
+    changed = false;
+    for (const n of graph.nodes) {
+      const incoming = graph.edges.filter((e) => e.target === n.id);
+      if (!incoming.length || !incoming.every((e) => inactive.has(e.id)))
+        continue;
+      for (const edge of graph.edges)
+        if (edge.source === n.id && !inactive.has(edge.id)) {
+          inactive.add(edge.id);
+          changed = true;
+        }
+    }
+  }
+  return inactive;
+}
+
+test('inactive routes match the reference on random graphs with cycles', () => {
+  let seed = 7;
+  const random = (limit: number) => {
+    seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+    return seed % limit;
+  };
+  for (let round = 0; round < 300; round++) {
+    const count = 2 + random(12);
+    const nodes = Array.from({ length: count }, (_, i) => node(`n${i}`));
+    const pairs: [string, string][] = Array.from(
+      { length: random(count * 3) },
+      () => [`n${random(count)}`, `n${random(count)}`],
+    );
+    const graph = doc(nodes, pairs);
+    for (const edge of graph.edges)
+      if (random(5) === 0) edge.relationship = 'dependency';
+    for (const n of graph.nodes)
+      if (random(3) === 0) {
+        const exits = graph.edges.filter((e) => e.source === n.id);
+        const pick = exits[random(exits.length + 1)];
+        n.journey = { mode: 'fixed', edge: pick?.id ?? 'gone' };
+      }
+    expect([...inactiveEdges(graph)].sort()).toEqual(
+      [...inactiveReference(graph)].sort(),
+    );
+  }
+});
+
 test('branch names use the connection label, else the destination', () => {
   const board = doc(
     [node('a'), node('b'), node('c')],
