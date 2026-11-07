@@ -1,0 +1,545 @@
+import type { DiagramEdge, DiagramNode, Port, Rect } from './document';
+import { worldPosition, worldRect } from './document';
+export interface Point {
+  x: number;
+  z: number;
+}
+export function portPosition(
+  node: DiagramNode,
+  port: Port,
+  nodes: ReadonlyMap<string, DiagramNode>,
+): Point {
+  const p = worldPosition(node, nodes);
+  return {
+    x:
+      p.x +
+      (port === 'east'
+        ? node.width / 2
+        : port === 'west'
+          ? -node.width / 2
+          : 0),
+    z:
+      p.z +
+      (port === 'south'
+        ? node.depth / 2
+        : port === 'north'
+          ? -node.depth / 2
+          : 0),
+  };
+}
+/** The side of a node facing a world point; used when a connection is dropped. */
+export function nearestPort(
+  node: DiagramNode,
+  point: Point,
+  nodes: ReadonlyMap<string, DiagramNode>,
+): Port {
+  const p = worldPosition(node, nodes);
+  // Normalize by size so wide tiles still offer their north/south sides.
+  const dx = (point.x - p.x) / Math.max(node.width, 1);
+  const dz = (point.z - p.z) / Math.max(node.depth, 1);
+  if (Math.abs(dx) >= Math.abs(dz)) return dx >= 0 ? 'east' : 'west';
+  return dz >= 0 ? 'south' : 'north';
+}
+/** Automatic ports face each other along the dominant axis between nodes. */
+function automaticPorts(
+  a: Point,
+  b: Point,
+  routing: DiagramEdge['routing'],
+): [Port, Port] {
+  const horizontal = routing
+    ? routing === 'horizontal'
+    : Math.abs(b.x - a.x) >= Math.abs(b.z - a.z);
+  const forward = horizontal ? b.x >= a.x : b.z >= a.z;
+  return horizontal
+    ? forward
+      ? ['east', 'west']
+      : ['west', 'east']
+    : forward
+      ? ['south', 'north']
+      : ['north', 'south'];
+}
+export interface Obstacle extends Rect {
+  id: string;
+}
+/** Tiles that routes steer around; compute once and reuse across many routes. */
+export function obstaclesOf(
+  nodes: ReadonlyMap<string, DiagramNode>,
+): Obstacle[] {
+  const result: Obstacle[] = [];
+  for (const node of nodes.values())
+    if (node.kind !== 'group')
+      result.push({ id: node.id, ...worldRect(node, nodes) });
+  return result;
+}
+/** The sides a connection leaves and enters by, fixed or automatic. */
+function resolvePorts(
+  edge: DiagramEdge,
+  nodes: ReadonlyMap<string, DiagramNode>,
+): [Port, Port] {
+  const source = nodes.get(edge.source),
+    target = nodes.get(edge.target);
+  if (!source || !target) throw Error('Missing connection endpoint');
+  const a = worldPosition(source, nodes),
+    b = worldPosition(target, nodes);
+  const [autoSource, autoTarget] = automaticPorts(a, b, edge.routing);
+  let sourcePort = edge.sourcePort ?? autoSource;
+  let targetPort = edge.targetPort ?? autoTarget;
+  // With one fixed side, pick the free side relative to that fixed endpoint.
+  if (edge.sourcePort && !edge.targetPort)
+    targetPort = nearestPort(
+      target,
+      portPosition(source, sourcePort, nodes),
+      nodes,
+    );
+  if (!edge.sourcePort && edge.targetPort)
+    sourcePort = nearestPort(
+      source,
+      portPosition(target, targetPort, nodes),
+      nodes,
+    );
+  return [sourcePort, targetPort];
+}
+/**
+ * Board-wide routing context: connections sharing a node side, keyed
+ * "node:port" (shared sides fork at the node), and each connected
+ * source/target pair, so a pair linked both ways can split into two lanes.
+ */
+export type Fans = ReadonlyMap<string, number>;
+const pairKey = (source: string, target: string) => `${source}\0${target}`;
+/** The fan keys one connection counts towards, or none if an end is missing. */
+function fanKeys(
+  edge: DiagramEdge,
+  nodes: ReadonlyMap<string, DiagramNode>,
+): string[] {
+  if (!nodes.has(edge.source) || !nodes.has(edge.target)) return [];
+  const [out, into] = resolvePorts(edge, nodes);
+  return [
+    `${edge.source}:${out}`,
+    `${edge.target}:${into}`,
+    pairKey(edge.source, edge.target),
+  ];
+}
+export function fansOf(
+  edges: Iterable<DiagramEdge>,
+  nodes: ReadonlyMap<string, DiagramNode>,
+): Map<string, number> {
+  const fans = new Map<string, number>();
+  for (const edge of edges)
+    for (const key of fanKeys(edge, nodes))
+      fans.set(key, (fans.get(key) ?? 0) + 1);
+  return fans;
+}
+/**
+ * A board's obstacles and fans, kept current while nodes move. Moving a
+ * component updates its own obstacle (and spatial-grid cells) and the fans of
+ * its own connections, instead of recomputing the whole board per frame.
+ */
+export class RoutingContext {
+  public readonly obstacles: Obstacle[];
+  public readonly fans = new Map<string, number>();
+  private readonly obstacleIndex = new Map<string, number>();
+  private readonly edgeFans = new Map<string, string[]>();
+  constructor(
+    private readonly nodes: ReadonlyMap<string, DiagramNode>,
+    edges: Iterable<DiagramEdge>,
+  ) {
+    this.obstacles = obstaclesOf(nodes);
+    for (const [index, obstacle] of this.obstacles.entries())
+      this.obstacleIndex.set(obstacle.id, index);
+    for (const edge of edges) this.countFans(edge, 1);
+  }
+  /**
+   * Nodes `ids` (not groups) moved; `edges` are every connection touching
+   * them. Their routes then need recomputing against this context.
+   */
+  public move(ids: Iterable<string>, edges: Iterable<DiagramEdge>): void {
+    for (const id of ids) {
+      const index = this.obstacleIndex.get(id);
+      const node = this.nodes.get(id);
+      if (index === undefined || !node) continue;
+      replaceObstacle(this.obstacles, index, {
+        id,
+        ...worldRect(node, this.nodes),
+      });
+    }
+    for (const edge of edges) {
+      this.countFans(edge, -1);
+      this.countFans(edge, 1);
+    }
+  }
+  private countFans(edge: DiagramEdge, sign: 1 | -1): void {
+    const keys =
+      sign > 0 ? fanKeys(edge, this.nodes) : (this.edgeFans.get(edge.id) ?? []);
+    for (const key of keys) {
+      const count = (this.fans.get(key) ?? 0) + sign;
+      if (count) this.fans.set(key, count);
+      else this.fans.delete(key);
+    }
+    if (sign > 0) this.edgeFans.set(edge.id, keys);
+    else this.edgeFans.delete(edge.id);
+  }
+}
+/** Gap between the two lanes of a connection pair that runs both ways. */
+const LANE_GAP = 14;
+/**
+ * A connection whose reverse also exists. Both share one route, each shifted
+ * to its own right-hand side, so the pair reads as two parallel one-way arrows
+ * instead of a single line carrying flow both ways.
+ */
+function isTwoWay(edge: DiagramEdge, fans: Fans | undefined): boolean {
+  return (
+    edge.source !== edge.target &&
+    (fans?.get(pairKey(edge.target, edge.source)) ?? 0) > 0
+  );
+}
+/** Offset an orthogonal polyline sideways, to the right of its direction. */
+function shiftRight(points: readonly Point[], by: number): Point[] {
+  const normals: (Point | undefined)[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1],
+      b = points[i];
+    const dx = (b?.x ?? 0) - (a?.x ?? 0),
+      dz = (b?.z ?? 0) - (a?.z ?? 0);
+    const length = Math.hypot(dx, dz);
+    // +X is screen-right and +Z screen-down, so right of travel is (-dz, dx).
+    normals.push(length ? { x: -dz / length, z: dx / length } : undefined);
+  }
+  return points.map((point, i) => {
+    let into: Point | undefined, out: Point | undefined;
+    for (let j = i - 1; j >= 0 && !into; j--) into = normals[j];
+    for (let j = i; j < normals.length && !out; j++) out = normals[j];
+    into ??= out;
+    out ??= into;
+    if (!into || !out) return { ...point };
+    // Miter join: a right-angle corner moves along both normals.
+    const dot = into.x * out.x + into.z * out.z;
+    const scale = dot > -0.99 ? by / (1 + dot) : by;
+    const x = dot > -0.99 ? into.x + out.x : into.x,
+      z = dot > -0.99 ? into.z + out.z : into.z;
+    return { x: point.x + x * scale, z: point.z + z * scale };
+  });
+}
+export function routeEdge(
+  edge: DiagramEdge,
+  nodes: ReadonlyMap<string, DiagramNode>,
+  obstacles: readonly Obstacle[] = obstaclesOf(nodes),
+  fans?: Fans,
+): { points: Point[]; sourcePort: Port; targetPort: Port } {
+  if (isTwoWay(edge, fans)) {
+    // Both directions follow the route of the lower-ID direction, so the
+    // lanes stay parallel; each then keeps to its own right-hand side.
+    const forward = edge.source < edge.target;
+    const shared = forward
+      ? routeOnce(edge, nodes, obstacles, fans)
+      : routeOnce(mirror(edge), nodes, obstacles, fans);
+    const points = forward ? shared.points : shared.points.reverse();
+    return {
+      sourcePort: forward ? shared.sourcePort : shared.targetPort,
+      targetPort: forward ? shared.targetPort : shared.sourcePort,
+      points: shiftRight(points, LANE_GAP / 2),
+    };
+  }
+  return routeOnce(edge, nodes, obstacles, fans);
+}
+function mirror(edge: DiagramEdge): DiagramEdge {
+  const result: DiagramEdge = {
+    ...edge,
+    source: edge.target,
+    target: edge.source,
+  };
+  delete result.sourcePort;
+  delete result.targetPort;
+  if (edge.targetPort) result.sourcePort = edge.targetPort;
+  if (edge.sourcePort) result.targetPort = edge.sourcePort;
+  return result;
+}
+function routeOnce(
+  edge: DiagramEdge,
+  nodes: ReadonlyMap<string, DiagramNode>,
+  obstacles: readonly Obstacle[],
+  fans: Fans | undefined,
+): { points: Point[]; sourcePort: Port; targetPort: Port } {
+  const source = nodes.get(edge.source),
+    target = nodes.get(edge.target);
+  if (!source || !target) throw Error('Missing connection endpoint');
+  const [sourcePort, targetPort] = resolvePorts(edge, nodes);
+  const fork = (fans?.get(`${edge.source}:${sourcePort}`) ?? 0) > 1;
+  const merge = (fans?.get(`${edge.target}:${targetPort}`) ?? 0) > 1;
+  const start = portPosition(source, sourcePort, nodes),
+    end = portPosition(target, targetPort, nodes);
+  const first = offset(start, sourcePort, 24),
+    last = offset(end, targetPort, 24);
+  return {
+    sourcePort,
+    targetPort,
+    points: [
+      start,
+      ...bestPath(
+        first,
+        last,
+        sourcePort,
+        targetPort,
+        edge,
+        source,
+        target,
+        nodes,
+        obstacles,
+        fork && !merge ? 'source' : merge && !fork ? 'target' : 'middle',
+      ),
+      end,
+    ],
+  };
+}
+const offset = (point: Point, port: Port, distance: number): Point => ({
+  x: point.x + (port === 'east' ? distance : port === 'west' ? -distance : 0),
+  z: point.z + (port === 'south' ? distance : port === 'north' ? -distance : 0),
+});
+const PAD = 6;
+/** Axis-aligned segment against a box, with a small clearance. */
+function crosses(a: Point, b: Point, box: Rect): boolean {
+  const pad = PAD;
+  return (
+    Math.max(a.x, b.x) > box.minX - pad &&
+    Math.min(a.x, b.x) < box.maxX + pad &&
+    Math.max(a.z, b.z) > box.minZ - pad &&
+    Math.min(a.z, b.z) < box.maxZ + pad
+  );
+}
+/**
+ * Uniform grid over an obstacle list so a segment only tests nearby tiles.
+ * Built once per list (lists are rebuilt, never mutated, when tiles move).
+ * Cell keys may collide far from the origin; that only adds candidates,
+ * since every candidate still gets the exact `crosses` test.
+ */
+interface ObstacleGrid {
+  cells: Map<number, number[]>;
+  /** Per-obstacle query stamp, so a box spanning several cells counts once. */
+  seen: Uint32Array;
+  query: number;
+}
+const CELL = 256;
+const grids = new WeakMap<readonly Obstacle[], ObstacleGrid>();
+const cellKey = (ix: number, iz: number) =>
+  ((ix & 0xffff) << 16) | (iz & 0xffff);
+function addToCell(
+  cells: Map<number, number[]>,
+  key: number,
+  index: number,
+): void {
+  const bucket = cells.get(key);
+  if (bucket) bucket.push(index);
+  else cells.set(key, [index]);
+}
+/** The grid cells a box covers. */
+function cellKeysOf(box: Rect): number[] {
+  const x0 = Math.floor(box.minX / CELL),
+    x1 = Math.floor(box.maxX / CELL);
+  const z0 = Math.floor(box.minZ / CELL),
+    z1 = Math.floor(box.maxZ / CELL);
+  // Degenerate or absurdly large boxes go in one shared bucket.
+  if (!(x1 - x0 <= 64 && z1 - z0 <= 64)) return [-1];
+  const keys: number[] = [];
+  for (let ix = x0; ix <= x1; ix++)
+    for (let iz = z0; iz <= z1; iz++) keys.push(cellKey(ix, iz));
+  return keys;
+}
+function gridOf(all: readonly Obstacle[]): ObstacleGrid {
+  let grid = grids.get(all);
+  if (grid) return grid;
+  const cells = new Map<number, number[]>();
+  for (let index = 0; index < all.length; index++) {
+    const box = all[index];
+    if (!box) continue;
+    for (const key of cellKeysOf(box)) addToCell(cells, key, index);
+  }
+  grid = { cells, seen: new Uint32Array(all.length), query: 0 };
+  grids.set(all, grid);
+  return grid;
+}
+/** Swap one obstacle for its moved box, keeping a built grid in step. */
+function replaceObstacle(all: Obstacle[], index: number, box: Obstacle): void {
+  const grid = grids.get(all);
+  const old = all[index];
+  if (grid && old)
+    for (const key of cellKeysOf(old)) {
+      const bucket = grid.cells.get(key);
+      const at = bucket?.indexOf(index) ?? -1;
+      if (!bucket || at < 0) continue;
+      bucket.splice(at, 1);
+      if (!bucket.length) grid.cells.delete(key);
+    }
+  all[index] = box;
+  if (grid)
+    for (const key of cellKeysOf(box)) addToCell(grid.cells, key, index);
+}
+/** Obstacles a segment passes through, excluding the two endpoint tiles. */
+function countCrossings(
+  a: Point,
+  b: Point,
+  all: readonly Obstacle[],
+  grid: ObstacleGrid,
+  sourceId: string,
+  targetId: string,
+): number {
+  if (++grid.query === 0xffffffff) {
+    grid.seen.fill(0);
+    grid.query = 1;
+  }
+  const x0 = Math.floor((Math.min(a.x, b.x) - PAD) / CELL),
+    x1 = Math.floor((Math.max(a.x, b.x) + PAD) / CELL);
+  const z0 = Math.floor((Math.min(a.z, b.z) - PAD) / CELL),
+    z1 = Math.floor((Math.max(a.z, b.z) + PAD) / CELL);
+  let count = countBucket(
+    grid.cells.get(-1),
+    a,
+    b,
+    all,
+    grid,
+    sourceId,
+    targetId,
+  );
+  if (x1 - x0 > 0xffff || z1 - z0 > 0xffff) {
+    // Unbounded segment: fall back to every bucket.
+    for (const [key, bucket] of grid.cells)
+      if (key !== -1)
+        count += countBucket(bucket, a, b, all, grid, sourceId, targetId);
+    return count;
+  }
+  for (let ix = x0; ix <= x1; ix++)
+    for (let iz = z0; iz <= z1; iz++)
+      count += countBucket(
+        grid.cells.get(cellKey(ix, iz)),
+        a,
+        b,
+        all,
+        grid,
+        sourceId,
+        targetId,
+      );
+  return count;
+}
+function countBucket(
+  bucket: readonly number[] | undefined,
+  a: Point,
+  b: Point,
+  all: readonly Obstacle[],
+  grid: ObstacleGrid,
+  sourceId: string,
+  targetId: string,
+): number {
+  if (!bucket) return 0;
+  let count = 0;
+  for (const index of bucket) {
+    if (grid.seen[index] === grid.query) continue;
+    grid.seen[index] = grid.query;
+    const box = all[index];
+    if (box && box.id !== sourceId && box.id !== targetId && crosses(a, b, box))
+      count++;
+  }
+  return count;
+}
+/**
+ * Orthogonal routing between two port stubs: try a handful of three-segment
+ * paths and keep the one that avoids tiles, never doubles back over a stub,
+ * and stays short with few bends.
+ */
+function bestPath(
+  first: Point,
+  last: Point,
+  sourcePort: Port,
+  targetPort: Port,
+  edge: DiagramEdge,
+  source: DiagramNode,
+  target: DiagramNode,
+  nodes: ReadonlyMap<string, DiagramNode>,
+  all: readonly Obstacle[],
+  split: 'source' | 'middle' | 'target',
+): Point[] {
+  const ends = [worldRect(source, nodes), worldRect(target, nodes)];
+  const bend = edge.bend ?? 0;
+  const minX = Math.min(...ends.map((r) => r.minX)) - 30;
+  const maxX = Math.max(...ends.map((r) => r.maxX)) + 30;
+  const minZ = Math.min(...ends.map((r) => r.minZ)) - 30;
+  const maxZ = Math.max(...ends.map((r) => r.maxZ)) + 30;
+  // The endpoint tiles always count; other tiles come from the spatial grid.
+  const grid = gridOf(all);
+  const candidates: Point[][] = [];
+  // Where the cross segment sits: halfway, or at a shared node so branches
+  // visibly fork from (or merge into) it.
+  const along = (a: number, b: number) =>
+    (split === 'source' ? a : split === 'target' ? b : (a + b) / 2) + bend;
+  for (const x of [along(first.x, last.x), minX + bend, maxX + bend])
+    candidates.push([first, { x, z: first.z }, { x, z: last.z }, last]);
+  for (const z of [along(first.z, last.z), minZ + bend, maxZ + bend])
+    candidates.push([first, { x: first.x, z }, { x: last.x, z }, last]);
+  const elbows = [
+    { x: last.x, z: first.z },
+    { x: first.x, z: last.z },
+  ];
+  const forked = candidates.length;
+  for (const elbow of elbows)
+    candidates.push([first, elbow, { ...elbow }, last]);
+  const out = direction(sourcePort);
+  const into = direction(targetPort);
+  let best = candidates[0] ?? [first, last];
+  let bestScore = Infinity;
+  for (const path of candidates) {
+    let score = 0;
+    let bends = 0;
+    let previous: Point | undefined;
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1],
+        b = path[i];
+      if (!a || !b) continue;
+      const dx = Math.sign(b.x - a.x),
+        dz = Math.sign(b.z - a.z);
+      if (!dx && !dz) continue;
+      score += Math.abs(b.x - a.x) + Math.abs(b.z - a.z);
+      for (const box of ends) if (crosses(a, b, box)) score += 10_000;
+      score += 10_000 * countCrossings(a, b, all, grid, source.id, target.id);
+      // Leaving against the source stub or arriving against the target stub.
+      if (!previous && dx === -out.x && dz === -out.z) score += 5_000;
+      if (i === path.length - 1 && dx === into.x && dz === into.z)
+        score += 5_000;
+      if (previous) bends++;
+      previous = b;
+    }
+    score += bends * 40;
+    // Equal-length elbows tie with a fork; keep shared branches at the node.
+    if (split !== 'middle' && candidates.indexOf(path) >= forked) score += 1;
+    if (score < bestScore) {
+      bestScore = score;
+      best = path;
+    }
+  }
+  return best;
+}
+const direction = (port: Port): Point => offset({ x: 0, z: 0 }, port, 1);
+/** The point halfway along a route, and whether that stretch runs along X. */
+export function routeMidpoint(points: readonly Point[]): {
+  point: Point;
+  horizontal: boolean;
+} {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1],
+      b = points[i];
+    if (a && b) total += Math.abs(b.x - a.x) + Math.abs(b.z - a.z);
+  }
+  let remaining = total / 2;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1],
+      b = points[i];
+    if (!a || !b) continue;
+    const length = Math.abs(b.x - a.x) + Math.abs(b.z - a.z);
+    if (length > 0 && remaining <= length) {
+      const t = remaining / length;
+      return {
+        point: { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t },
+        horizontal: Math.abs(b.x - a.x) >= Math.abs(b.z - a.z),
+      };
+    }
+    remaining -= length;
+  }
+  return { point: points[0] ?? { x: 0, z: 0 }, horizontal: true };
+}

@@ -12,12 +12,12 @@ https://github.com/ChaseStruse/solar-forge-diagrams/releases/latest/download/sol
 
 Pick `X.Y.Z` per [Semantic Versioning](https://semver.org/) and set it in all four manifests:
 
-- `package.json` → `"version"`
-- `src-tauri/Cargo.toml` → `version`
-- `src-tauri/tauri.conf.json` → `"version"`
+- `web/package.json` → `"version"`
+- `desktop/Cargo.toml` → `version`
+- `desktop/tauri.conf.json` → `"version"`
 - `packaging/omarchy/pkgbuilds/solar-forge-diagrams/PKGBUILD` → `pkgver`, and reset `pkgrel=1`. Increase `pkgrel` only for packaging-only rebuilds of the same version.
 
-Also update the app's own entry in `src-tauri/Cargo.lock`: the `version` line directly below `name = "solar-forge-diagrams"`. Dependencies are unchanged, and `--locked` builds fail if this entry is stale. `scripts/source-archive.sh` checks all five files.
+Also update the app's own entry in `desktop/Cargo.lock`: the `version` line directly below `name = "solar-forge-diagrams"`. Dependencies are unchanged, and `--locked` builds fail if this entry is stale. `scripts/source-archive.sh` checks all five files.
 
 Move the `[Unreleased]` entries in `CHANGELOG.md` under a new `[X.Y.Z] — YYYY-MM-DD` heading, update `docs/STATUS.md`, and merge to `main`.
 

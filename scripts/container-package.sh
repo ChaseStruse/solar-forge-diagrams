@@ -34,10 +34,10 @@ if (( ${#packages[@]} != 1 )); then
   exit 1
 fi
 
-# Remaining Rust release gates, on the tree makepkg just built (it holds node_modules and dist).
+# Remaining Rust release gates, on the tree makepkg just built (it holds web/node_modules and web/dist).
 built="$recipe/src/solar-forge-diagrams-$version"
-cargo fmt --manifest-path "$built/src-tauri/Cargo.toml" --check
-cargo clippy --manifest-path "$built/src-tauri/Cargo.toml" --locked --all-targets -- -D warnings
+cargo fmt --manifest-path "$built/desktop/Cargo.toml" --check
+cargo clippy --manifest-path "$built/desktop/Cargo.toml" --locked --all-targets -- -D warnings
 
 "$source/scripts/omarchy-bundle.sh" "${packages[0]}"
 mkdir -p "$out"

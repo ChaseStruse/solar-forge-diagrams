@@ -4,7 +4,7 @@ The installed app is native and offline. Bun, Rust, Docker and development serve
 
 ## Native development
 
-Use Bun 1.3.11 and Rust 1.99.1. Install Arch packages `webkit2gtk-4.1 gtk3 rust pkgconf` and your desktop's normal XDG portal/file chooser backend. Do not modify compositor configuration. Run `bun install --frozen-lockfile`, `bun run verify`, and `cargo test --manifest-path src-tauri/Cargo.toml --locked`, then build with `cargo build --manifest-path src-tauri/Cargo.toml --release --locked`. Run `src-tauri/target/release/solar-forge-diagrams`. `bun run desktop` starts a development window; installed builds embed the frontend.
+Use Bun 1.3.11 and Rust 1.99.1. Install Arch packages `webkit2gtk-4.1 gtk3 rust pkgconf` and your desktop's normal XDG portal/file chooser backend. Do not modify compositor configuration. In `web/`, run `bun install --frozen-lockfile` and `bun run verify`. From the repository root, run `cargo test --manifest-path desktop/Cargo.toml --locked`, then build with `cargo build --manifest-path desktop/Cargo.toml --release --locked`. Run `desktop/target/release/solar-forge-diagrams`. `bun run desktop` (in `web/`) starts a development window; installed builds embed the frontend.
 
 Opt-in native diagnostics: build with `--features diagnostics`, then run `--smoke-test`. For isolated testing set `XDG_DATA_HOME=/tmp/solar-forge-test-data`. Never report browser or container tests as native GUI/GPU certification.
 
@@ -20,7 +20,7 @@ Upgrade by running the next bundle's installer. Remove through Omarchy's package
 
 The recipe lives at `packaging/omarchy/pkgbuilds/solar-forge-diagrams/`, including Omarchy's `.omarchy/package.json` metadata. The recipe remains a PKGBUILD because that is the format required by the [Omarchy Package Repository](https://github.com/omacom/omarchy-pkgs#contribute-a-package).
 
-After a reviewed commit, run `scripts/source-archive.sh`; it refuses to run if `package.json`, `Cargo.toml`, `tauri.conf.json` and the PKGBUILD disagree on the version. Copy `artifacts/solar-forge-diagrams-<version>.tar.gz` beside the recipe. Replace `SKIP` with the printed SHA-256 (or run `updpkgsums`). Run `makepkg --cleanbuild` from that directory after installing its build dependencies. Then create the install bundle:
+After a reviewed commit, run `scripts/source-archive.sh`; it refuses to run if `web/package.json`, `desktop/Cargo.toml`, `tauri.conf.json` and the PKGBUILD disagree on the version. Copy `artifacts/solar-forge-diagrams-<version>.tar.gz` beside the recipe. Replace `SKIP` with the printed SHA-256 (or run `updpkgsums`). Run `makepkg --cleanbuild` from that directory after installing its build dependencies. Then create the install bundle:
 
 ```sh
 scripts/omarchy-bundle.sh /path/to/solar-forge-diagrams-<version>-<pkgrel>-x86_64.pkg.tar.zst

@@ -1,0 +1,454 @@
+import type { DiagramDocument, NetworkRule } from '../domain/document';
+import { laneBands, laneLayout } from '../domain/lanes';
+import { defaultTraffic } from '../domain/network';
+import { boardBuilder } from './builder';
+
+/**
+ * Small boards that each show off one feature, with sticky notes that walk
+ * through it step by step. They teach the app rather than model real systems.
+ */
+const NOTE_FONT = 28;
+function board(title: string) {
+  const doc: DiagramDocument = { version: 1, title, nodes: [], edges: [] };
+  const { node, edge } = boardBuilder(doc, { width: 200, depth: 100 });
+  /**
+   * A walkthrough sticky note; lines become numbered steps. Its depth is
+   * estimated from the wrapped text so the note fits what it says, so it is
+   * placed by its top edge.
+   */
+  function steps(
+    id: string,
+    lines: readonly string[],
+    x: number,
+    top: number,
+    width: number,
+  ) {
+    const charsPerLine = Math.floor((width - 60) / (NOTE_FONT * 0.46));
+    const rows = lines.reduce(
+      (total, line) => total + Math.ceil((line.length + 3) / charsPerLine),
+      0,
+    );
+    const depth = Math.round(rows * NOTE_FONT * 1.35 + 60);
+    doc.nodes.push({
+      id,
+      kind: 'note',
+      serviceId: 'note.sticky',
+      label: lines.map((line, i) => `${i + 1}. ${line}`).join('\n'),
+      x,
+      z: top + depth / 2,
+      width,
+      depth,
+      color: '#ffe29a',
+      fontSize: NOTE_FONT,
+    });
+  }
+  function heading(id: string, label: string, x: number, z: number) {
+    doc.nodes.push({
+      id,
+      kind: 'text',
+      serviceId: 'note.text',
+      label,
+      x,
+      z,
+      width: 1000,
+      depth: 70,
+      color: '#ffffff',
+      fontSize: 34,
+    });
+  }
+  return { doc, node, edge, steps, heading };
+}
+
+export function detailDiagramsTour(): DiagramDocument {
+  const main = board('Feature tour · Detail diagrams');
+  main.heading('title', 'Detail diagrams: one project, many boards', 0, -220);
+  main.node('user', 'actor.user', 'Customer', -660, 0);
+  main.node('api', 'aws.api-gateway', 'Orders API', -330, 0);
+  main.node('orders', 'aws.lambda', 'Order service', 0, 0, {
+    detailId: 'order-service',
+  });
+  main.node('table', 'aws.dynamodb', 'Orders table', 330, 0, {
+    detailId: 'orders-table',
+  });
+  main.edge('user', 'api', 'HTTPS');
+  main.edge('api', 'orders', 'POST /orders');
+  main.edge('orders', 'table', 'Write order');
+  main.steps(
+    'guide',
+    [
+      'Order service and Orders table each link to their own detail board. In Layers they show ↳ Open detail ↗.',
+      'Double-click Order service to open the board inside it.',
+      'Use ← Back above the canvas to come back here.',
+      'To add your own, select any tile, open Detail diagram in the properties panel and choose Create detail diagram.',
+    ],
+    0,
+    170,
+    1100,
+  );
+
+  const service = board('Order service · inside the function');
+  service.heading('title', 'Inside Order service', 0, -300);
+  service.node('received', 'flow.terminal', 'Order received', -660, 0);
+  service.node('validate', 'flow.process', 'Validate order', -330, 0);
+  service.node('stock', 'flow.decision', 'In stock?', 0, 0);
+  service.node('pay', 'flow.process', 'Take payment', 330, -140, {
+    detailId: 'payment',
+  });
+  service.node('sorry', 'flow.process', 'Email customer', 330, 140);
+  service.node('done', 'flow.terminal', 'Order confirmed', 660, -140);
+  service.edge('received', 'validate');
+  service.edge('validate', 'stock');
+  service.edge('stock', 'pay', 'Yes');
+  service.edge('stock', 'sorry', 'No');
+  service.edge('pay', 'done');
+  service.steps(
+    'guide',
+    [
+      'This board lives inside Order service. The project name above the canvas shows where you are.',
+      'Detail boards can link onward: double-click Take payment to go one level deeper.',
+      '← Back returns one level at a time.',
+    ],
+    0,
+    300,
+    1100,
+  );
+
+  const payment = board('Take payment · card check');
+  payment.heading('title', 'Inside Take payment', 0, -280);
+  payment.node('authorise', 'flow.process', 'Authorise card', -330, 0);
+  payment.node('approved', 'flow.decision', 'Approved?', 0, 0);
+  payment.node('paid', 'flow.terminal', 'Paid', 330, -140);
+  payment.node('declined', 'flow.terminal', 'Declined', 330, 140);
+  payment.edge('authorise', 'approved');
+  payment.edge('approved', 'paid', 'Yes');
+  payment.edge('approved', 'declined', 'No');
+  payment.steps(
+    'guide',
+    [
+      'Two levels deep. Every board shares one project file, one save and one undo history.',
+      'Press ← Back twice to reach the main board.',
+    ],
+    0,
+    300,
+    1000,
+  );
+
+  const table = board('Orders table · key design');
+  table.heading('title', 'Inside Orders table', 0, -200);
+  table.node('pk', 'flow.process', 'Partition key · customerId', -300, 0, {
+    width: 260,
+  });
+  table.node('sk', 'flow.process', 'Sort key · orderId', 0, 0, {
+    width: 260,
+  });
+  table.node('gsi', 'flow.process', 'Index · by status', 300, 0, {
+    width: 260,
+  });
+  table.steps(
+    'guide',
+    [
+      'A detail board can hold anything: notes, a flowchart, or a closer look at one resource like this table.',
+      'Press ← Back to return.',
+    ],
+    0,
+    160,
+    1000,
+  );
+
+  return {
+    ...main.doc,
+    details: [
+      { id: 'order-service', document: service.doc },
+      { id: 'payment', document: payment.doc },
+      { id: 'orders-table', document: table.doc },
+    ],
+  };
+}
+
+export function networkFlowTour(): DiagramDocument {
+  const { doc, node, edge, steps, heading } = board(
+    'Feature tour · Network flow',
+  );
+  heading(
+    'title',
+    'Network flow: rules decide which paths traffic takes',
+    0,
+    -340,
+  );
+  const allow = (port: number, sourceCidr?: string): NetworkRule => ({
+    action: 'allow',
+    protocol: 'tcp',
+    port,
+    direction: 'ingress',
+    ...(sourceCidr ? { sourceCidr } : {}),
+  });
+  node('internet', 'actor.internet', 'Internet', -720, 0).journeyCaption =
+    'Traffic starts on the public internet. The current Journey traffic settings decide which arrows it may cross.';
+  node('lb', 'aws.elb', 'Load balancer', -140, -170).journeyCaption =
+    'The load balancer only accepts HTTPS on port 443, from anywhere.';
+  node('web', 'aws.ec2', 'Web server', 280, -170).journeyCaption =
+    'Allowed HTTPS reaches the web server.';
+  node('bastion', 'aws.ec2', 'Bastion host', -140, 170).journeyCaption =
+    'Only SSH on port 22 from the office range 198.51.100.0/24 gets here.';
+  edge('internet', 'lb', 'HTTPS · 443', { networkRule: allow(443) });
+  edge('lb', 'web', 'Forward');
+  edge('internet', 'bastion', 'SSH · 22 · office', {
+    networkRule: allow(22, '198.51.100.0/24'),
+  });
+  doc.traffic = { ...defaultTraffic };
+  doc.scenarios = [
+    {
+      id: 'https-anywhere',
+      name: 'HTTPS from anywhere',
+      traffic: { ...defaultTraffic },
+    },
+    {
+      id: 'ssh-office',
+      name: 'SSH from the office',
+      traffic: { ...defaultTraffic, port: 22, sourceIp: '198.51.100.10' },
+    },
+    {
+      id: 'ssh-stranger',
+      name: 'SSH from a stranger',
+      traffic: { ...defaultTraffic, port: 22, sourceIp: '203.0.113.66' },
+    },
+  ];
+  steps(
+    'guide',
+    [
+      'Press P to play the journey. HTTPS on port 443 reaches the web server; the bastion path flashes red and stops, because its rule only allows port 22.',
+      'Open Traffic in the bottom bar, pick SSH from the office, choose Use scenario, then press P. Now only the bastion path is allowed.',
+      'Try SSH from a stranger: same port, but the source address is outside 198.51.100.0/24, so both paths stop.',
+      'Click an arrow and open Journey traffic rule to see or change its rule. Arrows without a rule let everything through.',
+    ],
+    -220,
+    320,
+    1150,
+  );
+  return doc;
+}
+
+export function journeyForksTour(): DiagramDocument {
+  const { doc, node, edge, steps, heading } = board(
+    'Feature tour · Journeys and forks',
+  );
+  heading('title', 'Journeys: three ways to handle a fork', 0, -330);
+  node('start', 'flow.terminal', 'Visitor arrives', -900, 0).journeyCaption =
+    'A visitor opens the site. Press P to follow them.';
+  node('signin', 'flow.process', 'Sign in', -600, 0).journeyCaption =
+    'They enter their password.';
+  node('check', 'flow.decision', 'Password OK?', -300, 0).journeyCaption =
+    'A decision asks which way to go: click a branch or press its number.';
+  node('retry', 'flow.process', 'Try again', -300, 260).journeyCaption =
+    'A wrong password loops back to Sign in.';
+  node('dashboard', 'flow.process', 'Dashboard', 0, 0, {
+    journey: { mode: 'all' },
+  }).journeyCaption = 'Dashboard takes every branch at once.';
+  node('widgets', 'flow.process', 'Load widgets', 330, -170).journeyCaption =
+    'One traveller loads the widgets…';
+  node('visit', 'flow.process', 'Record visit', 330, 170).journeyCaption =
+    '…while another records the visit.';
+  node('stream', 'flow.terminal', 'Live analytics', 760, 60).journeyCaption =
+    'Record visit always streams: Stream is its active route.';
+  node('batch', 'flow.terminal', 'Nightly report', 760, 280).journeyCaption =
+    'The nightly batch route is now active.';
+  edge('start', 'signin');
+  edge('signin', 'check');
+  edge('check', 'dashboard', 'Yes');
+  edge('check', 'retry', 'No');
+  edge('retry', 'signin', 'Retry');
+  edge('dashboard', 'widgets', 'Show');
+  edge('dashboard', 'visit', 'Log');
+  const stream = edge('visit', 'stream', 'Stream');
+  edge('visit', 'batch', 'Nightly batch');
+  const visit = doc.nodes.find((n) => n.id === 'visit');
+  if (visit) visit.journey = { mode: 'fixed', edge: stream.id };
+  steps(
+    'guide',
+    [
+      'Press P. The journey pauses at Password OK? and asks which way. Choose No to loop through Try again, then Yes.',
+      'At Dashboard it takes every branch at once.',
+      'Record visit always takes Stream, its active route; Nightly batch is dimmed. Right-click Nightly batch and choose Make active route to switch.',
+      'Select any tile with several arrows and change Journey at this fork in the properties panel.',
+    ],
+    -70,
+    420,
+    1500,
+  );
+  return doc;
+}
+
+export function buildingBlocksTour(): DiagramDocument {
+  const { doc, node, edge, steps, heading } = board(
+    'Feature tour · Building blocks',
+  );
+  heading('title', 'Building blocks: boundaries, lanes and notes', 0, -400);
+  node('vpc', 'boundary.vpc', 'VPC · 10.0.0.0/16', -260, 0, {
+    width: 980,
+    depth: 560,
+  });
+  node('subnet', 'boundary.subnet', 'Private subnet', 0, 30, {
+    width: 880,
+    depth: 420,
+    parentId: 'vpc',
+  });
+  node('app', 'aws.ecs', 'App', -220, 0, { parentId: 'subnet' });
+  node('queue', 'aws.sqs', 'Job queue', 220, 0, { parentId: 'subnet' });
+  node('bucket', 'aws.s3', 'Config bucket', 520, -120);
+  node('user', 'actor.user', 'User', -1000, 0);
+  edge('user', 'app', 'Uses');
+  edge('app', 'queue');
+  edge('queue', 'app');
+  edge('app', 'bucket', 'Reads config', { relationship: 'dependency' });
+  steps(
+    'guide',
+    [
+      'Boundaries nest: the subnet sits inside the VPC. Drag the VPC and everything inside moves with it.',
+      'App and Job queue are connected both ways (jobs out, results back), so each direction gets its own lane.',
+      'Reads config is a dependency: it describes a relationship, not traffic. It stays still when Flow is on, and journeys skip it.',
+      'Hold WASD or the arrow keys to move the view, scroll to zoom, and press F to fit.',
+      'Press T for text or N for a sticky note like this one. Double-click any tile to rename it.',
+    ],
+    -240,
+    340,
+    1400,
+  );
+  return doc;
+}
+
+export function swimlanesTour(): DiagramDocument {
+  const { doc, node, edge, steps, heading } = board('Feature tour · Swimlanes');
+  const step = (
+    id: string,
+    shape: 'process' | 'decision' | 'terminal',
+    label: string,
+    owner: string,
+    caption: string,
+  ) => {
+    const added = node(id, `flow.${shape}`, label, 0, 0, {
+      owner,
+      ...(shape === 'decision' ? { journey: { mode: 'ask' as const } } : {}),
+    });
+    added.journeyCaption = caption;
+    return added;
+  };
+  step(
+    'cart',
+    'terminal',
+    'Opens basket',
+    'Customer',
+    'A customer is ready to buy. Follow them through checkout.',
+  );
+  step(
+    'review',
+    'process',
+    'Reviews items',
+    'Customer',
+    'They check what is in the basket.',
+  );
+  step(
+    'signed',
+    'decision',
+    'Signed in?',
+    'Storefront',
+    'The storefront checks for an account: choose a branch.',
+  );
+  step(
+    'guest',
+    'process',
+    'Checks out as guest',
+    'Customer',
+    'No account, so they continue as a guest.',
+  );
+  step(
+    'address',
+    'process',
+    'Enters address',
+    'Customer',
+    'Delivery details go in.',
+  );
+  step(
+    'charge',
+    'process',
+    'Charges card',
+    'Payment service',
+    'The card is charged: work has passed to the payment service.',
+  );
+  step(
+    'approved',
+    'decision',
+    'Card approved?',
+    'Payment service',
+    'Did the bank approve it? Choose a branch.',
+  );
+  step(
+    'retry',
+    'process',
+    'Asks for another card',
+    'Storefront',
+    'Declined: the storefront asks for another card.',
+  );
+  step(
+    'order',
+    'process',
+    'Creates order',
+    'Storefront',
+    'Approved: the storefront records the order.',
+  );
+  step(
+    'pick',
+    'process',
+    'Picks and packs',
+    'Warehouse',
+    'The warehouse picks and packs the parcel.',
+  );
+  step(
+    'ship',
+    'process',
+    'Ships parcel',
+    'Warehouse',
+    'It leaves with the courier.',
+  );
+  step(
+    'arrives',
+    'terminal',
+    'Parcel arrives',
+    'Customer',
+    'Back with the customer: count the handoffs in the status bar.',
+  );
+  edge('cart', 'review');
+  edge('review', 'signed');
+  edge('signed', 'guest', 'No');
+  edge('signed', 'address', 'Yes');
+  edge('guest', 'address');
+  edge('address', 'charge');
+  edge('charge', 'approved');
+  edge('approved', 'retry', 'Declined');
+  edge('retry', 'charge', 'New card');
+  edge('approved', 'order', 'Approved');
+  edge('order', 'pick');
+  edge('pick', 'ship');
+  edge('ship', 'arrives');
+  // Lay the steps out in lanes, as pressing L would.
+  const { positions, order } = laneLayout(doc, 'right');
+  for (const n of doc.nodes) Object.assign(n, positions.get(n.id) ?? {});
+  doc.lanes = { direction: 'right', order };
+  const bands = laneBands(doc);
+  const top = bands?.bands[0]?.start ?? 0;
+  const bottom = bands?.bands.at(-1)?.end ?? 0;
+  const middle = bands ? (bands.from + bands.to) / 2 : 0;
+  heading('title', 'Swimlanes: who does each step', middle, top - 110);
+  steps(
+    'guide',
+    [
+      'Press P to follow a customer. Pick a branch at each decision; the status bar calls out every handoff between teams and the total at the end.',
+      'Select a step and change its Owner in the properties panel: it moves to that lane.',
+      'Drag a step into another lane to hand it to that team.',
+      'Press L to hide the lanes and L again to bring them back. Ctrl K → Lanes: switch rows and columns.',
+    ],
+    middle,
+    bottom + 80,
+    1700,
+  );
+  return doc;
+}

@@ -13,7 +13,7 @@ root = Path(__file__).resolve().parent.parent
 out = Path(sys.argv[1] if len(sys.argv) > 1 else root / 'artifacts/licenses')
 out.mkdir(parents=True, exist_ok=True)
 cargo_home = Path(os.environ.get('CARGO_HOME', Path.home() / '.cargo'))
-tree = subprocess.check_output(['cargo', 'tree', '--manifest-path', str(root / 'src-tauri/Cargo.toml'), '--locked', '--target', 'x86_64-unknown-linux-gnu', '--edges', 'normal', '--prefix', 'none', '--format', '{p}'], text=True)
+tree = subprocess.check_output(['cargo', 'tree', '--manifest-path', str(root / 'desktop/Cargo.toml'), '--locked', '--target', 'x86_64-unknown-linux-gnu', '--edges', 'normal', '--prefix', 'none', '--format', '{p}'], text=True)
 packages = sorted(set(re.findall(r'^([\w-]+) v([^\s]+)', tree, re.M)))
 missing = []
 for name, version in packages:
@@ -42,11 +42,11 @@ for name, version in packages:
         missing.append(f'{name} {version}: {metadata.get("license", "unknown license")} (no packaged license text)')
 three = out / 'three-0.183.2'
 three.mkdir(exist_ok=True)
-shutil.copyfile(root / 'node_modules/three/LICENSE', three / 'LICENSE')
-yaml_metadata = json.loads((root / 'node_modules/yaml/package.json').read_text())
+shutil.copyfile(root / 'web/node_modules/three/LICENSE', three / 'LICENSE')
+yaml_metadata = json.loads((root / 'web/node_modules/yaml/package.json').read_text())
 yaml_notice = out / f"yaml-{yaml_metadata['version']}"
 yaml_notice.mkdir(exist_ok=True)
-shutil.copyfile(root / 'node_modules/yaml/LICENSE', yaml_notice / 'LICENSE')
+shutil.copyfile(root / 'web/node_modules/yaml/LICENSE', yaml_notice / 'LICENSE')
 for filename in ['LICENSE', 'THIRD_PARTY_NOTICES.md']:
     shutil.copyfile(root / filename, out / filename)
 shutil.copytree(root / 'assets/aws', out / 'aws-architecture-icons', dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.svg'))

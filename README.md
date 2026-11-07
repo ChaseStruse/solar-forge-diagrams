@@ -36,13 +36,16 @@ Try the files in [examples/mermaid](examples/mermaid) and [examples/infrastructu
 - [Documents and recovery](docs/DOCUMENTS.md): file format and recovery behavior
 - [Building and packaging](docs/BUILDING.md) and [releasing](docs/RELEASING.md)
 - [Project status](docs/STATUS.md), [changelog](CHANGELOG.md) and [development log](docs/DEVELOPMENT_LOG.md)
-- [Implementation plan](IMPLEMENTATION_PLAN.md) and [design decisions](docs/decisions)
+- [Implementation plan](docs/IMPLEMENTATION_PLAN.md) and [design decisions](docs/decisions)
 
 ## Development
 
 Install Bun 1.3.11 and a stable Rust toolchain, plus the Tauri Linux prerequisites (WebKitGTK 4.1 and GTK 3 development libraries).
 
+The app UI lives in `web/` and the native Rust shell in `desktop/`. Run the Bun commands from `web/`:
+
 ```sh
+cd web
 bun install --frozen-lockfile
 bun run verify      # lint, type check, tests, build, size budget
 bun run desktop     # native development window
@@ -53,9 +56,9 @@ bun run desktop     # native development window
 ### Native smoke check
 
 ```sh
-bun run build
-cargo build --manifest-path src-tauri/Cargo.toml --locked
-src-tauri/target/debug/solar-forge-diagrams --smoke-test
+(cd web && bun run build)
+cargo build --manifest-path desktop/Cargo.toml --locked
+desktop/target/debug/solar-forge-diagrams --smoke-test
 ```
 
 The smoke check runs in debug builds, or in release builds compiled with `--features diagnostics`. It opens a real window, captures both camera views, checks idle rendering, loads the benchmark boards and round-trips a document through the native writer. Results go to `/tmp/solar-forge-native-smoke/`. It does not measure physical input latency, native dialogs, release startup or GPU time.
