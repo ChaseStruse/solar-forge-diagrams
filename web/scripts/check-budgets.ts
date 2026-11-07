@@ -12,7 +12,7 @@ console.log(
 if (compressed > 350 * 1024)
   throw new Error('Initial JavaScript exceeds the performance budget');
 if (process.argv.includes('--native')) {
-  const binary = Bun.file('src-tauri/target/release/solar-forge-diagrams');
+  const binary = Bun.file('../desktop/target/release/solar-forge-diagrams');
   if (!(await binary.exists()))
     throw new Error('Build the release native binary first');
   console.log(

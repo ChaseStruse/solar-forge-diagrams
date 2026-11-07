@@ -3,9 +3,9 @@
 .codex
 .aws
 .tools
-node_modules
-dist
-src-tauri/target
-src-tauri/gen
+web/node_modules
+web/dist
+desktop/target
+desktop/gen
 artifacts
 *.log

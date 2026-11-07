@@ -137,7 +137,10 @@ resource "aws_instance" "next" { private_ip = "10.0.0.12" }`);
 test('merged tags on every resource keep reachability decidable', async () => {
   const { readFileSync } = await import('node:fs');
   const { checkReachability } = await import('../src/domain/reachability');
-  const tagged = readFileSync('examples/infrastructure/vpc.tf', 'utf8').replace(
+  const tagged = readFileSync(
+    '../examples/infrastructure/vpc.tf',
+    'utf8',
+  ).replace(
     /^(resource "[^"]+" "[^"]+" \{)/gm,
     '$1\n  tags = merge(local.common, { Team = "web" })',
   );

@@ -8,7 +8,7 @@ import { importInfrastructure } from '../src/import/infrastructure';
 const example = (name: string) => ({
   name,
   content: readFileSync(
-    new URL(`../examples/infrastructure/${name}`, import.meta.url),
+    new URL(`../../examples/infrastructure/${name}`, import.meta.url),
     'utf8',
   ),
 });

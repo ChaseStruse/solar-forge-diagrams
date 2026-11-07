@@ -1,4 +1,4 @@
-import type { DiagramDocument } from '../src/domain/document';
+import type { DiagramDocument } from '../domain/document';
 
 /** Deterministic nested boards; counts include three nested group boundaries. */
 export function benchmarkDocument(

@@ -21,7 +21,7 @@ const fixture = () =>
     {
       name: 'vpc.tf',
       content: readFileSync(
-        new URL('../examples/infrastructure/vpc.tf', import.meta.url),
+        new URL('../../examples/infrastructure/vpc.tf', import.meta.url),
         'utf8',
       ),
     },

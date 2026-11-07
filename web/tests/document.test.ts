@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { benchmarkDocument } from '../benchmarks/fixtures';
 import {
   parseDocument,
   sampleDocument,
   serializeDocument,
   worldPosition,
 } from '../src/domain/document';
+import { benchmarkDocument } from '../src/renderer/benchmark-fixtures';
 
 describe('portable documents', () => {
   test('round trips the sample and nested positions', () => {

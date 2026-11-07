@@ -310,7 +310,7 @@ test('the modules example imports as a folder and its storefront is reachable', 
   const { readdirSync, readFileSync, statSync } = await import('node:fs');
   const { join, relative } = await import('node:path');
   const { checkReachability } = await import('../src/domain/reachability');
-  const root = 'examples/infrastructure/modules-project';
+  const root = '../examples/infrastructure/modules-project';
   const walk = (dir: string): string[] =>
     readdirSync(dir).flatMap((name) => {
       const path = join(dir, name);

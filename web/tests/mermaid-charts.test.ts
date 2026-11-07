@@ -312,7 +312,7 @@ test('architecture diagrams: groups, icons, junctions and sides', () => {
 
 test('the architecture example stacks tiles the way its links say', async () => {
   const source = await Bun.file(
-    new URL('../examples/mermaid/web-architecture.mmd', import.meta.url),
+    new URL('../../examples/mermaid/web-architecture.mmd', import.meta.url),
   ).text();
   const { document: doc, warnings } = importMermaid(source);
   expect(warnings).toEqual([]);

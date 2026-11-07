@@ -639,7 +639,7 @@ await Bun.sleep(300);
 // Mermaid import through the real dialog and its worker.
 {
   const chart = await Bun.file(
-    new URL('../examples/mermaid/checkout.mmd', import.meta.url),
+    new URL('../../examples/mermaid/checkout.mmd', import.meta.url),
   ).text();
   await evaluate(`document.querySelector('#import-infrastructure').click()`);
   await evaluate(`(() => {
@@ -691,7 +691,7 @@ await Bun.sleep(300);
 {
   const importChart = async (file: string, lanes: boolean) => {
     const chart = await Bun.file(
-      new URL(`../examples/mermaid/${file}`, import.meta.url),
+      new URL(`../../examples/mermaid/${file}`, import.meta.url),
     ).text();
     await evaluate(`document.querySelector('#import-infrastructure').click()`);
     await evaluate(`(() => {

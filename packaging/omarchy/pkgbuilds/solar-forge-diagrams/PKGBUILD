@@ -19,21 +19,20 @@ sha256sums=('SKIP') # Run updpkgsums after generating the reviewed local archive
 
 build() {
   cd "$srcdir/$pkgname-$pkgver"
-  bun install --frozen-lockfile
-  bun run verify
-  cargo test --manifest-path src-tauri/Cargo.toml --locked
-  cargo build --manifest-path src-tauri/Cargo.toml --release --locked
+  (cd web && bun install --frozen-lockfile && bun run verify)
+  cargo test --manifest-path desktop/Cargo.toml --locked
+  cargo build --manifest-path desktop/Cargo.toml --release --locked
   python scripts/collect-licenses.py
 }
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
-  install -Dm755 "${CARGO_TARGET_DIR:-src-tauri/target}/release/solar-forge-diagrams" "$pkgdir/usr/bin/solar-forge-diagrams"
+  install -Dm755 "${CARGO_TARGET_DIR:-desktop/target}/release/solar-forge-diagrams" "$pkgdir/usr/bin/solar-forge-diagrams"
   install -Dm644 packaging/linux/com.solarforge.diagrams.desktop "$pkgdir/usr/share/applications/com.solarforge.diagrams.desktop"
-  install -Dm644 assets/solar-forge.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/com.solarforge.diagrams.svg"
+  install -Dm644 web/assets/solar-forge.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/com.solarforge.diagrams.svg"
   install -Dm644 packaging/linux/70-solar-forge-huion.rules "$pkgdir/usr/lib/udev/rules.d/70-solar-forge-huion.rules"
   install -Dm644 packaging/linux/com.solarforge.diagrams.xml "$pkgdir/usr/share/mime/packages/com.solarforge.diagrams.xml"
-  install -Dm644 assets/aws/NOTICE.md "$pkgdir/usr/share/licenses/$pkgname/AWS-NOTICE.md"
+  install -Dm644 web/assets/aws/NOTICE.md "$pkgdir/usr/share/licenses/$pkgname/AWS-NOTICE.md"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
   cp -r artifacts/licenses "$pkgdir/usr/share/licenses/$pkgname/dependencies"

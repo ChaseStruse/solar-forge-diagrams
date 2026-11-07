@@ -1,5 +1,4 @@
 import { invoke } from '@tauri-apps/api/core';
-import { benchmarkDocument } from '../../benchmarks/fixtures';
 import {
   sampleDocument,
   serializeDocument,
@@ -12,6 +11,7 @@ import {
   pasteFragment,
   ungroupNodes,
 } from '../editor/operations';
+import { benchmarkDocument } from './benchmark-fixtures';
 import type { DiagramScene } from './scene';
 
 const frame = (): Promise<void> =>

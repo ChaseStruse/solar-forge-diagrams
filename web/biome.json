@@ -4,7 +4,6 @@
     "includes": [
       "src/**",
       "tests/**",
-      "benchmarks/**",
       "*.json",
       "index.html",
       "scripts/**",

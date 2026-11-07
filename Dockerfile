@@ -10,17 +10,17 @@ RUN printf 'deb [check-valid-until=no] https://snapshot.debian.org/archive/debia
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /source
 FROM tools AS dependencies
-COPY package.json bun.lock ./
-RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
+COPY web/package.json web/bun.lock web/
+RUN --mount=type=cache,target=/root/.bun/install/cache cd web && bun install --frozen-lockfile
 COPY . .
 FROM dependencies AS checks
-RUN bun run verify
-RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/source/src-tauri/target cargo test --manifest-path src-tauri/Cargo.toml --locked
+RUN cd web && bun run verify
+RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/source/desktop/target cargo test --manifest-path desktop/Cargo.toml --locked
 FROM checks AS frontend
-RUN mkdir /artifacts && cp -r dist /artifacts/frontend
+RUN mkdir /artifacts && cp -r web/dist /artifacts/frontend
 FROM checks AS native
-RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/source/src-tauri/target cargo build --manifest-path src-tauri/Cargo.toml --release --locked \
- && mkdir /artifacts && cp src-tauri/target/release/solar-forge-diagrams /artifacts/
+RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/source/desktop/target cargo build --manifest-path desktop/Cargo.toml --release --locked \
+ && mkdir /artifacts && cp desktop/target/release/solar-forge-diagrams /artifacts/
 FROM scratch AS frontend-artifacts
 COPY --from=frontend /artifacts/ /
 FROM scratch AS native-artifacts

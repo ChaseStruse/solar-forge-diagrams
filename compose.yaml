@@ -3,6 +3,7 @@ services:
     build:
       context: .
       target: checks
+    working_dir: /source/web
     command: ["bun", "run", "verify"]
   frontend:
     build:

@@ -1,6 +1,6 @@
 # Solar Forge Diagrams — agent implementation plan
 
-Status: alpha complete for M1–M5; M6 deferred. See [project status](docs/STATUS.md) for current results and next steps, and the [development log](docs/DEVELOPMENT_LOG.md) for the task-to-commit history.
+Status: alpha complete for M1–M5; M6 deferred. See [project status](STATUS.md) for current results and next steps, and the [development log](DEVELOPMENT_LOG.md) for the task-to-commit history.
 
 ## 1. Product objective and priorities
 
@@ -62,20 +62,24 @@ Three.js is the only scene renderer. Do not maintain parallel PixiJS and Three.j
 Start with a single application repository and clear modules, not a large package workspace:
 
 ```text
-src/
-  domain/          document types, validation, commands, history, migrations
-  editor/          selection, tools, snapping, ports, interaction state machine
-  renderer/        Three.js scene, cameras, picking, labels, resource ownership
-  ui/              DOM components, dialogs, panels, shortcuts, theme
-  catalog/         AWS service definitions and asset lookup
-  persistence/     desktop adapter, autosave scheduling, recovery coordination
-  export/          PNG rendering and document-driven SVG export
-  platform/        typed boundary around native APIs
-src-tauri/         narrow Rust commands, native configuration, packaging
-assets/            curated local icons and fonts
-tests/             fixtures and cross-module workflow tests
-benchmarks/        deterministic boards, interaction scripts, reports
-docs/              architecture decisions and operating instructions
+web/                 the app UI: TypeScript, Three.js, Bun/Vite configs
+  src/
+    domain/          document types, validation, commands, history, migrations
+    editor/          selection, tools, snapping, ports, interaction state machine
+    renderer/        Three.js scene, cameras, picking, labels, resource ownership
+    ui/              DOM components, dialogs, panels, shortcuts, theme
+    catalog/         AWS service definitions and asset lookup
+    persistence/     desktop adapter, autosave scheduling, recovery coordination
+    export/          PNG rendering and document-driven SVG export
+    platform/        typed boundary around native APIs
+  assets/            curated local icons and fonts
+  tests/             fixtures and cross-module workflow tests
+  scripts/           size budgets and the browser smoke test
+desktop/             narrow Rust commands, native configuration (Tauri)
+benchmarks/          native measurement reports
+packaging/           Linux desktop files, Omarchy recipe, license texts
+scripts/             release and packaging scripts
+docs/                architecture decisions and operating instructions
 ```
 
 - The domain model must not import Three.js, DOM, or Tauri APIs.
@@ -202,7 +206,7 @@ Work sequentially through decision gates. Each milestone must leave a runnable a
 | M2–M5 | No completion commits yet | Planned; initial palette/inspector/export prototypes do not establish milestone completion. |
 | M6 | None | Optional and deferred until M5. |
 
-Read [docs/STATUS.md](docs/STATUS.md) and [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md) for exact validation, measured limits, local tooling, and next steps. Each subsequent implementation change must add a dated entry to the development log and keep the status page current.
+Read [docs/STATUS.md](STATUS.md) and [docs/DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) for exact validation, measured limits, local tooling, and next steps. Each subsequent implementation change must add a dated entry to the development log and keep the status page current.
 
 ### M0 — Native feasibility and measurements
 

@@ -6,7 +6,7 @@ if [[ -n $(git status --porcelain) ]]; then
   echo 'Warning: uncommitted changes are not included; the release is built from HEAD.' >&2
 fi
 scripts/source-archive.sh
-version=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' package.json)
+version=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' web/package.json)
 input=$(mktemp -d "$PWD/artifacts/.release-input.XXXXXX")
 trap 'rm -rf -- "$input"' EXIT
 cp -- "artifacts/solar-forge-diagrams-$version.tar.gz" "$input/"
