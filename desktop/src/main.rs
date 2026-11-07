@@ -430,22 +430,33 @@ fn queue_arguments(app: &tauri::AppHandle, args: Vec<String>, cwd: &Path) {
     let _ = app.emit("pending-file", ());
 }
 
-#[tauri::command]
-async fn export_png(
+const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+
+/// The raw bytes of a binary IPC call; binary transfer avoids JSON number arrays.
+fn binary_body<'a>(request: &'a tauri::ipc::Request<'_>, what: &str) -> Result<&'a [u8], String> {
+    match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => Ok(bytes),
+        _ => Err(format!("{what} export requires a binary payload")),
+    }
+}
+
+/// Ask where to save with the native dialog, then write atomically.
+/// Resolves to `false` when the user cancels the dialog.
+async fn save_with_dialog(
     app: tauri::AppHandle,
     window: tauri::Window,
+    filter: &'static str,
+    extension: &'static str,
+    file_name: String,
     bytes: Vec<u8>,
 ) -> Result<bool, String> {
-    if bytes.len() > 50_000_000 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return Err("Invalid PNG export".into());
-    }
     tauri::async_runtime::spawn_blocking(move || {
         let Some(file) = app
             .dialog()
             .file()
             .set_parent(&window)
-            .add_filter("PNG image", &["png"])
-            .set_file_name("diagram.png")
+            .add_filter(filter, &[extension])
+            .set_file_name(file_name)
             .blocking_save_file()
         else {
             return Ok(false);
@@ -455,6 +466,20 @@ async fn export_png(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn export_png(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    request: tauri::ipc::Request<'_>,
+) -> Result<bool, String> {
+    let bytes = binary_body(&request, "PNG")?;
+    if bytes.len() > 50_000_000 || !bytes.starts_with(PNG_SIGNATURE) {
+        return Err("Invalid PNG export".into());
+    }
+    let bytes = bytes.to_vec();
+    save_with_dialog(app, window, "PNG image", "png", "diagram.png".into(), bytes).await
 }
 
 #[tauri::command]
@@ -463,41 +488,29 @@ async fn export_gif(
     window: tauri::Window,
     request: tauri::ipc::Request<'_>,
 ) -> Result<bool, String> {
-    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
-        return Err("GIF export requires a binary payload".into());
-    };
+    let bytes = binary_body(&request, "GIF")?;
     if bytes.len() > 50_000_000 || !bytes.starts_with(b"GIF89a") {
         return Err("Invalid GIF export".into());
     }
-    let bytes = bytes.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let Some(file) = app
-            .dialog()
-            .file()
-            .set_parent(&window)
-            .add_filter("GIF animation", &["gif"])
-            .set_file_name("journey.gif")
-            .blocking_save_file()
-        else {
-            return Ok(false);
-        };
-        atomic_write(&file.into_path().map_err(|e| e.to_string())?, &bytes)?;
-        Ok(true)
-    })
+    let bytes = bytes.to_vec();
+    save_with_dialog(
+        app,
+        window,
+        "GIF animation",
+        "gif",
+        "journey.gif".into(),
+        bytes,
+    )
     .await
-    .map_err(|e| e.to_string())?
 }
 
-/// Binary transfer avoids JSON expansion for recordings.
 #[tauri::command]
 async fn export_video(
     app: tauri::AppHandle,
     window: tauri::Window,
     request: tauri::ipc::Request<'_>,
 ) -> Result<bool, String> {
-    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
-        return Err("Video export requires a binary payload".into());
-    };
+    let bytes = binary_body(&request, "Video")?;
     let format = if bytes.starts_with(b"\x1a\x45\xdf\xa3") {
         "webm"
     } else if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
@@ -508,23 +521,9 @@ async fn export_video(
     if bytes.len() > 100_000_000 {
         return Err("Video exceeds 100 MB".into());
     }
-    let bytes = bytes.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let Some(file) = app
-            .dialog()
-            .file()
-            .set_parent(&window)
-            .add_filter("Journey video", &[format])
-            .set_file_name(format!("journey.{format}"))
-            .blocking_save_file()
-        else {
-            return Ok(false);
-        };
-        atomic_write(&file.into_path().map_err(|e| e.to_string())?, &bytes)?;
-        Ok(true)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    let bytes = bytes.to_vec();
+    let name = format!("journey.{format}");
+    save_with_dialog(app, window, "Journey video", format, name, bytes).await
 }
 
 #[tauri::command]
@@ -534,36 +533,35 @@ async fn export_text(
     content: String,
     format: String,
 ) -> Result<bool, String> {
-    if !["mmd", "puml", "drawio"].contains(&format.as_str()) || content.len() > 50_000_000 {
+    let Some(extension) = ["mmd", "puml", "drawio"]
+        .into_iter()
+        .find(|known| *known == format)
+    else {
+        return Err("Invalid interchange export".into());
+    };
+    if content.len() > 50_000_000 {
         return Err("Invalid interchange export".into());
     }
-    tauri::async_runtime::spawn_blocking(move || {
-        let Some(file) = app
-            .dialog()
-            .file()
-            .set_parent(&window)
-            .add_filter("Diagram source", &[format.as_str()])
-            .set_file_name(format!("diagram.{format}"))
-            .blocking_save_file()
-        else {
-            return Ok(false);
-        };
-        atomic_write(
-            &file.into_path().map_err(|e| e.to_string())?,
-            content.as_bytes(),
-        )?;
-        Ok(true)
-    })
+    let name = format!("diagram.{extension}");
+    save_with_dialog(
+        app,
+        window,
+        "Diagram source",
+        extension,
+        name,
+        content.into_bytes(),
+    )
     .await
-    .map_err(|e| e.to_string())?
 }
 
 /// Put a PNG on the desktop clipboard with the session's clipboard tool.
 #[tauri::command]
-async fn copy_png(bytes: Vec<u8>) -> Result<(), String> {
-    if bytes.len() > 50_000_000 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+async fn copy_png(request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let bytes = binary_body(&request, "PNG image")?;
+    if bytes.len() > 50_000_000 || !bytes.starts_with(PNG_SIGNATURE) {
         return Err("Invalid PNG image".into());
     }
+    let bytes = bytes.to_vec();
     tauri::async_runtime::spawn_blocking(move || {
         let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
         let (tool, args): (&str, &[&str]) = if wayland {
@@ -603,25 +601,15 @@ async fn export_svg(
     if content.len() > 50_000_000 || !content.starts_with("<svg ") {
         return Err("Invalid SVG export".into());
     }
-    tauri::async_runtime::spawn_blocking(move || {
-        let Some(file) = app
-            .dialog()
-            .file()
-            .set_parent(&window)
-            .add_filter("SVG image", &["svg"])
-            .set_file_name("diagram.svg")
-            .blocking_save_file()
-        else {
-            return Ok(false);
-        };
-        atomic_write(
-            &file.into_path().map_err(|e| e.to_string())?,
-            content.as_bytes(),
-        )?;
-        Ok(true)
-    })
+    save_with_dialog(
+        app,
+        window,
+        "SVG image",
+        "svg",
+        "diagram.svg".into(),
+        content.into_bytes(),
+    )
     .await
-    .map_err(|e| e.to_string())?
 }
 
 /// Monitor to return to when tablet mode ends.

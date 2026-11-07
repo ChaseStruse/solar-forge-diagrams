@@ -33,10 +33,7 @@ export async function saveDocumentFile(
   return { name };
 }
 export async function exportPng(blob: Blob): Promise<boolean> {
-  if (isTauri())
-    return invoke<boolean>('export_png', {
-      bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
-    });
+  if (isTauri()) return invoke<boolean>('export_png', await blob.arrayBuffer());
   return downloadBlob(blob, 'diagram.png');
 }
 export async function saveSvg(content: string): Promise<boolean> {
@@ -67,9 +64,7 @@ export async function writeRecovery(content: string | null): Promise<void> {
 /** Copy a PNG to the clipboard: natively via the desktop tool, else the web API. */
 export async function copyPng(blob: Blob): Promise<void> {
   if (isTauri()) {
-    await invoke('copy_png', {
-      bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
-    });
+    await invoke('copy_png', await blob.arrayBuffer());
     return;
   }
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);

@@ -1,17 +1,28 @@
 import { expect, test } from 'bun:test';
-import { exportGif } from '../src/platform/files';
+import {
+  copyPng,
+  exportGif,
+  exportPng,
+  exportVideo,
+} from '../src/platform/files';
 
-test('native GIF transfer passes a binary buffer instead of a JSON number array', async () => {
+/** Run `task` as if inside the desktop app, recording the native call it makes. */
+async function nativeCall(
+  task: () => Promise<unknown>,
+): Promise<{ command: unknown; payload: unknown }> {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const originalTauri = Object.getOwnPropertyDescriptor(globalThis, 'isTauri');
-  let payload: unknown, command: unknown;
+  const call: { command: unknown; payload: unknown } = {
+    command: undefined,
+    payload: undefined,
+  };
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
     value: {
       __TAURI_INTERNALS__: {
         invoke: async (cmd: unknown, args: unknown) => {
-          command = cmd;
-          payload = args;
+          call.command = cmd;
+          call.payload = args;
           return true;
         },
       },
@@ -22,13 +33,8 @@ test('native GIF transfer passes a binary buffer instead of a JSON number array'
     value: true,
   });
   try {
-    const bytes = new Uint8Array(1024 * 1024).fill(42);
-    expect(await exportGif(new Blob([bytes], { type: 'image/gif' }))).toBe(
-      true,
-    );
-    expect(command).toBe('export_gif');
-    expect(payload).toBeInstanceOf(ArrayBuffer);
-    expect(new Uint8Array(payload as ArrayBuffer)).toEqual(bytes);
+    await task();
+    return call;
   } finally {
     for (const [key, descriptor] of [
       ['window', originalWindow],
@@ -38,52 +44,34 @@ test('native GIF transfer passes a binary buffer instead of a JSON number array'
       else Reflect.deleteProperty(globalThis, key);
     }
   }
-});
+}
 
-test('native video export also uses a raw binary payload', async () => {
-  const { exportVideo } = await import('../src/platform/files');
-  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
-  const originalTauri = Object.getOwnPropertyDescriptor(globalThis, 'isTauri');
-  let payload: unknown, command: unknown;
-  Object.defineProperty(globalThis, 'window', {
-    configurable: true,
-    value: {
-      __TAURI_INTERNALS__: {
-        invoke: async (cmd: unknown, args: unknown) => {
-          command = cmd;
-          payload = args;
-          return true;
-        },
-      },
-    },
+const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const binaryExports: [
+  string,
+  Uint8Array<ArrayBuffer>,
+  (blob: Blob) => Promise<unknown>,
+][] = [
+  ['export_gif', new Uint8Array(1024 * 1024).fill(42), exportGif],
+  [
+    'export_video',
+    new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]),
+    (blob) => exportVideo(blob, 'webm'),
+  ],
+  ['export_png', png, exportPng],
+  ['copy_png', png, copyPng],
+];
+
+for (const [command, bytes, send] of binaryExports)
+  test(`native ${command} passes a binary buffer instead of a JSON number array`, async () => {
+    const call = await nativeCall(() => send(new Blob([bytes])));
+    expect(call.command).toBe(command);
+    expect(call.payload).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(call.payload as ArrayBuffer)).toEqual(bytes);
   });
-  Object.defineProperty(globalThis, 'isTauri', {
-    configurable: true,
-    value: true,
-  });
-  try {
-    const bytes = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]);
-    expect(
-      await exportVideo(new Blob([bytes], { type: 'video/webm' }), 'webm'),
-    ).toBe(true);
-    expect(command).toBe('export_video');
-    expect(payload).toBeInstanceOf(ArrayBuffer);
-    expect(new Uint8Array(payload as ArrayBuffer)).toEqual(bytes);
-  } finally {
-    for (const [key, descriptor] of [
-      ['window', originalWindow],
-      ['isTauri', originalTauri],
-    ] as const) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
-  }
-});
 
 test('browser saves and exports download files instead of failing', async () => {
-  const { exportPng, saveDocumentFile, saveSvg } = await import(
-    '../src/platform/files'
-  );
+  const { saveDocumentFile, saveSvg } = await import('../src/platform/files');
   const originalDocument = Object.getOwnPropertyDescriptor(
     globalThis,
     'document',
