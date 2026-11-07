@@ -13,7 +13,7 @@ import { type LayoutDirection, layoutDocument } from '../domain/layout';
 import type { ImportResult } from './types';
 
 export const MAX_NODES = 2000;
-export const MAX_EDGES = 4000;
+const MAX_EDGES = 4000;
 
 /** Add a connection numbered in chart order, refusing charts past the limit. */
 export function addEdge(

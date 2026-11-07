@@ -34,7 +34,7 @@ export type TabletBindings = Partial<Record<TabletAction, string>>;
 export const penSideButton = 'Pen side button';
 
 /** Mappings a new install starts with. */
-export const defaultBindings: TabletBindings = { 'tool-pan': penSideButton };
+const defaultBindings: TabletBindings = { 'tool-pan': penSideButton };
 
 /**
  * Add default mappings once: only for actions without a mapping, and only

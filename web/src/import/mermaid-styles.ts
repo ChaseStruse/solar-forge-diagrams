@@ -88,7 +88,7 @@ export interface Paint {
 }
 
 /** `fill:#f9f,stroke:#333,stroke-width:4px` → `{ fill, stroke }`. */
-export function stylePaint(declarations: string): Paint {
+function stylePaint(declarations: string): Paint {
   const paint: Paint = {};
   for (const part of declarations.split(/[,;]/)) {
     const [key = '', ...rest] = part.split(':');

@@ -7,7 +7,7 @@ export interface TourStep {
   target?: string;
 }
 
-export const featureTour: readonly TourStep[] = [
+const featureTour: readonly TourStep[] = [
   {
     title: 'Welcome to Solar Forge',
     body: 'A quick run through what you can do. Use the arrow keys or the buttons below, and press Esc to leave at any time.',

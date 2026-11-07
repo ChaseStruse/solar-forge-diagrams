@@ -33,7 +33,7 @@ export interface ResourceNetwork {
   networkIds?: string[];
   incomplete?: string[];
 }
-export const policyObject = (v: unknown): Record<string, unknown> => {
+const policyObject = (v: unknown): Record<string, unknown> => {
   if (!v || typeof v !== 'object' || Array.isArray(v))
     throw Error('Expected network settings object');
   return v as Record<string, unknown>;

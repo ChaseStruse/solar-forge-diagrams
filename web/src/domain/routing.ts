@@ -72,7 +72,7 @@ export function obstaclesOf(
   return result;
 }
 /** The sides a connection leaves and enters by, fixed or automatic. */
-export function resolvePorts(
+function resolvePorts(
   edge: DiagramEdge,
   nodes: ReadonlyMap<string, DiagramNode>,
 ): [Port, Port] {
@@ -124,7 +124,7 @@ export function fansOf(
   return fans;
 }
 /** Gap between the two lanes of a connection pair that runs both ways. */
-export const LANE_GAP = 14;
+const LANE_GAP = 14;
 /**
  * A connection whose reverse also exists. Both share one route, each shifted
  * to its own right-hand side, so the pair reads as two parallel one-way arrows
@@ -137,7 +137,7 @@ function isTwoWay(edge: DiagramEdge, fans: Fans | undefined): boolean {
   );
 }
 /** Offset an orthogonal polyline sideways, to the right of its direction. */
-export function shiftRight(points: readonly Point[], by: number): Point[] {
+function shiftRight(points: readonly Point[], by: number): Point[] {
   const normals: (Point | undefined)[] = [];
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1],

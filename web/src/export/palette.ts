@@ -27,7 +27,7 @@ function box(colors: Color[]): Box {
   return { colors, count, axis, range: high[axis] - low[axis] };
 }
 /** Weighted median cut preserves each frame's theme and artwork colours. */
-export function adaptivePalette(
+function adaptivePalette(
   rgba: Uint8ClampedArray,
   limit = 256,
 ): Uint8Array<ArrayBuffer> {

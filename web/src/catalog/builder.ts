@@ -9,7 +9,7 @@ import { findService } from './services';
  * A component from the catalog, as the palette would add it: the service's
  * kind, colour, shape and boundary type, at the given position and size.
  */
-export function serviceNode(
+function serviceNode(
   id: string,
   serviceId: string,
   label: string,

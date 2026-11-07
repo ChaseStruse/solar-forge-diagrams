@@ -262,7 +262,7 @@ export const legacyColors: ReadonlySet<string> = new Set([
   '#79a950',
   '#d9a15f',
 ]);
-export const componentColors: Record<string, string> = {
+const componentColors: Record<string, string> = {
   'network-acl': '#d9534f',
   docker: '#2496ed',
   container: '#326ce5',

@@ -12,7 +12,7 @@ type Check = { status: ReachabilityStatus; reason: string };
 const allow = (reason: string): Check => ({ status: 'allowed', reason });
 const deny = (reason: string): Check => ({ status: 'denied', reason });
 const unknown = (reason: string): Check => ({ status: 'unknown', reason });
-export function ancestor(
+function ancestor(
   index: ReadonlyMap<string, DiagramNode>,
   node: DiagramNode,
   kind: DiagramNode['boundary'],

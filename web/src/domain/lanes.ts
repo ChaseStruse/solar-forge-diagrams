@@ -28,7 +28,7 @@ export const LANE_HUES = [
 ];
 
 /** The lane a node belongs to: its owner, or '' for Unassigned. */
-export const laneKey = (node: DiagramNode) => node.owner ?? '';
+const laneKey = (node: DiagramNode) => node.owner ?? '';
 export const laneName = (owner: string) => owner || 'Unassigned';
 
 /**
@@ -44,7 +44,7 @@ const participants = (doc: DiagramDocument) =>
  * Lane order: the board's previous order for owners still in use, then new
  * owners in the order the flow first reaches them, with Unassigned last.
  */
-export function laneOrder(
+function laneOrder(
   doc: DiagramDocument,
   firstSeen: readonly string[] = participants(doc).map(laneKey),
 ): string[] {
