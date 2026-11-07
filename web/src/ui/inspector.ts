@@ -46,8 +46,12 @@ export function installInspector(app: App): Inspector {
     'tags',
     'notes',
   ] as const;
+  const selectedNode = () =>
+    state.current.nodes.find((n) => n.id === state.selected);
+  const selectedEdge = () =>
+    state.current.edges.find((e) => e.id === state.selectedEdge);
   function inspect(): void {
-    const node = state.current.nodes.find((n) => n.id === state.selected);
+    const node = selectedNode();
     element('properties').hidden = !node;
     element('selection').textContent =
       node?.kind === 'text' || node?.kind === 'note'
@@ -115,7 +119,7 @@ export function installInspector(app: App): Inspector {
       inputElement('node-wrap').checked = Boolean(node.wrap);
       inputElement('node-color').value = node.color;
     }
-    const edge = state.current.edges.find((e) => e.id === state.selectedEdge);
+    const edge = selectedEdge();
     element('edge-properties').hidden = !edge;
     if (node) {
       for (const key of ['x', 'z', 'width', 'depth'] as const)
@@ -234,7 +238,7 @@ export function installInspector(app: App): Inspector {
     updateLayers();
   }
   field('node-text').onchange = () => {
-    const node = state.current.nodes.find((n) => n.id === state.selected);
+    const node = selectedNode();
     const label = field('node-text').value.slice(0, MAX_TEXT);
     if (!node || label === node.label) return;
     commit({
@@ -244,7 +248,7 @@ export function installInspector(app: App): Inspector {
     });
   };
   field('node-font').onchange = () => {
-    const node = state.current.nodes.find((n) => n.id === state.selected);
+    const node = selectedNode();
     if (node?.kind === 'service' && !field('node-font').value.trim()) {
       const value = { ...node };
       delete value.fontSize;
@@ -267,7 +271,7 @@ export function installInspector(app: App): Inspector {
     });
   };
   inputElement('node-wrap').onchange = () => {
-    const node = state.current.nodes.find((n) => n.id === state.selected);
+    const node = selectedNode();
     if (!node) return;
     const value = { ...node };
     if (inputElement('node-wrap').checked) value.wrap = true;
@@ -279,7 +283,7 @@ export function installInspector(app: App): Inspector {
     });
   };
   field('node-branch').onchange = () => {
-    const node = state.current.nodes.find((n) => n.id === state.selected);
+    const node = selectedNode();
     const value = field('node-branch').value;
     if (!node) return;
     const journey: NonNullable<DiagramNode['journey']> = value.startsWith(
@@ -294,7 +298,7 @@ export function installInspector(app: App): Inspector {
     });
   };
   field('node-color').onchange = () => {
-    const node = state.current.nodes.find((n) => n.id === state.selected);
+    const node = selectedNode();
     const color = field('node-color').value;
     if (!node || !/^#[0-9a-f]{6}$/i.test(color) || color === node.color) return;
     commit({
@@ -304,7 +308,7 @@ export function installInspector(app: App): Inspector {
     });
   };
   element('node-label').onchange = () => {
-    const node = state.current.nodes.find((n) => n.id === state.selected);
+    const node = selectedNode();
     if (!node) return;
     const label = inputElement('node-label').value.slice(0, 1000);
     if (label === node.label) return;
@@ -325,16 +329,14 @@ export function installInspector(app: App): Inspector {
     });
   };
   element('detail-open').onclick = () => {
-    const id = state.current.nodes.find(
-      (n) => n.id === state.selected,
-    )?.detailId;
+    const id = selectedNode()?.detailId;
     const board = state.project.details?.find(
       (entry) => entry.id === id,
     )?.document;
     if (board) navigateDiagram(board);
   };
   element('detail-create').onclick = () => {
-    const node = state.current.nodes.find((n) => n.id === state.selected);
+    const node = selectedNode();
     if (!node) return;
     if ((state.project.details?.length ?? 0) >= 100) {
       notify('A project supports up to 100 detail diagrams');
@@ -356,7 +358,7 @@ export function installInspector(app: App): Inspector {
     navigateDiagram(board);
   };
   field('node-detail').onchange = () => {
-    const node = state.current.nodes.find((n) => n.id === state.selected);
+    const node = selectedNode();
     if (!node) return;
     const value = { ...node };
     if (field('node-detail').value) value.detailId = field('node-detail').value;
@@ -368,7 +370,7 @@ export function installInspector(app: App): Inspector {
     });
   };
   field('node-caption').onchange = () => {
-    const node = state.current.nodes.find((n) => n.id === state.selected);
+    const node = selectedNode();
     if (!node) return;
     commit({
       type: 'graph',
@@ -396,7 +398,7 @@ export function installInspector(app: App): Inspector {
   }
   field('rule-action').onchange = updateRuleFields;
   element('rule-apply').onclick = () => {
-    const edge = state.current.edges.find((e) => e.id === state.selectedEdge);
+    const edge = selectedEdge();
     if (!edge) return;
     try {
       const value = { ...edge };
@@ -430,7 +432,7 @@ export function installInspector(app: App): Inspector {
   };
   for (const key of ['x', 'z', 'width', 'depth'] as const)
     field(`node-${key}`).onchange = () => {
-      const node = state.current.nodes.find((n) => n.id === state.selected);
+      const node = selectedNode();
       if (!node) return;
       const value = Number(field(`node-${key}`).value);
       if (
@@ -466,7 +468,7 @@ export function installInspector(app: App): Inspector {
       });
     };
   field('node-parent').onchange = () => {
-    const node = state.current.nodes.find((n) => n.id === state.selected);
+    const node = selectedNode();
     if (!node) return;
     const index = new Map(state.current.nodes.map((n) => [n.id, n]));
     const world = worldPosition(node, index);
@@ -532,7 +534,7 @@ export function installInspector(app: App): Inspector {
       );
     };
   element('meta-apply-inside').onclick = () => {
-    const boundary = state.current.nodes.find((n) => n.id === state.selected);
+    const boundary = selectedNode();
     if (!boundary) return;
     const details = Object.fromEntries(
       Object.entries(boundary.metadata ?? {}).filter(([, value]) => value),
@@ -557,7 +559,7 @@ export function installInspector(app: App): Inspector {
     'bend',
   ] as const)
     field(`edge-${key}`).onchange = () => {
-      const edge = state.current.edges.find((e) => e.id === state.selectedEdge);
+      const edge = selectedEdge();
       if (!edge) return;
       const value = { ...edge };
       const input = field(`edge-${key}`).value;
@@ -584,7 +586,7 @@ export function installInspector(app: App): Inspector {
   element('delete-edge').onclick = deleteSelection;
   /** Which route actions apply to the selected connection's fork. */
   function routeActions(): { active: boolean; all: boolean } {
-    const edge = state.current.edges.find((e) => e.id === state.selectedEdge);
+    const edge = selectedEdge();
     if (!edge) return { active: false, all: false };
     const fork =
       state.current.edges.filter((e) => e.source === edge.source).length >= 2;
@@ -595,7 +597,7 @@ export function installInspector(app: App): Inspector {
   }
   /** Choose the connection a fork follows; the other branches dim and go still. */
   function setRoute(active: boolean): void {
-    const edge = state.current.edges.find((e) => e.id === state.selectedEdge);
+    const edge = selectedEdge();
     const node = edge && state.current.nodes.find((n) => n.id === edge.source);
     if (!edge || !node) return;
     const value = { ...node };
