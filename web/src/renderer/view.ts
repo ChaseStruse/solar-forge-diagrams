@@ -1,11 +1,8 @@
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
+import type { Rect } from '../domain/document';
 
 export type ViewMode = 'isometric' | 'top';
-export interface BoardBounds {
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
+export interface BoardBounds extends Rect {
   maxY: number;
 }
 

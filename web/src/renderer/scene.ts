@@ -33,9 +33,11 @@ import type {
   DiagramDocument,
   DiagramEdge,
   DiagramNode,
+  Footprint,
   Port,
+  Rect,
 } from '../domain/document';
-import { isPort, worldPosition } from '../domain/document';
+import { isPort, worldPosition, worldRect } from '../domain/document';
 import { inactiveEdges } from '../domain/journey';
 import { laneBands } from '../domain/lanes';
 import {
@@ -58,7 +60,6 @@ import { LabelAtlas, rasterBucket } from './labels';
 import { createLaneBands, type LaneBandsView } from './lane-bands';
 import { type GestureBoard, PointerGestures } from './pointer-gestures';
 import { nodesInSelectionRect } from './selection';
-import type { Rect } from './smart-guides';
 import { TileBodies } from './tile-bodies';
 import { TileDetails } from './tile-details';
 import { BoardView, type ViewMode } from './view';
@@ -70,16 +71,10 @@ const FOG_DENSITY = 0.00012;
 /** Marching-dash defaults; themes may override them via flowStyle. */
 const DEFAULT_FLOW = { width: 3.6, dash: 12, gap: 38, speed: 40 };
 
-interface Box {
-  x: number;
-  z: number;
-  width: number;
-  depth: number;
-}
 export interface ResizeChange {
   id: string;
-  from: Partial<Box>;
-  to: Partial<Box>;
+  from: Partial<Footprint>;
+  to: Partial<Footprint>;
 }
 function segmentDistance(
   px: number,
@@ -1083,13 +1078,7 @@ export class DiagramScene {
   }
   private worldRect(tile: Tile | undefined): Rect {
     if (!tile) return { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
-    const p = worldPosition(tile.node, this.nodeIndex);
-    return {
-      minX: p.x - tile.node.width / 2,
-      maxX: p.x + tile.node.width / 2,
-      minZ: p.z - tile.node.depth / 2,
-      maxZ: p.z + tile.node.depth / 2,
-    };
+    return worldRect(tile.node, this.nodeIndex);
   }
   private applySize(tile: Tile): void {
     const mesh = tile.group.children[0];

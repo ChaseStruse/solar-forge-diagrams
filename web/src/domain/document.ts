@@ -406,6 +406,28 @@ export function worldPosition(
   }
   return { x, z, level };
 }
+/** An axis-aligned box on the board plane. */
+export interface Rect {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+/** A node's position and size, in its parent's coordinates. */
+export type Footprint = Pick<DiagramNode, 'x' | 'z' | 'width' | 'depth'>;
+/** The box a node covers on the board, in world coordinates. */
+export function worldRect(
+  node: DiagramNode,
+  nodes: ReadonlyMap<string, DiagramNode>,
+): Rect {
+  const p = worldPosition(node, nodes);
+  return {
+    minX: p.x - node.width / 2,
+    maxX: p.x + node.width / 2,
+    minZ: p.z - node.depth / 2,
+    maxZ: p.z + node.depth / 2,
+  };
+}
 export function sampleDocument(): DiagramDocument {
   return {
     version: 1,

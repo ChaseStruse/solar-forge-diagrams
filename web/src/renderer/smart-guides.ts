@@ -1,10 +1,4 @@
-/** An axis-aligned box on the board plane. */
-export interface Rect {
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-}
+import type { Rect } from '../domain/document';
 
 /** Height above the board at which guide lines are drawn. */
 const GUIDE_Y = 16;

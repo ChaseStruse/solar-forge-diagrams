@@ -1,6 +1,7 @@
 import type { DiagramDocument, DiagramNode } from '../domain/document';
 import { worldPosition } from '../domain/document';
 import { LANE_HUES, laneBands, laneMembers, laneName } from '../domain/lanes';
+import { escapeXml } from './xml';
 
 /** Width of a draw.io lane's title strip, short of where the steps start. */
 const LANE_TITLE = 180;
@@ -9,25 +10,6 @@ const stableId = (id: string) =>
   `n${Array.from(new TextEncoder().encode(id), (n) => n.toString(16).padStart(2, '0')).join('')}`;
 const sorted = <T extends { id: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-const xml = (value: string) =>
-  value
-    .replace(
-      /[<>&"']/g,
-      (char) =>
-        ({
-          '<': '&lt;',
-          '>': '&gt;',
-          '&': '&amp;',
-          '"': '&quot;',
-          "'": '&apos;',
-        })[char] ?? char,
-    )
-    .split('')
-    .filter((char) => {
-      const code = char.charCodeAt(0);
-      return code >= 32 || code === 9 || code === 10 || code === 13;
-    })
-    .join('');
 // Mermaid entity codes keep user text out of the diagram grammar and HTML.
 const mermaidLabel = (value: string) =>
   Array.from(value, (char) =>
@@ -178,7 +160,7 @@ function drawio(doc: DiagramDocument): string {
       const hue =
         LANE_HUES[bands.bands.indexOf(band) % LANE_HUES.length] ?? '#35e0f0';
       cells.push(
-        `<mxCell id="${id}" value="${xml(laneName(lane.owner))}" style="swimlane;horizontal=${down ? 1 : 0};startSize=${LANE_TITLE};container=1;collapsible=0;html=0;fontStyle=1;fillColor=${hue};swimlaneFillColor=#ffffff;strokeColor=#475569;" vertex="1" parent="1"><mxGeometry x="${x}" y="${y}" width="${down ? across : along}" height="${down ? along : across}" as="geometry"/></mxCell>`,
+        `<mxCell id="${id}" value="${escapeXml(laneName(lane.owner))}" style="swimlane;horizontal=${down ? 1 : 0};startSize=${LANE_TITLE};container=1;collapsible=0;html=0;fontStyle=1;fillColor=${hue};swimlaneFillColor=#ffffff;strokeColor=#475569;" vertex="1" parent="1"><mxGeometry x="${x}" y="${y}" width="${down ? across : along}" height="${down ? along : across}" as="geometry"/></mxCell>`,
       );
       for (const node of lane.nodes) lanes.set(node.id, { id, x, y });
     }
@@ -211,18 +193,18 @@ function drawio(doc: DiagramDocument): string {
                 ? 'shape=note;'
                 : 'rounded=0;';
       const style = `${shape}whiteSpace=wrap;html=0;fillColor=${node.color};fontColor=#111827;strokeColor=#475569;`;
-      const cell = `<mxCell id="${stableId(node.id)}" value="${xml(node.label).replace(/\n/g, '&#10;')}" style="${style}" vertex="1" parent="${parent ? stableId(parent.id) : (lane?.id ?? '1')}"><mxGeometry x="${x}" y="${y}" width="${node.width}" height="${node.depth}" as="geometry"/></mxCell>`;
+      const cell = `<mxCell id="${stableId(node.id)}" value="${escapeXml(node.label).replace(/\n/g, '&#10;')}" style="${style}" vertex="1" parent="${parent ? stableId(parent.id) : (lane?.id ?? '1')}"><mxGeometry x="${x}" y="${y}" width="${node.width}" height="${node.depth}" as="geometry"/></mxCell>`;
       cells.push(
         node.detailId
-          ? `<object id="${stableId(node.id)}" label="${xml(node.label).replace(/\n/g, '&#10;')}" link="data:page/id,${xml(stableId(node.detailId))}">${cell.replace(` id="${stableId(node.id)}"`, '')}</object>`
+          ? `<object id="${stableId(node.id)}" label="${escapeXml(node.label).replace(/\n/g, '&#10;')}" link="data:page/id,${escapeXml(stableId(node.detailId))}">${cell.replace(` id="${stableId(node.id)}"`, '')}</object>`
           : cell,
       );
     }
     for (const edge of sorted(board.edges))
       cells.push(
-        `<mxCell id="e${stableId(edge.id)}" value="${xml(edge.label).replace(/\n/g, '&#10;')}" edge="1" parent="1" source="${stableId(edge.source)}" target="${stableId(edge.target)}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;${edge.relationship === 'dependency' ? 'dashed=1;' : ''}"><mxGeometry relative="1" as="geometry"/></mxCell>`,
+        `<mxCell id="e${stableId(edge.id)}" value="${escapeXml(edge.label).replace(/\n/g, '&#10;')}" edge="1" parent="1" source="${stableId(edge.source)}" target="${stableId(edge.target)}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;${edge.relationship === 'dependency' ? 'dashed=1;' : ''}"><mxGeometry relative="1" as="geometry"/></mxCell>`,
       );
-    return `<diagram id="${id === undefined ? 'overview' : stableId(id)}" name="${xml(board.title)}"><mxGraphModel grid="1" gridSize="10"><root>${cells.join('')}</root></mxGraphModel></diagram>`;
+    return `<diagram id="${id === undefined ? 'overview' : stableId(id)}" name="${escapeXml(board.title)}"><mxGraphModel grid="1" gridSize="10"><root>${cells.join('')}</root></mxGraphModel></diagram>`;
   });
   return `<?xml version="1.0" encoding="UTF-8"?>\n<mxfile host="Solar Forge">${pages.join('')}</mxfile>\n`;
 }

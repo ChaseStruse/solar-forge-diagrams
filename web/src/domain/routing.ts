@@ -1,5 +1,5 @@
-import type { DiagramEdge, DiagramNode, Port } from './document';
-import { worldPosition } from './document';
+import type { DiagramEdge, DiagramNode, Port, Rect } from './document';
+import { worldPosition, worldRect } from './document';
 export interface Point {
   x: number;
   z: number;
@@ -68,7 +68,7 @@ export function obstaclesOf(
   const result: Obstacle[] = [];
   for (const node of nodes.values())
     if (node.kind !== 'group')
-      result.push({ id: node.id, ...rect(node, nodes) });
+      result.push({ id: node.id, ...worldRect(node, nodes) });
   return result;
 }
 /** The sides a connection leaves and enters by, fixed or automatic. */
@@ -238,24 +238,6 @@ const offset = (point: Point, port: Port, distance: number): Point => ({
   x: point.x + (port === 'east' ? distance : port === 'west' ? -distance : 0),
   z: point.z + (port === 'south' ? distance : port === 'north' ? -distance : 0),
 });
-interface Rect {
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-}
-function rect(
-  node: DiagramNode,
-  nodes: ReadonlyMap<string, DiagramNode>,
-): Rect {
-  const p = worldPosition(node, nodes);
-  return {
-    minX: p.x - node.width / 2,
-    maxX: p.x + node.width / 2,
-    minZ: p.z - node.depth / 2,
-    maxZ: p.z + node.depth / 2,
-  };
-}
 const PAD = 6;
 /** Axis-aligned segment against a box, with a small clearance. */
 function crosses(a: Point, b: Point, box: Rect): boolean {
@@ -399,7 +381,7 @@ function bestPath(
   all: readonly Obstacle[],
   split: 'source' | 'middle' | 'target',
 ): Point[] {
-  const ends = [rect(source, nodes), rect(target, nodes)];
+  const ends = [worldRect(source, nodes), worldRect(target, nodes)];
   const bend = edge.bend ?? 0;
   const minX = Math.min(...ends.map((r) => r.minX)) - 30;
   const maxX = Math.max(...ends.map((r) => r.maxX)) + 30;

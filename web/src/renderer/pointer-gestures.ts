@@ -1,6 +1,12 @@
 import { type Intersection, type Object3D, Vector3 } from 'three';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { type DiagramNode, isPort, type Port } from '../domain/document';
+import {
+  type DiagramNode,
+  type Footprint,
+  isPort,
+  type Port,
+  type Rect,
+} from '../domain/document';
 import { nearestPort, type Point, portPosition } from '../domain/routing';
 import type { ScenePalette } from '../themes';
 import { OverlayLine } from './overlay-line';
@@ -10,19 +16,12 @@ import {
   type SelectionRect,
   selectionRect,
 } from './selection';
-import { type Rect, snapToNeighbours } from './smart-guides';
+import { snapToNeighbours } from './smart-guides';
 
 /** Pointer Events button number for a pen's eraser end. */
 const ERASER_BUTTON = 5;
 /** Screen pixels a pen may wobble on a tap before it counts as a drag. */
 const PEN_TAP_SLOP = 6;
-
-interface Box {
-  x: number;
-  z: number;
-  width: number;
-  depth: number;
-}
 
 /** Both views keep +X screen-right and +Z screen-down, so cursors map directly. */
 function resizeCursor(sx: number, sz: number): string {
@@ -135,7 +134,7 @@ export class PointerGestures {
         sx: number;
         sz: number;
         start: Point;
-        from: Box;
+        from: Footprint;
         children: { node: DiagramNode; x: number; z: number }[];
       }
     | undefined;

@@ -1,5 +1,5 @@
 import type { DiagramDocument, DiagramNode } from '../domain/document';
-import { worldPosition } from '../domain/document';
+import { worldPosition, worldRect } from '../domain/document';
 import type { Change, Edit } from '../domain/history';
 import {
   cleanNetworkChanges,
@@ -261,15 +261,7 @@ export function alignNodes(
     .filter((n) => selected.has(n.id) && !hasSelectedParent(n, index, selected))
     .map((node) => {
       const p = worldPosition(node, index);
-      return {
-        node,
-        x: p.x,
-        z: p.z,
-        minX: p.x - node.width / 2,
-        maxX: p.x + node.width / 2,
-        minZ: p.z - node.depth / 2,
-        maxZ: p.z + node.depth / 2,
-      };
+      return { node, x: p.x, z: p.z, ...worldRect(node, index) };
     });
   const label =
     alignment === 'distribute-x' || alignment === 'distribute-z'

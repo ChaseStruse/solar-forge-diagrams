@@ -4,19 +4,8 @@ import { worldPosition } from '../domain/document';
 import { LANE_HEADER, LANE_HUES, laneBands, laneName } from '../domain/lanes';
 import { fansOf, obstaclesOf, routeEdge } from '../domain/routing';
 import { fitText, fontSize, serviceCaption } from '../domain/text';
+import { escapeXml } from './xml';
 
-const xmlText = (text: string) =>
-  text.replace(
-    /[<>&"']/g,
-    (c) =>
-      ({
-        '<': '&lt;',
-        '>': '&gt;',
-        '&': '&amp;',
-        '"': '&quot;',
-        "'": '&apos;',
-      })[c] ?? c,
-  );
 /**
  * Swimlane bands as drawn on the board floor: a tinted strip per owner, a
  * stronger title strip where the flow starts, a divider and the lane name.
@@ -58,10 +47,10 @@ export function laneSvg(
       const text = lines
         .map(
           (line, j) =>
-            `<tspan x="${cx}" y="${top + (j + 0.85) * font * 1.28}">${xmlText(line)}</tspan>`,
+            `<tspan x="${cx}" y="${top + (j + 0.85) * font * 1.28}">${escapeXml(line)}</tspan>`,
         )
         .join('');
-      return `<g><title>${xmlText(name)}</title>${rect(lanes.from, band.start, length, size, `fill="${hue}" fill-opacity="${i % 2 ? 0.07 : 0.12}"`)}${rect(lanes.from, band.start, header, size, `fill="${hue}" fill-opacity="0.28"`)}${rect(lanes.from, band.start, length, 3, `fill="${hue}" fill-opacity="0.7"`)}<text text-anchor="middle" font-size="${font}" font-weight="700" fill="#243449">${text}</text></g>`;
+      return `<g><title>${escapeXml(name)}</title>${rect(lanes.from, band.start, length, size, `fill="${hue}" fill-opacity="${i % 2 ? 0.07 : 0.12}"`)}${rect(lanes.from, band.start, header, size, `fill="${hue}" fill-opacity="0.28"`)}${rect(lanes.from, band.start, length, 3, `fill="${hue}" fill-opacity="0.7"`)}<text text-anchor="middle" font-size="${font}" font-weight="700" fill="#243449">${text}</text></g>`;
     })
     .join('');
   const first = lanes.bands[0]?.start ?? 0;
@@ -145,13 +134,13 @@ export async function exportSvg(
         image && node.width >= 120
           ? `<image x="${p.x + node.width / 2 - 42}" y="${p.z - node.depth / 2 + 10}" width="28" height="28" href="${image}"/>`
           : '';
-      return `<g><title>${xmlText(node.label)}</title><rect x="${p.x - node.width / 2}" y="${p.z - node.depth / 2}" width="${node.width}" height="${node.depth}" rx="8" fill="#f2f5f8" stroke="${node.color}" stroke-width="2"/><text x="${p.x - node.width / 2 + 14}" y="${p.z - node.depth / 2 + 24}" fill="#43546b" font-size="15">${xmlText(node.label)}</text>${headerIcon}</g>`;
+      return `<g><title>${escapeXml(node.label)}</title><rect x="${p.x - node.width / 2}" y="${p.z - node.depth / 2}" width="${node.width}" height="${node.depth}" rx="8" fill="#f2f5f8" stroke="${node.color}" stroke-width="2"/><text x="${p.x - node.width / 2 + 14}" y="${p.z - node.depth / 2 + 24}" fill="#43546b" font-size="15">${escapeXml(node.label)}</text>${headerIcon}</g>`;
     })
     .join('');
   const edges = routes
     .map(({ edge, points }) => {
       const mid = points[Math.floor(points.length / 2)];
-      return `<g><path d="${points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.z}`).join(' ')}" fill="none" stroke="#576b84" stroke-width="2" marker-end="url(#arrow)"/>${mid && edge.label ? `<text x="${mid.x}" y="${mid.z - 12}" text-anchor="middle" fill="#243449" paint-order="stroke" stroke="#fff" stroke-width="5" font-size="14">${xmlText(edge.label)}</text>` : ''}</g>`;
+      return `<g><path d="${points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.z}`).join(' ')}" fill="none" stroke="#576b84" stroke-width="2" marker-end="url(#arrow)"/>${mid && edge.label ? `<text x="${mid.x}" y="${mid.z - 12}" text-anchor="middle" fill="#243449" paint-order="stroke" stroke="#fff" stroke-width="5" font-size="14">${escapeXml(edge.label)}</text>` : ''}</g>`;
     })
     .join('');
   const services = positioned
@@ -168,14 +157,14 @@ export async function exportSvg(
       const captionText = caption.lines
         .map(
           (line, i) =>
-            `<tspan x="${p.x}" y="${captionTop + (i + 0.85) * caption.size * 1.28}">${xmlText(line)}</tspan>`,
+            `<tspan x="${p.x}" y="${captionTop + (i + 0.85) * caption.size * 1.28}">${escapeXml(line)}</tspan>`,
         )
         .join('');
       const shape =
         node.shape === 'decision'
           ? `<polygon points="${p.x},${z} ${x + node.width},${p.z} ${p.x},${z + node.depth} ${x},${p.z}"`
           : `<rect x="${x}" y="${z}" width="${node.width}" height="${node.depth}" rx="${node.shape === 'terminal' ? node.depth / 2 : 8}"`;
-      return `<g><title>${xmlText(node.label)}</title>${shape} fill="#fff" stroke="${node.color}" stroke-width="2"/>${image && !node.shape ? `<image href="${image}" x="${p.x - 26}" y="${p.z - 26}" width="52" height="52"/>` : ''}<text text-anchor="middle" font-size="${caption.size}" fill="#172c43">${captionText}</text></g>`;
+      return `<g><title>${escapeXml(node.label)}</title>${shape} fill="#fff" stroke="${node.color}" stroke-width="2"/>${image && !node.shape ? `<image href="${image}" x="${p.x - 26}" y="${p.z - 26}" width="52" height="52"/>` : ''}<text text-anchor="middle" font-size="${caption.size}" fill="#172c43">${captionText}</text></g>`;
     })
     .join('');
   const annotations = positioned
@@ -195,11 +184,11 @@ export async function exportSvg(
       const text = lines
         .map(
           (line, i) =>
-            `<tspan x="${x + padding}" dy="${i ? size * 1.28 : size}">${xmlText(line)}</tspan>`,
+            `<tspan x="${x + padding}" dy="${i ? size * 1.28 : size}">${escapeXml(line)}</tspan>`,
         )
         .join('');
       return `<g>${note ? `<rect x="${x}" y="${z}" width="${node.width}" height="${node.depth}" rx="3" fill="${node.color}" stroke="#00000022"/>` : ''}<text x="${x + padding}" y="${z + padding}" font-size="${size}" font-weight="${note ? 500 : 600}" fill="${note ? '#2a2010' : '#172c43'}">${text}</text></g>`;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minZ} ${width} ${height}" role="img" aria-label="${xmlText(doc.title)}"><title>${xmlText(doc.title)}</title><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="#576b84"/></marker></defs><rect x="${minX}" y="${minZ}" width="${width}" height="${height}" fill="#fff"/><g font-family="${xmlText(font)}">${lanes.markup}${groups}${edges}${services}${annotations}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minZ} ${width} ${height}" role="img" aria-label="${escapeXml(doc.title)}"><title>${escapeXml(doc.title)}</title><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="#576b84"/></marker></defs><rect x="${minX}" y="${minZ}" width="${width}" height="${height}" fill="#fff"/><g font-family="${escapeXml(font)}">${lanes.markup}${groups}${edges}${services}${annotations}</g></svg>`;
 }
