@@ -172,9 +172,26 @@ export class MermaidStyles {
     return pick('fill') ?? pick('stroke');
   }
 
-  /** Classes used on nodes but never defined, for a warning. */
-  public get undefinedClasses(): string[] {
-    const names = new Set([...this.classes.values()].flat());
-    return [...names].filter((n) => !this.defs.has(n)).sort();
+  /**
+   * Colour the chart's nodes (keyed by their final ID; `writtenId` maps back
+   * to the ID the chart used) and warn about styles the board cannot show.
+   */
+  public apply(
+    nodes: ReadonlyMap<string, { color: string }>,
+    warnings: string[],
+    writtenId: (id: string) => string = (id) => id,
+  ): void {
+    if (this.unreadable.length)
+      warnings.push(
+        `${this.unreadable.length} style line(s) set no fill or stroke colour the board can show`,
+      );
+    const used = new Set([...this.classes.values()].flat());
+    const missing = [...used].filter((n) => !this.defs.has(n)).sort();
+    if (missing.length)
+      warnings.push(`Classes used but never defined: ${missing.join(', ')}`);
+    for (const [id, node] of nodes) {
+      const color = this.colorOf(writtenId(id));
+      if (color) node.color = color;
+    }
   }
 }

@@ -15,6 +15,17 @@ import type { ImportResult } from './types';
 export const MAX_NODES = 2000;
 export const MAX_EDGES = 4000;
 
+/** Add a connection numbered in chart order, refusing charts past the limit. */
+export function addEdge(
+  edges: DiagramEdge[],
+  noun: 'links' | 'transitions',
+  edge: Omit<DiagramEdge, 'id'>,
+): void {
+  if (edges.length >= MAX_EDGES)
+    throw Error(`Mermaid import supports up to ${MAX_EDGES} ${noun}`);
+  edges.push({ id: `edge-${edges.length + 1}`, ...edge });
+}
+
 const NAMED_ENTITIES: Record<string, string> = {
   quot: '"',
   amp: '&',

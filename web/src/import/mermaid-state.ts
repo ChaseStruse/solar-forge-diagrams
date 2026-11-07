@@ -2,9 +2,9 @@ import { findService } from '../catalog/services';
 import type { DiagramEdge, DiagramNode } from '../domain/document';
 import type { LayoutDirection } from '../domain/layout';
 import {
+  addEdge,
   chartTitle,
   finishChart,
-  MAX_EDGES,
   MAX_NODES,
   mermaidText,
 } from './mermaid-common';
@@ -136,10 +136,7 @@ export function importStateDiagram(
       const forward = arrow === '-->';
       const source = end(forward ? a : b, forward ? aClass : bClass, true);
       const target = end(forward ? b : a, forward ? bClass : aClass, false);
-      if (edges.length >= MAX_EDGES)
-        throw Error(`Mermaid import supports up to ${MAX_EDGES} transitions`);
-      edges.push({
-        id: `edge-${edges.length + 1}`,
+      addEdge(edges, 'transitions', {
         source: source.id,
         target: target.id,
         label: label ? mermaidText(label) : '',
@@ -222,17 +219,7 @@ export function importStateDiagram(
   if (concurrent)
     warnings.push('Concurrent regions (--) are shown together in one group');
   for (const line of skipped) warnings.push(`Skipped unreadable line: ${line}`);
-  if (styles.unreadable.length)
-    warnings.push(
-      `${styles.unreadable.length} style line(s) set no fill or stroke colour the board can show`,
-    );
-  const missing = styles.undefinedClasses;
-  if (missing.length)
-    warnings.push(`Classes used but never defined: ${missing.join(', ')}`);
-  for (const [id, node] of nodes) {
-    const color = styles.colorOf(id);
-    if (color) node.color = color;
-  }
+  styles.apply(nodes, warnings);
   const result = finishChart({
     title: chartTitle(source, name),
     nodes: [...nodes.values()],

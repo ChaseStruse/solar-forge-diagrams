@@ -3,10 +3,10 @@ import type { DiagramEdge, DiagramNode } from '../domain/document';
 import type { LayoutDirection } from '../domain/layout';
 import { importArchitecture } from './mermaid-architecture';
 import {
+  addEdge,
   chartTitle,
   exporterComments,
   finishChart,
-  MAX_EDGES,
   MAX_NODES,
   meaningfulLines,
   mermaidText,
@@ -349,10 +349,7 @@ function importFlowchart(
         const to = group.nodes.map(ensure);
         for (const source of from)
           for (const target of to) {
-            if (edges.length >= MAX_EDGES)
-              throw Error(`Mermaid import supports up to ${MAX_EDGES} links`);
-            edges.push({
-              id: `edge-${edges.length + 1}`,
+            addEdge(edges, 'links', {
               source: source.id,
               target: target.id,
               label: read.link.label,
@@ -372,17 +369,7 @@ function importFlowchart(
     warnings.push(
       `Interaction and link styling lines were skipped (${[...ignored].sort().join(', ')})`,
     );
-  if (styles.unreadable.length)
-    warnings.push(
-      `${styles.unreadable.length} style line(s) set no fill or stroke colour the board can show`,
-    );
-  const missing = styles.undefinedClasses;
-  if (missing.length)
-    warnings.push(`Classes used but never defined: ${missing.join(', ')}`);
-  for (const [id, node] of nodes) {
-    const color = styles.colorOf(writtenIds.get(id) ?? id);
-    if (color) node.color = color;
-  }
+  styles.apply(nodes, warnings, (id) => writtenIds.get(id) ?? id);
 
   // Comments written by this app's exporter: captions and owners.
   for (const [writtenId, caption] of exporterComments(source, 'Caption')) {

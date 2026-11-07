@@ -2,9 +2,9 @@ import { findService } from '../catalog/services';
 import type { DiagramEdge, DiagramNode, Port } from '../domain/document';
 import { worldPosition } from '../domain/document';
 import {
+  addEdge,
   chartTitle,
   finishChart,
-  MAX_EDGES,
   MAX_NODES,
   mermaidText,
 } from './mermaid-common';
@@ -168,10 +168,7 @@ export function importArchitecture(
         target: string,
         targetPort: Port,
       ) => {
-        if (edges.length >= MAX_EDGES)
-          throw Error(`Mermaid import supports up to ${MAX_EDGES} links`);
-        edges.push({
-          id: `edge-${edges.length + 1}`,
+        addEdge(edges, 'links', {
           source,
           target,
           label,
