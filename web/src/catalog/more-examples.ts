@@ -1,51 +1,12 @@
-import type { DiagramDocument, DiagramNode } from '../domain/document';
+import type { DiagramDocument } from '../domain/document';
 import { defaultTraffic } from '../domain/network';
-import { findService } from './services';
+import { boardBuilder } from './builder';
 
+/** Marks a connection as a dependency rather than traffic. */
+const dependsOn = { relationship: 'dependency' } as const;
 function example(title: string) {
   const doc: DiagramDocument = { version: 1, title, nodes: [], edges: [] };
-  function node(
-    id: string,
-    serviceId: string,
-    label: string,
-    x: number,
-    z: number,
-    parentId?: string,
-  ): DiagramNode {
-    const service = findService(serviceId);
-    if (!service) throw Error(`Missing example component: ${serviceId}`);
-    const result: DiagramNode = {
-      id,
-      serviceId,
-      label,
-      kind: service.kind,
-      color: service.color,
-      x,
-      z,
-      width: 220,
-      depth: 100,
-      ...(parentId ? { parentId } : {}),
-      ...(service.shape ? { shape: service.shape } : {}),
-      ...(service.boundary ? { boundary: service.boundary } : {}),
-    };
-    doc.nodes.push(result);
-    return result;
-  }
-  function edge(
-    source: string,
-    target: string,
-    label: string,
-    dependency = false,
-  ) {
-    doc.edges.push({
-      id: `${source}-${target}`,
-      source,
-      target,
-      label,
-      ...(dependency ? { relationship: 'dependency' as const } : {}),
-    });
-  }
-  return { doc, node, edge };
+  return { doc, ...boardBuilder(doc, { width: 220, depth: 100 }) };
 }
 
 export function privateWorkerExample(): DiagramDocument {
@@ -168,9 +129,9 @@ export function privateWorkerExample(): DiagramDocument {
   );
   external.network = { model: 'generic', ip: '198.51.100.40' };
   edge('worker', 'external', 'Outbound HTTPS · 443');
-  edge('worker-sg', 'worker', '', true);
-  edge('private-routes', 'nat', '0.0.0.0/0', true);
-  edge('public-routes', 'igw', '0.0.0.0/0', true);
+  edge('worker-sg', 'worker', '', dependsOn);
+  edge('private-routes', 'nat', '0.0.0.0/0', dependsOn);
+  edge('public-routes', 'igw', '0.0.0.0/0', dependsOn);
   doc.traffic = {
     ...defaultTraffic,
     sourceIp: '10.20.2.10',
@@ -232,9 +193,9 @@ export function containerDeliveryExample(): DiagramDocument {
       'Image delivery arrows describe build and deployment dependencies. The ECS service runs application tasks; roles, subnet placement, security groups and load-balancer health checks are omitted.',
   };
   node('logs', 'component.container', 'New task revision', 560, -400);
-  edge('ci', 'registry', 'Push image', true);
-  edge('registry', 'logs', 'Image reference', true);
-  edge('logs', 'ecs', 'Deploy revision', true);
+  edge('ci', 'registry', 'Push image', dependsOn);
+  edge('registry', 'logs', 'Image reference', dependsOn);
+  edge('logs', 'ecs', 'Deploy revision', dependsOn);
   edge('clients', 'elb', 'HTTPS');
   edge('elb', 'ecs', 'Healthy targets');
   return doc;
@@ -295,8 +256,8 @@ export function internalKubernetesExample(): DiagramDocument {
   edge('frontend', 'api-service', 'HTTP · internal API');
   edge('api-service', 'api-a', 'Selected backend');
   edge('api-service', 'api-b', 'Selected backend');
-  edge('deployment', 'api-a', '', true);
-  edge('deployment', 'api-b', '', true);
+  edge('deployment', 'api-a', '', dependsOn);
+  edge('deployment', 'api-b', '', dependsOn);
   return doc;
 }
 

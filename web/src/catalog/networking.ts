@@ -4,7 +4,8 @@ import type {
   NetworkRule,
 } from '../domain/document';
 import { defaultTraffic } from '../domain/network';
-import { boundaryColors, findService } from './services';
+import { boardBuilder } from './builder';
+import { boundaryColors } from './services';
 
 /** Two availability zones with isolated data tiers, matching the reference. */
 export function vpcExample(demo = false): DiagramDocument {
@@ -40,44 +41,26 @@ export function vpcExample(demo = false): DiagramDocument {
       ...(parentId ? { parentId } : {}),
     });
   }
-  function service(
+  const { node, edge } = boardBuilder(doc, { width: 160, depth: 100 });
+  const service = (
     id: string,
     label: string,
     serviceId: string,
     x: number,
     z: number,
     parentId?: string,
-  ) {
-    const def = findService(serviceId);
-    if (!def) throw Error('Missing networking component');
-    doc.nodes.push({
-      id,
-      label,
-      serviceId,
-      kind: 'service',
-      x,
-      z,
-      width: 160,
-      depth: 100,
-      color: def.color,
-      ...(parentId ? { parentId } : {}),
-    });
-  }
-  function connect(
+  ) => node(id, serviceId, label, x, z, parentId);
+  const connect = (
     id: string,
     source: string,
     target: string,
     label: string,
     networkRule?: NetworkRule,
-  ) {
-    doc.edges.push({
+  ) =>
+    edge(source, target, label, {
       id,
-      source,
-      target,
-      label,
       ...(networkRule ? { networkRule } : {}),
     });
-  }
   boundary('region', 'AWS Region', 'region', 0, 0, 2200, 1300);
   boundary('vpc', 'VPC · 10.0.0.0/16', 'vpc', 70, 30, 1960, 1160, 'region');
   for (const [i, zone] of ['a', 'b'].entries()) {

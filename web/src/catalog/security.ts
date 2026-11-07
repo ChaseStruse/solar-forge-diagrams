@@ -1,11 +1,8 @@
-import type {
-  DiagramDocument,
-  DiagramNode,
-  TrafficScenario,
-} from '../domain/document';
+import type { DiagramDocument, TrafficScenario } from '../domain/document';
 import { defaultTraffic } from '../domain/network';
 import type { FirewallRule } from '../domain/policies';
-import { boundaryColors, findService } from './services';
+import { boardBuilder } from './builder';
+import { boundaryColors } from './services';
 
 /** Identity relationships plus editable, evaluated network policy examples. */
 export function securityDemo(): DiagramDocument {
@@ -17,46 +14,13 @@ export function securityDemo(): DiagramDocument {
     traffic: { ...defaultTraffic },
     scenarios: [],
   };
-  function node(
-    id: string,
-    serviceId: string,
-    label: string,
-    x: number,
-    z: number,
-    parentId?: string,
-  ): DiagramNode {
-    const service = findService(serviceId);
-    if (!service) throw Error(`Missing security component: ${serviceId}`);
-    const result: DiagramNode = {
-      id,
-      kind: service.kind,
-      serviceId,
-      label,
-      x,
-      z,
-      width: 220,
-      depth: 100,
-      color: service.color,
-      ...(service.boundary ? { boundary: service.boundary } : {}),
-      ...(parentId ? { parentId } : {}),
-    };
-    doc.nodes.push(result);
-    return result;
-  }
-  function connect(
+  const { node, edge } = boardBuilder(doc, { width: 220, depth: 100 });
+  const connect = (
     source: string,
     target: string,
     label: string,
     relationship: 'network' | 'dependency' = 'dependency',
-  ) {
-    doc.edges.push({
-      id: `${source}-${target}`,
-      source,
-      target,
-      label,
-      relationship,
-    });
-  }
+  ) => edge(source, target, label, { relationship });
   function tcp(
     direction: FirewallRule['direction'],
     port: number,

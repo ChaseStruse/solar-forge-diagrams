@@ -1,12 +1,7 @@
-import type {
-  DiagramDocument,
-  DiagramEdge,
-  DiagramNode,
-  NetworkRule,
-} from '../domain/document';
+import type { DiagramDocument, NetworkRule } from '../domain/document';
 import { laneBands, laneLayout } from '../domain/lanes';
 import { defaultTraffic } from '../domain/network';
-import { findService } from './services';
+import { boardBuilder } from './builder';
 
 /**
  * Small boards that each show off one feature, with sticky notes that walk
@@ -15,49 +10,7 @@ import { findService } from './services';
 const NOTE_FONT = 28;
 function board(title: string) {
   const doc: DiagramDocument = { version: 1, title, nodes: [], edges: [] };
-  function node(
-    id: string,
-    serviceId: string,
-    label: string,
-    x: number,
-    z: number,
-    extra: Partial<DiagramNode> = {},
-  ): DiagramNode {
-    const service = findService(serviceId);
-    if (!service) throw Error(`Missing example component: ${serviceId}`);
-    const result: DiagramNode = {
-      id,
-      serviceId,
-      label,
-      kind: service.kind,
-      color: service.color,
-      x,
-      z,
-      width: 200,
-      depth: 100,
-      ...(service.shape ? { shape: service.shape } : {}),
-      ...(service.boundary ? { boundary: service.boundary } : {}),
-      ...extra,
-    };
-    doc.nodes.push(result);
-    return result;
-  }
-  function edge(
-    source: string,
-    target: string,
-    label = '',
-    extra: Partial<DiagramEdge> = {},
-  ): DiagramEdge {
-    const result: DiagramEdge = {
-      id: `${source}-${target}`,
-      source,
-      target,
-      label,
-      ...extra,
-    };
-    doc.edges.push(result);
-    return result;
-  }
+  const { node, edge } = boardBuilder(doc, { width: 200, depth: 100 });
   /**
    * A walkthrough sticky note; lines become numbered steps. Its depth is
    * estimated from the wrapped text so the note fits what it says, so it is

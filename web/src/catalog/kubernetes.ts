@@ -1,42 +1,23 @@
-import type { DiagramDocument, DiagramNode } from '../domain/document';
-import { findService } from './services';
+import type { DiagramDocument } from '../domain/document';
+import { boardBuilder } from './builder';
 
 /** Traffic reaches Pods through a Service; Deployment arrows describe management only. */
 export function kubernetesExample(): DiagramDocument {
-  function node(
-    id: string,
-    serviceId: string,
-    label: string,
-    x: number,
-    z: number,
-    parentId?: string,
-  ): DiagramNode {
-    const service = findService(serviceId);
-    if (!service) throw Error('Missing Kubernetes template component');
-    return {
-      id,
-      serviceId,
-      label,
-      kind: service.kind,
-      color: service.color,
-      x,
-      z,
-      width: 160,
-      depth: 100,
-      ...(parentId ? { parentId } : {}),
-    };
-  }
-  const namespace = {
-    ...node(
-      'namespace',
-      'kubernetes.namespace',
-      'Namespace · production',
-      100,
-      0,
-    ),
-    width: 1100,
-    depth: 800,
+  const doc: DiagramDocument = {
+    version: 1,
+    title: 'Kubernetes · web application',
+    nodes: [],
+    edges: [],
   };
+  const { node } = boardBuilder(doc, { width: 160, depth: 100 });
+  const namespace = node(
+    'namespace',
+    'kubernetes.namespace',
+    'Namespace · production',
+    100,
+    0,
+    { width: 1100, depth: 800 },
+  );
   const client = node('client', 'actor.internet', 'Web clients', -650, 0);
   const ingress = node(
     'ingress',
@@ -96,53 +77,49 @@ export function kubernetesExample(): DiagramDocument {
     notes:
       'The Deployment manages Pods through a ReplicaSet (omitted here). Management arrows do not carry application traffic.',
   };
-  return {
-    version: 1,
-    title: 'Kubernetes · web application',
-    nodes: [namespace, client, ingress, service, deployment, podA, podB],
-    edges: [
-      {
-        id: 'https',
-        source: client.id,
-        target: ingress.id,
-        label: 'HTTPS',
-        relationship: 'network',
-      },
-      {
-        id: 'ingress-service',
-        source: ingress.id,
-        target: service.id,
-        label: 'HTTP route',
-        relationship: 'network',
-      },
-      {
-        id: 'service-pod-a',
-        source: service.id,
-        target: podA.id,
-        label: 'Selected backend',
-        relationship: 'network',
-      },
-      {
-        id: 'service-pod-b',
-        source: service.id,
-        target: podB.id,
-        label: 'Selected backend',
-        relationship: 'network',
-      },
-      {
-        id: 'deployment-pod-a',
-        source: deployment.id,
-        target: podA.id,
-        label: '',
-        relationship: 'dependency',
-      },
-      {
-        id: 'deployment-pod-b',
-        source: deployment.id,
-        target: podB.id,
-        label: '',
-        relationship: 'dependency',
-      },
-    ],
-  };
+  doc.edges = [
+    {
+      id: 'https',
+      source: client.id,
+      target: ingress.id,
+      label: 'HTTPS',
+      relationship: 'network',
+    },
+    {
+      id: 'ingress-service',
+      source: ingress.id,
+      target: service.id,
+      label: 'HTTP route',
+      relationship: 'network',
+    },
+    {
+      id: 'service-pod-a',
+      source: service.id,
+      target: podA.id,
+      label: 'Selected backend',
+      relationship: 'network',
+    },
+    {
+      id: 'service-pod-b',
+      source: service.id,
+      target: podB.id,
+      label: 'Selected backend',
+      relationship: 'network',
+    },
+    {
+      id: 'deployment-pod-a',
+      source: deployment.id,
+      target: podA.id,
+      label: '',
+      relationship: 'dependency',
+    },
+    {
+      id: 'deployment-pod-b',
+      source: deployment.id,
+      target: podB.id,
+      label: '',
+      relationship: 'dependency',
+    },
+  ];
+  return doc;
 }

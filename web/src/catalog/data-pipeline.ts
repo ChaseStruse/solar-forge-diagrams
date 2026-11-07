@@ -4,7 +4,7 @@ import type {
   DiagramNode,
   Port,
 } from '../domain/document';
-import { findService } from './services';
+import { boardBuilder } from './builder';
 
 /** Editable e-commerce data pipeline from the supplied architecture reference. */
 export function dataPipelineExample(): DiagramDocument {
@@ -31,33 +31,11 @@ export function dataPipelineExample(): DiagramDocument {
     },
   ];
   const edges: DiagramEdge[] = [];
-  function node(
-    id: string,
-    serviceId: string,
-    label: string,
-    x: number,
-    z: number,
-    parentId?: string,
-  ): DiagramNode {
-    const service = findService(serviceId);
-    if (!service) throw Error(`Missing data pipeline component: ${serviceId}`);
-    const result: DiagramNode = {
-      id,
-      kind: service.kind,
-      serviceId,
-      label,
-      x,
-      z,
-      width: 180,
-      depth: 100,
-      color: service.color,
-      ...(service.shape ? { shape: service.shape } : {}),
-      ...(parentId ? { parentId } : {}),
-    };
-    nodes.push(result);
-    return result;
-  }
-  function connect(
+  const { node, edge } = boardBuilder(
+    { nodes, edges },
+    { width: 180, depth: 100 },
+  );
+  const connect = (
     id: string,
     source: string,
     target: string,
@@ -65,17 +43,13 @@ export function dataPipelineExample(): DiagramDocument {
     sourcePort: Port,
     targetPort: Port,
     relationship?: DiagramEdge['relationship'],
-  ) {
-    edges.push({
+  ) =>
+    edge(source, target, label, {
       id,
-      source,
-      target,
-      label,
       sourcePort,
       targetPort,
       ...(relationship ? { relationship } : {}),
     });
-  }
 
   node('customers', 'actor.user', 'Customers', 0, 10, 'app');
   node('dynamodb', 'aws.dynamodb', 'Amazon DynamoDB', -1060, 240);
