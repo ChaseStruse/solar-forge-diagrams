@@ -692,11 +692,9 @@ export class DiagramScene {
     this.ready = loadServiceImages(missing)
       .then(() => {
         if (this.disposed || this.document !== document) return;
-        const edge = this.selectedEdge;
-        const selection = this.selection;
-        this.load(document);
-        if (edge) this.selectEdge(edge);
-        else this.selectMany(selection);
+        // Only the icon labels change; the rest of the board stays as it is.
+        this.retired.push(this.labels.refreshIcons());
+        this.invalidate();
       })
       .catch((error) => this.onError(String(error)));
   }

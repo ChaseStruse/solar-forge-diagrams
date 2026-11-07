@@ -48,6 +48,8 @@ interface Region {
   scale: number;
   /** Drawn smaller than wanted because it would not fit a page. */
   capped: boolean;
+  /** An icon drawn from its service image rather than the fallback glyph. */
+  image: boolean;
 }
 interface Entry {
   object: Object3D;
@@ -141,7 +143,8 @@ export class LabelAtlas {
     kind: LabelKind = 'node',
     bounds: CaptionBounds = { width: 160, depth: 100 },
   ): Object3D {
-    if (kind === 'icon' && !serviceImages.has(text)) text = serviceGlyph(text);
+    // Icons are keyed by service, so one drawn as a glyph upgrades in place
+    // once its image loads.
     const key =
       kind === 'node'
         ? `node:${text}:${bounds.width}:${bounds.depth}:${bounds.fontSize ?? ''}:${bounds.wrap ? 1 : 0}`
@@ -167,12 +170,41 @@ export class LabelAtlas {
     for (const key of this.specs.keys())
       if (!used.has(key)) this.specs.delete(key);
     for (const [key, spec] of this.specs)
-      if (!this.regions.has(key))
+      if (this.needsDrawing(key, spec))
         this.draw(key, spec, this.hints.get(key) ?? 1);
     for (const entry of this.entries)
       this.regions.get(entry.key)?.page.entries.push(entry);
     for (const page of this.pages)
       if (page.entries.length) this.batch(page, root);
+  }
+  /** Not drawn yet, or an icon drawn as a glyph whose image has since loaded. */
+  private needsDrawing(key: string, spec: Spec): boolean {
+    const region = this.regions.get(key);
+    if (!region) return true;
+    return (
+      spec.kind === 'icon' && !region.image && serviceImages.has(spec.text)
+    );
+  }
+  /**
+   * Redraw icons whose images have loaded since they were drawn, rebuilding
+   * the batches in place. Returns a callback that frees the old batches.
+   */
+  public refreshIcons(): () => void {
+    const root = this.root;
+    if (!root) return () => {};
+    const batches: InstancedMesh[] = [];
+    for (const page of this.pages) {
+      if (page.batch) {
+        root.remove(page.batch);
+        batches.push(page.batch);
+      }
+      delete page.batch;
+      page.entries = [];
+    }
+    this.finish(root);
+    return () => {
+      for (const batch of batches) releaseBatch(batch);
+    };
   }
   /** Whether unused labels take more than half of a multi-page atlas. */
   private mostlyUnused(used: ReadonlySet<string>): boolean {
@@ -282,7 +314,13 @@ export class LabelAtlas {
           width / 2,
           padding + (index + 0.5) * caption.size * resolution * 1.28,
         );
-    else context.fillText(text, width / 2, height / 2, width - 20);
+    else
+      context.fillText(
+        kind === 'icon' ? serviceGlyph(text) : text,
+        width / 2,
+        height / 2,
+        width - 20,
+      );
     context.setTransform(1, 0, 0, 1, 0, 0);
     this.regions.set(key, {
       page,
@@ -294,6 +332,7 @@ export class LabelAtlas {
       pixelHeight,
       scale,
       capped: scale < rasterBucket(wanted) - 1e-6,
+      image: image !== undefined,
     });
     this.hints.set(key, scale);
     page.x += pixelWidth + 4;
