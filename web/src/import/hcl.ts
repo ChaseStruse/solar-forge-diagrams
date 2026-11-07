@@ -61,10 +61,6 @@ function quotedEnd(source: string, start: number, depth = 0): number {
   }
   throw Error('Unterminated HCL quoted string');
 }
-/** Static HCL reader. It preserves expressions as references and never evaluates code. */
-export function parseHcl(source: string): HclBlock[] {
-  return parseHclFile(source).blocks;
-}
 /**
  * Read a whole HCL file: its blocks, plus top-level attributes (as in a
  * `.tfvars` file). Expressions are kept as `{ $expr }` with their source text;

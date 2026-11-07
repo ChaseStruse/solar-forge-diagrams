@@ -43,7 +43,6 @@ export class HclError extends Error {}
 const keyText = (key: Value) =>
   typeof key === 'string' ? JSON.stringify(key) : String(key);
 
-export const isUnknown = (v: Value): v is Unknown => v instanceof Unknown;
 export const isObject = (v: Value): v is { [key: string]: Value } =>
   typeof v === 'object' &&
   v !== null &&

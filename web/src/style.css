@@ -162,7 +162,6 @@ canvas {
   display: block;
   text-align: left;
 }
-.local-dot,
 .offline-dot {
   width: 5px;
   height: 5px;
@@ -170,9 +169,6 @@ canvas {
   background: var(--ok);
   display: inline-block;
   flex-shrink: 0;
-}
-.local-dot {
-  margin-left: 3px;
 }
 .export-button {
   height: 35px;
@@ -462,11 +458,6 @@ canvas {
   color: var(--accent-text);
   background: var(--accent-soft);
 }
-.dock-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin: 0 5px;
-}
 .delete-button {
   color: var(--danger);
 }
@@ -634,9 +625,6 @@ canvas {
     transform: none;
     bottom: 72px;
   }
-  .view-dock .dock-label {
-    display: none;
-  }
   .status,
   .board-count {
     display: none;
@@ -663,7 +651,6 @@ canvas {
   .board-heading {
     gap: 5px;
   }
-  .local-dot,
   .top-actions #quick-save {
     display: none;
   }
@@ -726,7 +713,6 @@ canvas {
   overflow-y: auto;
 }
 @media (max-width: 1150px) {
-  .canvas-controls .dock-label,
   .canvas-controls .delete-button span {
     display: none;
   }

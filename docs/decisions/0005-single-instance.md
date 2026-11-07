@@ -1,4 +1,4 @@
-# Native single-instance file opening
+# 0005: Native single-instance file opening
 
 Use the official `tauri-plugin-single-instance` Rust plugin, pinned to 2.5.4 (MIT OR Apache-2.0), registered before other plugins. It forwards file-manager arguments to the running window and focuses it. The native side queues paths and exposes their contents through a narrow command; the frontend still validates documents and offers unsaved-change protection before replacement.
 
